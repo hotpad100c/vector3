@@ -1,16 +1,18 @@
 # Vector3
 
-Vector3 adds a `RyansRenderingKit 图形` keyframe track to Flashback. Creating a
-keyframe directly creates a timeline-owned cube; its position, Euler rotation,
-scale, dimensions, see-through state and visibility are stored in the replay's
-keyframe JSON and applied on playback.
+Vector3 adds a Flashback track named `Shapes`. Its creation popup supports
+solid/wireframe boxes, sphere, face/line circles, solid/wireframe cylinders and
+cones, and line segments. Any number of Shapes tracks can run in parallel. Every
+created shape receives its own UUID; its position, Euler
+rotation, scale, dimensions, segments, line width, see-through state and visibility
+are stored in the replay's keyframe JSON and applied on playback.
 
 ## Extending it
 
 Register another RyansRenderingKit shape factory during client initialization:
 
 ```java
-ShapeTrackRegistry.register("sphere", state -> /* build and return a Shape */);
+ShapeTrackRegistry.register("custom", "Custom shape", state -> /* return a Shape */);
 ```
 
 Create keyframes whose `ShapeState.shapeType()` is the same registered name.

@@ -5,12 +5,15 @@ import com.moulberry.flashback.keyframe.KeyframeType;
 import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
+import com.moulberry.flashback.editor.ui.ReplayUI;
+import imgui.moulberry90.ImGui;
 import ml.mypals.vectorthree.shape.ShapeState;
+import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 
 import java.util.UUID;
 
 public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
-    public static final String ID = "vector3_shape";
+    public static final String ID = "vector3_shapes";
     public static final ShapeKeyframeType INSTANCE = new ShapeKeyframeType();
 
     private ShapeKeyframeType() {}
@@ -20,13 +23,39 @@ public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
     @Override public boolean supportsHandler(KeyframeHandler handler) { return handler instanceof MinecraftKeyframeHandler; }
     @Override public boolean allowApplyingDuplicateKeyframeChanges() { return true; }
     @Override public String icon() { return "▣"; }
-    @Override public String name() { return "RyansRenderingKit 图形"; }
+    @Override public String name() { return "Shapes"; }
     @Override public String id() { return ID; }
 
     @Override
     public ShapeKeyframe createDirect() {
-        return new ShapeKeyframe(ShapeState.cube("vector3:timeline/" + UUID.randomUUID()));
+        return null;
     }
 
-    @Override public KeyframeCreatePopup<ShapeKeyframe> createPopup() { return null; }
+    @Override
+    public KeyframeCreatePopup<ShapeKeyframe> createPopup() {
+        ShapeTrackRegistry.Definition[] definitions = java.util.stream.StreamSupport
+                .stream(ShapeTrackRegistry.definitions().spliterator(), false)
+                .toArray(ShapeTrackRegistry.Definition[]::new);
+        String[] selected = {definitions[0].id()};
+        return () -> {
+            ShapeTrackRegistry.Definition current = ShapeTrackRegistry.definition(selected[0]);
+            ImGui.setNextItemWidth(240);
+            if (ImGui.beginCombo("Shape", current.name())) {
+                for (ShapeTrackRegistry.Definition definition : definitions) {
+                    if (ImGui.selectable(definition.name(), definition.id().equals(selected[0]))) {
+                        selected[0] = definition.id();
+                    }
+                }
+                ImGui.endCombo();
+            }
+            if (ImGui.button("Add") || ReplayUI.consumeConfirm()) return create(selected[0]);
+            ImGui.sameLine();
+            if (ImGui.button("Cancel") || ReplayUI.consumeCancel()) ImGui.closeCurrentPopup();
+            return null;
+        };
+    }
+
+    private static ShapeKeyframe create(String shapeType) {
+        return new ShapeKeyframe(ShapeState.create(shapeType, "vector3:timeline/" + UUID.randomUUID()));
+    }
 }

@@ -20,6 +20,16 @@ public final class ShapeKeyframeSerializer implements JsonSerializer<ShapeKeyfra
 
     public static ShapeKeyframe read(JsonObject json, JsonDeserializationContext context) {
         ShapeState state = context.deserialize(json.get("shape"), ShapeState.class);
+        if (state.segments() <= 0 || state.lineWidth() <= 0) {
+            state = new ShapeState(state.shapeType(), state.shapeId(), state.x(), state.y(), state.z(),
+                    state.pitch(), state.yaw(), state.roll(), state.scaleX(), state.scaleY(), state.scaleZ(),
+                    state.sizeX(), state.sizeY(), state.sizeZ(),
+                    state.segments() <= 0 ? 32 : state.segments(),
+                    state.lineWidth() <= 0 ? 0.05f : state.lineWidth(),
+                    state.color() == 0 ? 0xFFFFFFFF : state.color(),
+                    state.points() == null ? java.util.List.of() : state.points(),
+                    state.seeThrough(), state.visible());
+        }
         InterpolationType interpolation = json.has("interpolation_type")
                 ? context.deserialize(json.get("interpolation_type"), InterpolationType.class)
                 : InterpolationType.getDefault();
