@@ -1,0 +1,15 @@
+{
+	"required": true,
+	"package": "ml.mypals.vectorthree.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"flashback.FlashbackGsonMixin",
+		"flashback.KeyframeTypeAdapterMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

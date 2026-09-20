@@ -1,0 +1,33 @@
+{
+	"schemaVersion": 1,
+	"id": "vector3",
+	"version": "${version}",
+	"name": "Vector3",
+	"description": "Controls RyansRenderingKit shapes from Flashback timelines.",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/vector3/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"ml.mypals.vectorthree.Vector3"
+		]
+	},
+	"mixins": [
+		"vector3.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*",
+		"flashback": "*",
+		"ryansrenderingkit": "*"
+	}
+}
