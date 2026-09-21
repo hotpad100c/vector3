@@ -3,6 +3,7 @@
 	"package": "ml.mypals.vectorthree.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
+		"TextShapeMixin",
 		"flashback.FlashbackGsonMixin",
 		"flashback.KeyframeTypeAdapterMixin",
 		"flashback.EditorSceneMixin"

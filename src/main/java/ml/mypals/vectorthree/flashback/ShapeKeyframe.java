@@ -8,15 +8,16 @@ import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.shape.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
+import ml.mypals.vectorthree.shape.TextSettings;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImBoolean;
 import imgui.moulberry90.type.ImInt;
+import imgui.moulberry90.type.ImString;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TreeMap;
 import java.util.function.Consumer;
 
 public final class ShapeKeyframe extends Keyframe {
@@ -43,21 +44,16 @@ public final class ShapeKeyframe extends Keyframe {
     @Override
     public KeyframeChange createSmoothInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3,
             float t0, float t1, float t2, float t3, float amount) {
-        return new ShapeKeyframeChange(((ShapeKeyframe) p1).state
-                .interpolate(((ShapeKeyframe) p2).state, amount));
+        return new ShapeKeyframeChange(ShapeState.smooth(state, ((ShapeKeyframe) p1).state,
+                ((ShapeKeyframe) p2).state, ((ShapeKeyframe) p3).state,
+                t1 - t0, t2 - t0, t3 - t0, amount));
     }
 
     @Override
     public KeyframeChange createHermiteInterpolatedChange(Map<Float, Keyframe> keyframes, float amount) {
-        TreeMap<Float, Keyframe> sorted = new TreeMap<>(keyframes);
-        Map.Entry<Float, Keyframe> floor = sorted.floorEntry(amount);
-        Map.Entry<Float, Keyframe> ceil = sorted.ceilingEntry(amount);
-        if (floor == null) floor = sorted.firstEntry();
-        if (ceil == null) ceil = sorted.lastEntry();
-        float span = ceil.getKey() - floor.getKey();
-        double local = span == 0 ? 0 : (amount - floor.getKey()) / span;
-        return new ShapeKeyframeChange(((ShapeKeyframe) floor.getValue()).state
-                .interpolate(((ShapeKeyframe) ceil.getValue()).state, local));
+        Map<Float, ShapeState> states = new java.util.TreeMap<>();
+        keyframes.forEach((tick, keyframe) -> states.put(tick, ((ShapeKeyframe) keyframe).state));
+        return new ShapeKeyframeChange(ShapeState.hermite(states, amount));
     }
 
     @Override
@@ -92,6 +88,24 @@ public final class ShapeKeyframe extends Keyframe {
             ImGui.endCombo();
         }
 
+        String[] parentId = {state.parentShapeId() == null ? "" : state.parentShapeId()};
+        ImGui.setNextItemWidth(360);
+        if (ImGui.beginCombo("Parent Shape UUID", parentId[0].isEmpty() ? "None" : parentId[0])) {
+            if (ImGui.selectable("None", parentId[0].isEmpty())) {
+                parentId[0] = "";
+                changed = true;
+            }
+            for (String shapeId : ShapeTrackRegistry.shapeIds()) {
+                if (shapeId.equals(selectedId[0])) continue;
+                if (ImGui.selectable(shapeId, shapeId.equals(parentId[0]))) {
+                    parentId[0] = shapeId;
+                    changed = true;
+                }
+                if (ImGui.isItemHovered()) ShapeTrackRegistry.previewHighlight(shapeId);
+            }
+            ImGui.endCombo();
+        }
+
         float[] position = {(float) state.x(), (float) state.y(), (float) state.z()};
         float[] rotation = {state.pitch(), state.yaw(), state.roll()};
         float[] scale = {(float) state.scaleX(), (float) state.scaleY(), (float) state.scaleZ()};
@@ -106,6 +120,12 @@ public final class ShapeKeyframe extends Keyframe {
         ImInt segments = new ImInt(state.segments());
         ImBoolean seeThrough = new ImBoolean(state.seeThrough());
         ImBoolean visible = new ImBoolean(state.visible());
+        TextSettings currentText = state.text() == null ? TextSettings.defaults() : state.text();
+        ImString textValue = new ImString(currentText.value(), 4096);
+        ImBoolean holdText = new ImBoolean(currentText.holdText());
+        ImBoolean textShadow = new ImBoolean(currentText.shadow());
+        ImBoolean textOutline = new ImBoolean(currentText.outline());
+        String[] billboard = {currentText.billboard()};
 
         changed |= ImGui.dragFloat3("Position", position, 0.05f);
         changed |= ImGui.dragFloat3("Rotation", rotation, 1.0f);
@@ -167,6 +187,22 @@ public final class ShapeKeyframe extends Keyframe {
                 }
                 changed |= ImGui.dragFloat("Line Width", width, 0.01f, 0.001f, 100.0f);
             }
+            case "text" -> {
+                changed |= ImGui.inputTextMultiline("Text", textValue, 420, 100);
+                changed |= ImGui.checkbox("Hold Text", holdText);
+                changed |= ImGui.checkbox("Shadow", textShadow);
+                changed |= ImGui.checkbox("Outline", textOutline);
+                ImGui.setNextItemWidth(180);
+                if (ImGui.beginCombo("Billboard", billboard[0])) {
+                    for (String mode : List.of("FIXED", "VERTICAL", "HORIZONTAL", "ALL")) {
+                        if (ImGui.selectable(mode, mode.equals(billboard[0]))) {
+                            billboard[0] = mode;
+                            changed = true;
+                        }
+                    }
+                    ImGui.endCombo();
+                }
+            }
         }
         changed |= ImGui.checkbox("See Through", seeThrough);
         changed |= ImGui.checkbox("Visible", visible);
@@ -176,8 +212,14 @@ public final class ShapeKeyframe extends Keyframe {
                     | (Math.round(color[1] * 255) << 8) | Math.round(color[2] * 255);
             ShapeState replacement = state.with(position, rotation, scale, size,
                     Math.max(3, segments.get()), Math.max(0.001f, width[0]), argb,
-                    points, seeThrough.get(), visible.get())
+                    points, selectedType[0].equals("text")
+                            ? new TextSettings(textValue.get(), holdText.get(), textShadow.get(),
+                                    textOutline.get(), billboard[0])
+                            : state.text(),
+                    parentId[0],
+                    seeThrough.get(), visible.get())
                     .withIdentity(selectedType[0], selectedId[0]);
+            ShapeTrackRegistry.apply(replacement);
             update.accept(keyframe -> ((ShapeKeyframe) keyframe).state = replacement);
         }
 

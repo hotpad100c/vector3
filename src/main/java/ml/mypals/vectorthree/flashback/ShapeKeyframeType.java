@@ -9,6 +9,10 @@ import com.moulberry.flashback.editor.ui.ReplayUI;
 import imgui.moulberry90.ImGui;
 import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
+import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Vector3fc;
 
 import java.util.UUID;
 
@@ -56,6 +60,10 @@ public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
     }
 
     private static ShapeKeyframe create(String shapeType) {
-        return new ShapeKeyframe(ShapeState.create(shapeType, "vector3:timeline/" + UUID.randomUUID()));
+        Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
+        Vec3 cameraPosition = camera.position();
+        Vector3fc forward = camera.forwardVector();
+        return new ShapeKeyframe(ShapeState.create(shapeType, "vector3:timeline/" + UUID.randomUUID(),
+                cameraPosition.x + forward.x(), cameraPosition.y + forward.y(), cameraPosition.z + forward.z()));
     }
 }

@@ -28,6 +28,8 @@ public final class ShapeKeyframeSerializer implements JsonSerializer<ShapeKeyfra
                     state.lineWidth() <= 0 ? 0.05f : state.lineWidth(),
                     state.color() == 0 ? 0xFFFFFFFF : state.color(),
                     state.points() == null ? java.util.List.of() : state.points(),
+                    state.text(),
+                    state.parentShapeId() == null ? "" : state.parentShapeId(),
                     state.seeThrough(), state.visible());
         }
         InterpolationType interpolation = json.has("interpolation_type")

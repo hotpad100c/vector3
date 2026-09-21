@@ -3,6 +3,7 @@ package ml.mypals.vectorthree;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 
 import net.minecraft.resources.Identifier;
 
@@ -21,6 +22,7 @@ public class Vector3 implements ClientModInitializer {
 	public void onInitializeClient() {
 		ShapeTrackRegistry.registerDefaults();
 		ShapeKeyframeType.register();
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ShapeTrackRegistry.clear());
 		LOGGER.info("Registered RyansRenderingKit shape tracks with Flashback");
 	}
 
