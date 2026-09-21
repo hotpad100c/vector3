@@ -19,6 +19,7 @@ import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
 import ml.mypals.ryansrenderingkit.shape.round.FaceCircleShape;
 import ml.mypals.ryansrenderingkit.shape.round.LineCircleShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
+import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -111,6 +112,22 @@ public final class ShapeTrackRegistry {
     public static Iterable<String> shapeIds() { return List.copyOf(SHAPES.keySet()); }
     public static String typeOf(String shapeId) { return SHAPE_TYPES.get(shapeId); }
     public static void previewHighlight(String shapeId) { previewHighlightId = shapeId; }
+
+    public static String pickShape(RayModelIntersection.Ray ray) {
+        String closestId = null;
+        double closestDistance = Double.POSITIVE_INFINITY;
+        for (Map.Entry<String, Shape> entry : SHAPES.entrySet()) {
+            Shape shape = entry.getValue();
+            if (!LAST_STATES.get(entry.getKey()).visible()) continue;
+            RayModelIntersection.HitResult hit = RayModelIntersection.rayIntersectsModel(
+                    ray, shape.getModel(false), shape.indexBuffer);
+            if (hit.hit && hit.distance < closestDistance) {
+                closestId = entry.getKey();
+                closestDistance = hit.distance;
+            }
+        }
+        return closestId;
+    }
 
     public static void clear() {
         for (String shapeId : List.copyOf(SHAPES.keySet())) {

@@ -6,7 +6,8 @@
 		"TextShapeMixin",
 		"flashback.FlashbackGsonMixin",
 		"flashback.KeyframeTypeAdapterMixin",
-		"flashback.EditorSceneMixin"
+		"flashback.EditorSceneMixin",
+		"flashback.TimelineWindowMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
