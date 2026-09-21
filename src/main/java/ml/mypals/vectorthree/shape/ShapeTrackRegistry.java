@@ -118,15 +118,71 @@ public final class ShapeTrackRegistry {
         double closestDistance = Double.POSITIVE_INFINITY;
         for (Map.Entry<String, Shape> entry : SHAPES.entrySet()) {
             Shape shape = entry.getValue();
-            if (!LAST_STATES.get(entry.getKey()).visible()) continue;
-            RayModelIntersection.HitResult hit = RayModelIntersection.rayIntersectsModel(
-                    ray, shape.getModel(false), shape.indexBuffer);
-            if (hit.hit && hit.distance < closestDistance) {
+            ShapeState state = LAST_STATES.get(entry.getKey());
+            if (state == null || !state.visible()) continue;
+            double distance = hitDistance(ray, shape, state);
+            if (distance >= 0 && distance < closestDistance) {
                 closestId = entry.getKey();
-                closestDistance = hit.distance;
+                closestDistance = distance;
             }
         }
         return closestId;
+    }
+
+    private static double hitDistance(RayModelIntersection.Ray ray, Shape shape, ShapeState state) {
+        List<Vec3> model = shape.getModel(false);
+        int[] indices = shape.indexBuffer;
+        if (indices == null || indices.length == 0) {
+            return rayToPoint(ray, new Vec3(state.x(), state.y(), state.z()));
+        }
+        boolean lines = switch (state.shapeType()) {
+            case "box_wireframe", "line_circle", "cylinder_wireframe", "cone_wireframe", "line", "line_strip" -> true;
+            default -> false;
+        };
+        if (lines || indices.length % 3 != 0) return rayToSegments(ray, model, indices);
+        RayModelIntersection.HitResult hit = RayModelIntersection.rayIntersectsModel(ray, model, indices);
+        return hit.hit ? hit.distance : -1;
+    }
+
+    private static double rayToSegments(RayModelIntersection.Ray ray, List<Vec3> vertices, int[] indices) {
+        double closest = Double.POSITIVE_INFINITY;
+        for (int i = 0; i + 1 < indices.length; i += 2) {
+            int first = indices[i];
+            int second = indices[i + 1];
+            if (first < 0 || second < 0 || first >= vertices.size() || second >= vertices.size()) continue;
+            double distance = rayToSegment(ray, vertices.get(first), vertices.get(second));
+            if (distance >= 0 && distance < closest) closest = distance;
+        }
+        return closest == Double.POSITIVE_INFINITY ? -1 : closest;
+    }
+
+    private static double rayToSegment(RayModelIntersection.Ray ray, Vec3 start, Vec3 end) {
+        Vec3 rayDirection = ray.direction.normalize();
+        Vec3 segment = end.subtract(start);
+        double segmentLengthSquared = segment.lengthSqr();
+        if (segmentLengthSquared < 1.0e-10) return rayToPoint(ray, start);
+
+        Vec3 offset = ray.origin.subtract(start);
+        double directionSegment = rayDirection.dot(segment);
+        double directionOffset = rayDirection.dot(offset);
+        double segmentOffset = segment.dot(offset);
+        double denominator = segmentLengthSquared - directionSegment * directionSegment;
+        double segmentAmount = Math.abs(denominator) < 1.0e-10 ? 0
+                : (segmentOffset - directionSegment * directionOffset) / denominator;
+        segmentAmount = Math.max(0, Math.min(1, segmentAmount));
+        double rayAmount = Math.max(0, directionSegment * segmentAmount - directionOffset);
+        Vec3 rayPoint = ray.origin.add(rayDirection.scale(rayAmount));
+        Vec3 segmentPoint = start.add(segment.scale(segmentAmount));
+        double tolerance = Math.max(0.04, rayAmount * 0.012);
+        return rayPoint.distanceToSqr(segmentPoint) <= tolerance * tolerance ? rayAmount : -1;
+    }
+
+    private static double rayToPoint(RayModelIntersection.Ray ray, Vec3 point) {
+        Vec3 direction = ray.direction.normalize();
+        double distance = Math.max(0, point.subtract(ray.origin).dot(direction));
+        double tolerance = Math.max(0.1, distance * 0.04);
+        return ray.origin.add(direction.scale(distance)).distanceToSqr(point) <= tolerance * tolerance
+                ? distance : -1;
     }
 
     public static void clear() {

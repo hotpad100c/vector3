@@ -5,7 +5,6 @@ import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 
 import net.minecraft.resources.Identifier;
@@ -15,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 public class Vector3 implements ClientModInitializer {
 	public static final String MOD_ID = "vector3";
+	public static final ShapeGizmoEditor GIZMO_EDITOR = new ShapeGizmoEditor();
 
 	// This logger is used to write text to the console and the log file.
 	// It is considered best practice to use your mod id as the logger's name.
@@ -23,13 +23,11 @@ public class Vector3 implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		ShapeGizmoEditor gizmoEditor = new ShapeGizmoEditor();
 		ShapeTrackRegistry.registerDefaults();
 		ShapeKeyframeType.register();
-		ShapeKeyframe.setEditor(gizmoEditor);
-		ClientTickEvents.END_CLIENT_TICK.register(client -> gizmoEditor.tick());
+		ShapeKeyframe.setEditor(GIZMO_EDITOR);
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-			gizmoEditor.clear();
+			GIZMO_EDITOR.clear();
 			ShapeTrackRegistry.clear();
 		});
 		LOGGER.info("Registered RyansRenderingKit shape tracks with Flashback");

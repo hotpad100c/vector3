@@ -42,6 +42,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private final String session = UUID.randomUUID().toString();
     private final List<Handle> handles = new ArrayList<>();
     private ShapeKeyframe keyframe;
+    private Consumer<ShapeState> commit = state -> {};
     private Mode mode = Mode.MOVE;
     private String layoutKey = "";
     private Handle hovered;
@@ -53,17 +54,11 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private Vec3 dragPlaneStart;
     private double dragParameter;
     private double dragAngle;
-    private long lastSeen;
-    private boolean rightMouseDown;
+    private ShapeState previewState;
 
     @Override
     public void edit(ShapeKeyframe keyframe, Consumer<Consumer<ShapeKeyframe>> update) {
-        lastSeen = System.nanoTime();
-        if (this.keyframe != keyframe) {
-            this.keyframe = keyframe;
-            dragging = null;
-            rebuild(keyframe.state);
-        }
+        select(keyframe, replacement -> update.accept(changed -> changed.state = replacement));
 
         ImGui.text("Viewport Gizmo");
         setModeButton("Move", Mode.MOVE); ImGui.sameLine();
@@ -71,49 +66,75 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         setModeButton("Scale", Mode.SCALE); ImGui.sameLine();
         setModeButton("Geometry", Mode.GEOMETRY);
 
-        ShapeState state = keyframe.state;
-        String wantedLayout = layoutKey(state);
-        if (!wantedLayout.equals(layoutKey)) rebuild(state);
-        updateHandles(state);
+    }
 
+    public void frame() {
+        if (!ReplayUI.isActive()) return;
         Minecraft minecraft = Minecraft.getInstance();
-        Camera camera = minecraft.gameRenderer.mainCamera();
-        Vec3 mouseDirection = ReplayUI.getMouseLookVector();
-        if (mouseDirection == null || ReplayUI.hasAnyPopupOpen) {
-            setHovered(null);
+        if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) {
+            ReplayUI.imguiWindower.ungrab();
+        }
+
+        if (dragging != null && !ImGui.isMouseDown(1)) {
+            if (previewState != null) commit.accept(previewState);
+            previewState = null;
+            dragging = null;
+            updateColors();
             return;
         }
 
-        RayModelIntersection.Ray ray = new RayModelIntersection.Ray(camera.position(), mouseDirection);
-        if (dragging == null) {
-            setHovered(pick(ray));
-            if (hovered != null && ImGui.isMouseClicked(0)) beginDrag(hovered, state, ray, camera);
-        } else if (ImGui.isMouseDown(0)) {
-            ShapeState replacement = drag(ray, camera);
-            if (replacement != null) {
-                ShapeTrackRegistry.apply(replacement);
-                update.accept(changed -> changed.state = replacement);
-            }
-        } else {
-            dragging = null;
-            updateColors();
-        }
-    }
+        boolean inViewport = mouseInViewport();
+        Vec3 direction = ReplayUI.getMouseLookVector();
+        if (direction == null) return;
+        Camera camera = minecraft.gameRenderer.mainCamera();
+        RayModelIntersection.Ray ray = new RayModelIntersection.Ray(camera.position(), direction);
 
-    public void tick() {
-        Minecraft minecraft = Minecraft.getInstance();
-        boolean rightDown = minecraft.options.keyUse.isDown();
-        if (rightDown && !rightMouseDown && ReplayUI.isActive() && ReplayUI.isMainFrameHovered()
-                && !ReplayUI.hasAnyPopupOpen) {
-            Vec3 direction = ReplayUI.getMouseLookVector();
-            if (direction != null) {
-                String shapeId = ShapeTrackRegistry.pickShape(new RayModelIntersection.Ray(
-                        minecraft.gameRenderer.mainCamera().position(), direction));
+        ShapeState state = null;
+        if (keyframe != null) {
+            state = previewState == null ? keyframe.state : previewState;
+            String wantedLayout = layoutKey(state);
+            if (!wantedLayout.equals(layoutKey)) rebuild(state);
+            updateHandles(state);
+        }
+
+        if (dragging == null) {
+            setHovered(keyframe != null && inViewport ? pick(ray) : null);
+            if (ImGui.isMouseClicked(1) && hovered != null) {
+                ReplayUI.imguiWindower.ungrab();
+                beginDrag(hovered, state, ray, camera);
+            } else if (ImGui.isMouseClicked(1) && inViewport) {
+                String shapeId = ShapeTrackRegistry.pickShape(ray);
                 if (shapeId != null) ShapeTimelineSelection.request(shapeId);
             }
         }
-        rightMouseDown = rightDown;
-        if (keyframe != null && System.nanoTime() - lastSeen > 500_000_000L) clear();
+
+        if (dragging != null && ImGui.isMouseDown(1)) {
+            ShapeState replacement = drag(ray, camera);
+            if (replacement != null) {
+                previewState = replacement;
+                ShapeTrackRegistry.apply(replacement);
+                updateHandles(replacement);
+            }
+        }
+    }
+
+    public boolean isDragging() {
+        return dragging != null;
+    }
+
+    public void select(ShapeKeyframe keyframe, Consumer<ShapeState> commit) {
+        this.commit = commit;
+        if (this.keyframe == keyframe) return;
+        this.keyframe = keyframe;
+        previewState = null;
+        dragging = null;
+        rebuild(keyframe.state);
+        updateHandles(keyframe.state);
+    }
+
+    public void clearSelection() {
+        if (isDragging()) return;
+        if (keyframe != null) clear();
     }
 
     public void clear() {
@@ -123,7 +144,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         keyframe = null;
         hovered = null;
         dragging = null;
-        rightMouseDown = false;
+        previewState = null;
+        commit = state -> {};
         layoutKey = "";
     }
 
@@ -131,7 +153,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         if (ImGui.radioButton(label + "##shape_gizmo", mode == candidate) && mode != candidate) {
             mode = candidate;
             dragging = null;
-            if (keyframe != null) rebuild(keyframe.state);
+            if (keyframe != null) {
+                rebuild(keyframe.state);
+                updateHandles(keyframe.state);
+            }
         }
     }
 
@@ -424,5 +449,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         while (angle > Math.PI) angle -= Math.PI * 2;
         while (angle < -Math.PI) angle += Math.PI * 2;
         return angle;
+    }
+
+    private static boolean mouseInViewport() {
+        return ReplayUI.isActive() && ReplayUI.isMainFrameHovered();
     }
 }
