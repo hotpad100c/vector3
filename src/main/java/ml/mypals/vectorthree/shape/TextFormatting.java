@@ -16,11 +16,11 @@ public final class TextFormatting {
     private TextFormatting() {}
 
     public static FormattedCharSequence[] format(List<String> lines) {
-        return lines.stream().map(TextFormatting::format)
+        return lines.stream().map(TextFormatting::formatLine)
                 .toArray(FormattedCharSequence[]::new);
     }
 
-    private static FormattedCharSequence format(String text) {
+    public static FormattedCharSequence formatLine(String text) {
         String trimmed = text.trim();
         if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
             try {
