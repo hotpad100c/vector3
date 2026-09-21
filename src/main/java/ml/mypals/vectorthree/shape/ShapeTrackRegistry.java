@@ -59,42 +59,42 @@ public final class ShapeTrackRegistry {
                 .size(new Vec3(state.sizeX(), state.sizeY(), state.sizeZ()))
                 .color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough())
-                .build(Shape.RenderingType.IMMEDIATE));
+                .build(Shape.RenderingType.BATCH));
         register("box_wireframe", "Box Wireframe", state -> ShapeGenerator.generateBoxWireframe()
                 .size(size(state)).edgeWidth(state.lineWidth()).color(new Color(state.color(), true))
-                .seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("wireframed_box", "Solid + Wireframe Box", state -> ShapeGenerator.generateWireframedBox()
                 .size(size(state)).edgeWidth(state.lineWidth()).color(new Color(state.color(), true))
-                .seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("sphere", "Sphere", state -> ShapeGenerator.generateSphere()
                 .radius((float) state.sizeX() / 2).segments(state.segments()).color(new Color(state.color(), true))
-                .seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("face_circle", "Circle", state -> ShapeGenerator.generateFaceCircle()
                 .radius((float) state.sizeX() / 2).segments(state.segments()).color(new Color(state.color(), true))
-                .seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("line_circle", "Circle Wireframe", state -> ShapeGenerator.generateLineCircle()
                 .radius((float) state.sizeX() / 2).segments(state.segments()).lineWidth(state.lineWidth())
-                .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("cylinder", "Cylinder", state -> ShapeGenerator.generateCylinder()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
-                .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("cylinder_wireframe", "Cylinder Wireframe", state -> ShapeGenerator.generateCylinderWireframe()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
                 .width(state.lineWidth()).color(new Color(state.color(), true)).seeThrough(state.seeThrough())
-                .build(Shape.RenderingType.IMMEDIATE));
+                .build(Shape.RenderingType.BATCH));
         register("cone", "Cone", state -> ShapeGenerator.generateCone()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
-                .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("cone_wireframe", "Cone Wireframe", state -> ShapeGenerator.generateConeWireframe()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
                 .width(state.lineWidth()).color(new Color(state.color(), true)).seeThrough(state.seeThrough())
-                .build(Shape.RenderingType.IMMEDIATE));
+                .build(Shape.RenderingType.BATCH));
         register("line", "Line", state -> ShapeGenerator.generateLine()
                 .start(point(state, 0)).end(point(state, 1)).lineWidth(state.lineWidth()).color(new Color(state.color(), true))
-                .seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("line_strip", "Line Strip", state -> ShapeGenerator.generateStripLine()
                 .vertexes(points(state)).lineWidth(state.lineWidth()).color(new Color(state.color(), true))
-                .seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE));
+                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("text", "Text", state -> {
             TextSettings settings = state.text() == null ? TextSettings.defaults() : state.text();
             return ShapeGenerator.generateText()
@@ -102,7 +102,7 @@ public final class ShapeTrackRegistry {
                     .textColors(new Color(state.color(), true))
                     .billBoardMode(TextShape.BillBoardMode.valueOf(settings.billboard()))
                     .shadow(settings.shadow()).outline(settings.outline())
-                    .seeThrough(state.seeThrough()).build(Shape.RenderingType.IMMEDIATE);
+                    .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH);
         });
     }
 

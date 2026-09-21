@@ -2,6 +2,8 @@ package ml.mypals.vectorthree.shape;
 
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.chat.Style;
@@ -25,7 +27,13 @@ public final class TextFormatting {
                 return ComponentSerialization.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(text))
                         .result().map(Component::getVisualOrderText).orElseGet(() -> legacy(text));
             } catch (RuntimeException ignored) {
-                // Incomplete JSON while editing falls back to visible literal text.
+                try {
+                    return ComponentSerialization.CODEC.parse(NbtOps.INSTANCE,
+                                    TagParser.create(NbtOps.INSTANCE).parseFully(text))
+                            .result().map(Component::getVisualOrderText).orElseGet(() -> legacy(text));
+                } catch (Exception ignoredSnbt) {
+                    // Incomplete component input while editing falls back to visible literal text.
+                }
             }
         }
         return legacy(text);
