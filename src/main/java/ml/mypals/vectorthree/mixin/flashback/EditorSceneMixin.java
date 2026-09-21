@@ -4,6 +4,7 @@ import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.KeyframeTrack;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
+import ml.mypals.vectorthree.shape.ShapeTimelineSelection;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 @Mixin(EditorScene.class)
 public class EditorSceneMixin {
@@ -40,5 +42,10 @@ public class EditorSceneMixin {
                 return;
             }
         }
+    }
+
+    @Inject(method = {"undo", "redo"}, at = @At("RETURN"), remap = false)
+    private void vector3$refreshShapesAfterHistory(Consumer<String> message, CallbackInfo ci) {
+        ShapeTimelineSelection.requestRefresh();
     }
 }

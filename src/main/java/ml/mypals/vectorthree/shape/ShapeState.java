@@ -19,6 +19,7 @@ public record ShapeState(
         int color,
         List<ShapePoint> points,
         TextSettings text,
+        String model,
         String parentShapeId,
         boolean seeThrough, boolean visible
 ) {
@@ -29,7 +30,8 @@ public record ShapeState(
         };
         return new ShapeState(type, id, x, y, z, 0, 0, 0,
                 1, 1, 1, 1, 1, 1, 32, 0.05f, 0xFFFFFFFF, points,
-                type.equals("text") ? TextSettings.defaults() : null, "", false, true);
+                type.equals("text") ? TextSettings.defaults() : null,
+                type.equals("obj") ? "ryansrenderingkit:models/monkey.obj" : "", "", false, true);
     }
 
     public ShapeState interpolate(ShapeState target, double amount) {
@@ -46,6 +48,7 @@ public record ShapeState(
                 lerpColor(color, target.color, amount),
                 interpolatePoints(target, amount),
                 TextSettings.transition(text, target.text, amount),
+                amount >= 1.0 ? target.model : model,
                 amount >= 1.0 ? target.parentShapeId : parentShapeId,
                 amount < 0.5 ? seeThrough : target.seeThrough,
                 amount < 0.5 ? visible : target.visible);
@@ -73,6 +76,7 @@ public record ShapeState(
                 smoothColor(p0.color, p1.color, p2.color, p3.color, t1, t2, t3, amount),
                 smoothPoints(p0, p1, p2, p3, t1, t2, t3, amount),
                 TextSettings.transition(p1.text, p2.text, amount),
+                amount >= 1.0f ? p2.model : p1.model,
                 amount >= 1.0f ? p2.parentShapeId : p1.parentShapeId,
                 amount < 0.5f ? p1.seeThrough : p2.seeThrough,
                 amount < 0.5f ? p1.visible : p2.visible);
@@ -98,6 +102,7 @@ public record ShapeState(
                 (float) positive(hermite(states, amount, s -> s.lineWidth)),
                 hermiteColor(states, amount), hermitePoints(states, amount, base),
                 hermiteText(sorted, amount, base),
+                base.model,
                 base.parentShapeId,
                 base.seeThrough, base.visible);
     }
@@ -108,13 +113,19 @@ public record ShapeState(
         return new ShapeState(shapeType, shapeId,
                 position[0], position[1], position[2], rotation[0], rotation[1], rotation[2],
                 scale[0], scale[1], scale[2], size[0], size[1], size[2],
-                segments, lineWidth, color, List.copyOf(points), text, parentShapeId, seeThrough, visible);
+                segments, lineWidth, color, List.copyOf(points), text, model, parentShapeId, seeThrough, visible);
     }
 
     public ShapeState withIdentity(String shapeType, String shapeId) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
-                color, points == null ? List.of() : points, text, parentShapeId, seeThrough, visible);
+                color, points == null ? List.of() : points, text, model, parentShapeId, seeThrough, visible);
+    }
+
+    public ShapeState withModel(String model) {
+        return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
+                scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
+                color, points, text, model, parentShapeId, seeThrough, visible);
     }
 
     private List<ShapePoint> interpolatePoints(ShapeState target, double amount) {

@@ -12,8 +12,10 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 import java.awt.Color;
 import java.util.ArrayList;
@@ -85,6 +87,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
         boolean inViewport = mouseInViewport();
         Vec3 direction = ReplayUI.getMouseLookVector();
+        if (direction == null && dragging != null) direction = unboundedMouseLookVector();
         if (direction == null) return;
         Camera camera = minecraft.gameRenderer.mainCamera();
         RayModelIntersection.Ray ray = new RayModelIntersection.Ray(camera.position(), direction);
@@ -199,14 +202,19 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 add(Operation.DIMENSION, Axis.Z, -1, SCALE_MODEL, Z_COLOR);
             }
             case "cylinder", "cylinder_wireframe", "cone", "cone_wireframe" -> {
-                add(Operation.HEIGHT, Axis.X, -1, SCALE_MODEL, X_COLOR);
-                add(Operation.RADIUS, Axis.Y, -1, SCALE_MODEL, PROPERTY_COLOR);
+                add(Operation.HEIGHT, Axis.Y, -1, MOVE_MODEL, Y_COLOR);
+                add(Operation.RADIUS, Axis.X, -1, MOVE_MODEL, PROPERTY_COLOR);
             }
             case "face_circle", "line_circle" -> add(Operation.RADIUS, Axis.Y, -1, SCALE_MODEL, PROPERTY_COLOR);
             case "sphere" -> add(Operation.RADIUS, Axis.X, -1, SCALE_MODEL, PROPERTY_COLOR);
             case "line", "line_strip" -> {
                 int count = state.points() == null ? 0 : state.points().size();
-                for (int i = 0; i < count; i++) add(Operation.POINT, Axis.NONE, i, CENTER_MODEL, PROPERTY_COLOR);
+                for (int i = 0; i < count; i++) {
+                    add(Operation.POINT, Axis.X, i, MOVE_MODEL, X_COLOR);
+                    add(Operation.POINT, Axis.Y, i, MOVE_MODEL, Y_COLOR);
+                    add(Operation.POINT, Axis.Z, i, MOVE_MODEL, Z_COLOR);
+                    add(Operation.POINT, Axis.NONE, i, CENTER_MODEL, PROPERTY_COLOR);
+                }
             }
         }
     }
@@ -224,8 +232,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         double scale = gizmoScale(center);
         for (Handle handle : handles) {
             Vec3 position = handlePosition(state, handle);
+            double handleScale = handle.operation() == Operation.POINT && handle.axis() == Axis.NONE
+                    ? scale * 0.5 : scale;
             handle.shape().forceSetWorldPosition(position);
-            handle.shape().forceSetWorldScale(new Vec3(scale, scale, scale));
+            handle.shape().forceSetWorldScale(new Vec3(handleScale, handleScale, handleScale));
             handle.shape().forceSetWorldRotation(handleRotation(state, handle));
         }
         updateColors();
@@ -238,7 +248,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             return center.add(localAxis(state, handle.axis()).scale(size(state, handle.axis()) * scale(state, handle.axis()) / 2));
         }
         if (handle.operation() == Operation.HEIGHT) {
-            return center.add(localAxis(state, Axis.X).scale(state.sizeY() * state.scaleX() / 2));
+            return center.add(localAxis(state, handle.axis())
+                    .scale(state.sizeY() * scale(state, handle.axis()) / 2));
         }
         if (handle.operation() == Operation.RADIUS) {
             Axis radial = handle.axis();
@@ -299,7 +310,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         dragAxis = handle.axis() == Axis.NONE ? Vec3.ZERO
                 : mode == Mode.GEOMETRY ? localAxis(state, handle.axis()) : axis(handle.axis());
         dragPlaneNormal = new Vec3(camera.forwardVector());
-        if (handle.operation() == Operation.MOVE_FREE || handle.operation() == Operation.POINT) {
+        if (handle.operation() == Operation.MOVE_FREE
+                || handle.operation() == Operation.POINT && handle.axis() == Axis.NONE) {
             dragPlaneStart = intersectPlane(ray, dragOrigin, dragPlaneNormal);
         } else if (handle.operation() == Operation.ROTATE) {
             Vec3 point = intersectPlane(ray, dragOrigin, dragAxis);
@@ -311,7 +323,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private ShapeState drag(RayModelIntersection.Ray ray, Camera camera) {
-        if (dragging.operation() == Operation.MOVE_FREE || dragging.operation() == Operation.POINT) {
+        if (dragging.operation() == Operation.MOVE_FREE
+                || dragging.operation() == Operation.POINT && dragging.axis() == Axis.NONE) {
             Vec3 current = intersectPlane(ray, dragOrigin, dragPlaneNormal);
             if (current == null || dragPlaneStart == null) return null;
             Vec3 delta = current.subtract(dragPlaneStart);
@@ -342,10 +355,20 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 yield with(dragStart, null, null, scale, null, null);
             }
             case DIMENSION -> withDimensionDelta(dragStart, dragging.axis(), delta);
-            case HEIGHT -> withHeightDelta(dragStart, delta);
+            case HEIGHT -> withHeightDelta(dragStart, dragging.axis(), delta);
             case RADIUS -> withRadiusDelta(dragStart, dragging.axis(), delta);
+            case POINT -> withPointDelta(dragStart, dragging.point(), dragAxis.scale(delta));
             default -> null;
         };
+    }
+
+    private static ShapeState withPointDelta(ShapeState state, int pointIndex, Vec3 worldDelta) {
+        List<ShapePoint> points = new ArrayList<>(state.points());
+        Vec3 localDelta = worldDeltaToLocal(state, worldDelta);
+        ShapePoint point = points.get(pointIndex);
+        points.set(pointIndex, new ShapePoint(point.x() + localDelta.x,
+                point.y() + localDelta.y, point.z() + localDelta.z));
+        return with(state, null, null, null, null, points);
     }
 
     private static ShapeState withDimensionDelta(ShapeState state, Axis axis, double worldDelta) {
@@ -355,9 +378,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         return with(state, null, null, null, size, null);
     }
 
-    private static ShapeState withHeightDelta(ShapeState state, double worldDelta) {
+    private static ShapeState withHeightDelta(ShapeState state, Axis axis, double worldDelta) {
         float[] size = {(float) state.sizeX(), (float) state.sizeY(), (float) state.sizeZ()};
-        size[1] = Math.max(0.001f, size[1] + (float) (2 * worldDelta / state.scaleX()));
+        size[1] = Math.max(0.001f, size[1] + (float) (2 * worldDelta / scale(state, axis)));
         return with(state, null, null, null, size, null);
     }
 
@@ -452,6 +475,18 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private static boolean mouseInViewport() {
-        return ReplayUI.isActive() && ReplayUI.isMainFrameHovered();
+        var mouse = ReplayUI.getMouseViewportFraction();
+        return ReplayUI.isActive() && mouse != null
+                && mouse.x >= 0 && mouse.x <= 1 && mouse.y >= 0 && mouse.y <= 1;
+    }
+
+    private static Vec3 unboundedMouseLookVector() {
+        if (ReplayUI.lastProjectionMatrix == null || ReplayUI.lastViewQuaternion == null) return null;
+        var mouse = ReplayUI.getMouseViewportFraction();
+        if (mouse == null) return null;
+        Vector4f projected = new Vector4f(mouse.x * 2 - 1, mouse.y * 2 - 1, 0, 1)
+                .mul(new Matrix4f(ReplayUI.lastProjectionMatrix).invert());
+        return ReplayUI.getMouseLookVectorFromForwards(
+                new Vec3(projected.x, -projected.y, projected.z).normalize());
     }
 }

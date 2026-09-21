@@ -125,6 +125,7 @@ public final class ShapeKeyframe extends Keyframe {
         ImBoolean holdText = new ImBoolean(currentText.holdText());
         ImBoolean textShadow = new ImBoolean(currentText.shadow());
         ImBoolean textOutline = new ImBoolean(currentText.outline());
+        ImString model = new ImString(state.model() == null ? "" : state.model(), 512);
         String[] billboard = {currentText.billboard()};
 
         changed |= ImGui.dragFloat3("Position", position, 0.05f);
@@ -203,6 +204,7 @@ public final class ShapeKeyframe extends Keyframe {
                     ImGui.endCombo();
                 }
             }
+            case "obj" -> changed |= ImGui.inputText("OBJ Resource", model);
         }
         changed |= ImGui.checkbox("See Through", seeThrough);
         changed |= ImGui.checkbox("Visible", visible);
@@ -218,7 +220,10 @@ public final class ShapeKeyframe extends Keyframe {
                             : state.text(),
                     parentId[0],
                     seeThrough.get(), visible.get())
-                    .withIdentity(selectedType[0], selectedId[0]);
+                    .withIdentity(selectedType[0], selectedId[0])
+                    .withModel(selectedType[0].equals("obj")
+                            ? model.get().isBlank() ? "ryansrenderingkit:models/monkey.obj" : model.get()
+                            : state.model());
             ShapeTrackRegistry.apply(replacement);
             update.accept(keyframe -> ((ShapeKeyframe) keyframe).state = replacement);
         }

@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.shape;
 
 import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManager;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManagers;
@@ -16,6 +17,7 @@ import ml.mypals.ryansrenderingkit.shape.line.LineShape;
 import ml.mypals.ryansrenderingkit.shape.line.StripLineShape;
 import ml.mypals.ryansrenderingkit.shape.round.SphereShape;
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
+import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shape.round.FaceCircleShape;
 import ml.mypals.ryansrenderingkit.shape.round.LineCircleShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
@@ -105,6 +107,9 @@ public final class ShapeTrackRegistry {
                     .shadow(settings.shadow()).outline(settings.outline())
                     .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH);
         });
+        register("obj", "OBJ Model", state -> new ObjModelShape(Shape.RenderingType.BATCH,
+                transformer -> {}, objModelId(state.model()), Vec3.ZERO,
+                new Color(state.color(), true), state.seeThrough()));
     }
 
     public static Iterable<Definition> definitions() { return TYPES.values(); }
@@ -202,7 +207,10 @@ public final class ShapeTrackRegistry {
         boolean immutableWidthChanged = previous != null
                 && (state.shapeType().equals("box_wireframe") || state.shapeType().equals("wireframed_box"))
                 && previous.lineWidth() != state.lineWidth();
-        if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId())) || immutableWidthChanged)) {
+        boolean modelChanged = previous != null && state.shapeType().equals("obj")
+                && !java.util.Objects.equals(previous.model(), state.model());
+        if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId()))
+                || immutableWidthChanged || modelChanged)) {
             ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
             SHAPES.remove(state.shapeId());
             shape = null;
@@ -306,6 +314,11 @@ public final class ShapeTrackRegistry {
         return state.points() == null ? List.of() : state.points().stream().map(ShapePoint::vec3).toList();
     }
 
+    private static Identifier objModelId(String value) {
+        Identifier id = value == null ? null : Identifier.tryParse(value);
+        return id == null ? Identifier.fromNamespaceAndPath("ryansrenderingkit", "models/monkey.obj") : id;
+    }
+
     private static void applyParent(Shape shape, String parentId) {
         Shape parent = parentId == null || parentId.isEmpty() ? null : SHAPES.get(parentId);
         if (parent == shape || createsCycle(shape, parent)) parent = null;
@@ -322,24 +335,38 @@ public final class ShapeTrackRegistry {
 
     private static void fixSeeThroughPipelines() {
         if (fixedSeeThroughPipelines || BuilderManagers.LINES_BUILDER_MANAGER == null) return;
-        replaceSeeThroughPipeline(BuilderManagers.LINES_BUILDER_MANAGER, "see_through_lines_fixed");
-        replaceSeeThroughPipeline(BuilderManagers.LINE_STRIP_BUILDER_MANAGER, "see_through_line_strip_fixed");
+        replacePipelines(BuilderManagers.LINES_BUILDER_MANAGER, "lines_translucent", RenderPipelines.LINES_SNIPPET);
+        replacePipelines(BuilderManagers.LINE_STRIP_BUILDER_MANAGER, "line_strip_translucent", RenderPipelines.LINES_SNIPPET);
+        replacePipelines(BuilderManagers.TRIANGLES_BUILDER_MANAGER, "triangles_translucent", RenderPipelines.DEBUG_FILLED_SNIPPET);
         fixedSeeThroughPipelines = true;
     }
 
-    private static void replaceSeeThroughPipeline(BuilderManager manager, String name) {
+    private static void replacePipelines(BuilderManager manager, String name, RenderPipeline.Snippet snippet) {
         RenderMethod old = manager.renderMethod;
-        RenderPipeline pipeline = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.LINES_SNIPPET)
+        RenderPipeline normalPipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
                 .withLocation(Identifier.fromNamespaceAndPath("vector3", name))
-                .withColorTargetState(ColorTargetState.DEFAULT)
+                .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+                .withCull(old.cullFace())
+                .withVertexBinding(0, old.format())
+                .withPrimitiveTopology(old.mode())
+                .build());
+        RenderPipeline seeThroughPipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
+                .withLocation(Identifier.fromNamespaceAndPath("vector3", name + "_see_through"))
+                .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
                 .withDepthStencilState(Optional.empty())
                 .withCull(old.cullFace())
                 .withVertexBinding(0, old.format())
                 .withPrimitiveTopology(old.mode())
                 .build());
-        RenderType renderType = RenderType.create(name,
-                RenderSetup.builder(pipeline).createRenderSetup());
-        manager.renderMethod = new RenderMethod(renderType, old.normalRenderType(),
+        RenderSetup.RenderSetupBuilder normalSetup = RenderSetup.builder(normalPipeline);
+        RenderSetup.RenderSetupBuilder seeThroughSetup = RenderSetup.builder(seeThroughPipeline);
+        if (old.mode() == com.mojang.renderpearl.api.pipeline.PrimitiveTopology.TRIANGLES) {
+            normalSetup.sortOnUpload();
+            seeThroughSetup.sortOnUpload();
+        }
+        RenderType normal = RenderType.create(name, normalSetup.createRenderSetup());
+        RenderType seeThrough = RenderType.create(name + "_see_through", seeThroughSetup.createRenderSetup());
+        manager.renderMethod = new RenderMethod(seeThrough, normal,
                 old.mode(), old.format(), old.cullFace());
     }
 }
