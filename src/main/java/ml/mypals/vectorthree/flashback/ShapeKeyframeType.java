@@ -64,8 +64,17 @@ public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
         Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
         Vec3 cameraPosition = camera.position();
         Vector3fc forward = camera.forwardVector();
-        ShapeState state = ShapeState.create(shapeType, "vector3:timeline/" + UUID.randomUUID(),
-                cameraPosition.x + forward.x(), cameraPosition.y + forward.y(), cameraPosition.z + forward.z())
+        double x = cameraPosition.x + forward.x();
+        double y = cameraPosition.y + forward.y();
+        double z = cameraPosition.z + forward.z();
+        if (shapeType.equals("area")) {
+            // AreaShape's default corners are local (-0.5,-0.5,-0.5)/(0.5,0.5,0.5); snapping the
+            // center to a block's midpoint makes those corners land on whole-block coordinates.
+            x = Math.floor(x) + 0.5;
+            y = Math.floor(y) + 0.5;
+            z = Math.floor(z) + 0.5;
+        }
+        ShapeState state = ShapeState.create(shapeType, "vector3:timeline/" + UUID.randomUUID(), x, y, z)
                 .withVideoStartTick(TimelineWindow.getCursorTick());
         ShapeTrackRegistry.apply(state);
         return new ShapeKeyframe(state);

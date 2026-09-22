@@ -71,6 +71,7 @@ public final class ShapeTrackRegistry {
         VertexBuilderGetter.registerEmptyShapeBuilder(FontTextShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         VertexBuilderGetter.registerEmptyShapeBuilder(ImageShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         VertexBuilderGetter.registerEmptyShapeBuilder(VideoShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        VertexBuilderGetter.registerEmptyShapeBuilder(AreaShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
         register("box", "Solid Box", state -> ShapeGenerator.generateBoxFace()
                 .pos(new Vec3(state.x(), state.y(), state.z()))
@@ -129,6 +130,8 @@ public final class ShapeTrackRegistry {
         register("image", "Image", state -> new ImageShape(state.model(),
                 new Color(state.color(), true), state.seeThrough()));
         register("video", "Video", state -> new VideoShape(state.model(),
+                new Color(state.color(), true), state.seeThrough()));
+        register("area", "Area (Baked Region)", state -> new AreaShape(state,
                 new Color(state.color(), true), state.seeThrough()));
     }
 
@@ -236,8 +239,14 @@ public final class ShapeTrackRegistry {
                         || state.shapeType().equals("video"))
                 && (!java.util.Objects.equals(previous.model(), state.model())
                         || !java.util.Objects.equals(previous.blockProperties(), state.blockProperties()));
+        // AreaShape's two Geometry points are the source selection (the blue box) and are what get
+        // baked; the shape's own position/rotation/scale is just the destination preview (the yellow
+        // box) and is applied at draw time via AreaShape.updateTransform below, so only a points change
+        // needs a full re-bake.
+        boolean areaBoundsChanged = previous != null && state.shapeType().equals("area")
+                && !java.util.Objects.equals(previous.points(), state.points());
         if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId()))
-                || immutableWidthChanged || modelChanged)) {
+                || immutableWidthChanged || modelChanged || areaBoundsChanged)) {
             ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
             shape.discard();
             SHAPES.remove(state.shapeId());
@@ -256,6 +265,7 @@ public final class ShapeTrackRegistry {
         shape.forceSetWorldPosition(new Vec3(state.x(), state.y(), state.z()));
         shape.forceSetWorldRotation(new Vector3f(state.pitch(), state.yaw(), state.roll()));
         shape.forceSetWorldScale(new Vec3(state.scaleX(), state.scaleY(), state.scaleZ()));
+        if (shape instanceof AreaShape area) area.updateTransform(state);
         if (shape instanceof BoxShape box) box.forceSetDimensions(size(state));
         if (shape instanceof WireframedBoxShape wireframed) {
             wireframed.edgeWidth = state.lineWidth();
@@ -352,6 +362,8 @@ public final class ShapeTrackRegistry {
             VertexBuilderGetter.registerEmptyShapeBuilder(ImageShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof VideoShape)
             VertexBuilderGetter.registerEmptyShapeBuilder(VideoShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        else if (shape instanceof AreaShape)
+            VertexBuilderGetter.registerEmptyShapeBuilder(AreaShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof ArrowShape)
             VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
     }
@@ -451,10 +463,7 @@ public final class ShapeTrackRegistry {
         RenderPipeline seeThroughPipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
                 .withLocation(Identifier.fromNamespaceAndPath("vector3", name + "_see_through"))
                 .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
-                // Ignore whatever is already in the depth buffer (so it draws through walls) but still
-                // write true depth, so shapes rendered afterward in a LATER pass (e.g. Image/VideoShape,
-                // which always draw after batched shapes like this one) still depth-test against it
-                // correctly instead of unconditionally painting over it.
+
                 .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true))
                 .withCull(old.cullFace())
                 .withVertexBinding(0, old.format())

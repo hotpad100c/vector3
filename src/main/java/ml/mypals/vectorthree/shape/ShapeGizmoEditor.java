@@ -42,6 +42,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private static final double ARROW_POINT_GIZMO_SCALE = 0.1;
     private static final Color AABB_COLOR = new Color(255, 220, 0, 255);
     private static final Color CENTER_POINT_COLOR = new Color(255, 40, 40, 255);
+    private static final Color AREA_SELECTION_COLOR = new Color(60, 140, 255, 255);
     private static final float AABB_EDGE_WIDTH = 1F;
     private static final double CENTER_POINT_GIZMO_SCALE = 0.25;
 
@@ -70,6 +71,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private final Set<Integer> heldShortcutKeys = new HashSet<>();
     private BoxWireframeShape aabbBox;
     private ObjModelShape centerPoint;
+    private BoxWireframeShape areaSelectionBox;
 
     @Override
     public void edit(ShapeKeyframe keyframe, Consumer<Consumer<ShapeKeyframe>> update) {
@@ -78,7 +80,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         ImGui.text("Viewport Gizmo");
         setModeButton("Move (G)", Mode.MOVE); ImGui.sameLine();
         setModeButton("Rotate (R)", Mode.ROTATE); ImGui.sameLine();
-        setModeButton("Scale (S)", Mode.SCALE); ImGui.sameLine();
+        setModeButton("Scale (B)", Mode.SCALE); ImGui.sameLine();
         setModeButton("Geometry (M)", Mode.GEOMETRY);
 
     }
@@ -113,6 +115,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             if (!wantedLayout.equals(layoutKey)) rebuild(state);
             updateHandles(state);
             updateAabbMarker(state);
+            updateAreaSelectionMarker(state);
         }
 
         if (dragging == null) {
@@ -133,6 +136,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 ShapeTrackRegistry.apply(replacement);
                 updateHandles(replacement);
                 updateAabbMarker(replacement);
+                updateAreaSelectionMarker(replacement);
             }
         }
     }
@@ -150,6 +154,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         rebuild(keyframe.state);
         updateHandles(keyframe.state);
         updateAabbMarker(keyframe.state);
+        updateAreaSelectionMarker(keyframe.state);
     }
 
     public void clearSelection() {
@@ -162,6 +167,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         handles.clear();
         ShapeManagers.removeShapes(Vector3.id("gizmo/" + session));
         removeAabbMarker();
+        removeAreaSelectionMarker();
         keyframe = null;
         hovered = null;
         dragging = null;
@@ -178,11 +184,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private void handleShortcuts() {
         if (keyframe == null || dragging != null || ImGui.getIO().getWantTextInput() || ImGui.isAnyItemActive()) return;
-        // Flashback only forwards key events to ImGui's IO while a Minecraft Screen is open; in the
-        // viewport (no screen open) it routes keys straight to the game instead, so ImGui.isKeyPressed
-        // never fires for G/S/R/M here. Poll the platform key state directly to sidestep that routing.
         boolean move = keyJustPressed(InputConstants.KEY_G);
-        boolean scale = keyJustPressed(InputConstants.KEY_S);
+        boolean scale = keyJustPressed(InputConstants.KEY_B);
         boolean rotate = keyJustPressed(InputConstants.KEY_R);
         boolean geometry = keyJustPressed(InputConstants.KEY_M);
         Mode requested = move ? Mode.MOVE : scale ? Mode.SCALE : rotate ? Mode.ROTATE : geometry ? Mode.GEOMETRY : null;
@@ -203,6 +206,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             rebuild(keyframe.state);
             updateHandles(keyframe.state);
             updateAabbMarker(keyframe.state);
+            updateAreaSelectionMarker(keyframe.state);
         }
     }
 
@@ -251,7 +255,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             }
             case "face_circle", "line_circle" -> add(Operation.RADIUS, Axis.Y, -1, SCALE_MODEL, PROPERTY_COLOR);
             case "sphere" -> add(Operation.RADIUS, Axis.X, -1, SCALE_MODEL, PROPERTY_COLOR);
-            case "line", "line_strip", "arrow" -> {
+            case "line", "line_strip", "arrow", "area" -> {
                 int count = state.points() == null ? 0 : state.points().size();
                 for (int i = 0; i < count; i++) {
                     add(Operation.POINT, Axis.X, i, MOVE_MODEL, X_COLOR);
@@ -335,9 +339,48 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         centerPoint = null;
     }
 
+    private void updateAreaSelectionMarker(ShapeState state) {
+        if (!state.shapeType().equals("area") || state.points() == null || state.points().size() < 2) {
+            removeAreaSelectionMarker();
+            return;
+        }
+        Vec3 a = state.points().get(0).vec3();
+        Vec3 b = state.points().get(1).vec3();
+         double inset = 0.01;
+        Vec3 min = new Vec3(Math.min(a.x, b.x) - inset, Math.min(a.y, b.y) - inset, Math.min(a.z, b.z) - inset);
+        Vec3 max = new Vec3(Math.max(a.x, b.x) + inset, Math.max(a.y, b.y) + inset, Math.max(a.z, b.z) + inset);
+        ensureAreaSelectionMarker();
+        areaSelectionBox.forceSetCorners(min, max);
+    }
+
+    private void ensureAreaSelectionMarker() {
+        if (areaSelectionBox != null) return;
+        areaSelectionBox = ShapeGenerator.generateBoxWireframe()
+                .aabb(Vec3.ZERO, new Vec3(1, 1, 1))
+                .edgeWidth(AABB_EDGE_WIDTH)
+                .color(AREA_SELECTION_COLOR)
+                .seeThrough(true)
+                .build(Shape.RenderingType.BATCH);
+        ShapeManagers.addShape(Vector3.id("gizmo_area_selection/" + session), areaSelectionBox);
+    }
+
+    private void removeAreaSelectionMarker() {
+        if (areaSelectionBox == null) return;
+        areaSelectionBox.discard();
+        ShapeManagers.removeShapes(Vector3.id("gizmo_area_selection/" + session));
+        areaSelectionBox = null;
+    }
+
+    private static boolean usesAbsolutePoints(ShapeState state) {
+        return state.shapeType().equals("area");
+    }
+
     private Vec3 handlePosition(ShapeState state, Handle handle) {
         Vec3 center = center(state);
-        if (handle.operation() == Operation.POINT) return localToWorld(state, state.points().get(handle.point()));
+        if (handle.operation() == Operation.POINT) {
+            ShapePoint point = state.points().get(handle.point());
+            return usesAbsolutePoints(state) ? point.vec3() : localToWorld(state, point);
+        }
         if (handle.operation() == Operation.DIMENSION) {
             return center.add(localAxis(state, handle.axis()).scale(size(state, handle.axis()) * scale(state, handle.axis()) / 2));
         }
@@ -410,7 +453,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         dragAxis = handle.operation() == Operation.SCALE_UNIFORM
                 ? new Vec3(camera.leftVector()).scale(-1)
                 : handle.axis() == Axis.NONE ? Vec3.ZERO
-                : mode == Mode.GEOMETRY ? localAxis(state, handle.axis()) : axis(handle.axis());
+                : mode == Mode.GEOMETRY && !usesAbsolutePoints(state) ? localAxis(state, handle.axis())
+                : axis(handle.axis());
         dragPlaneNormal = new Vec3(camera.forwardVector());
         if (handle.operation() == Operation.MOVE_FREE
                 || handle.operation() == Operation.POINT && handle.axis() == Axis.NONE) {
@@ -432,10 +476,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             Vec3 delta = current.subtract(dragPlaneStart);
             if (dragging.operation() == Operation.MOVE_FREE) return withPosition(dragStart, center(dragStart).add(delta));
             List<ShapePoint> points = new ArrayList<>(dragStart.points());
-            Vec3 localDelta = worldDeltaToLocal(dragStart, delta);
+            Vec3 pointDelta = usesAbsolutePoints(dragStart) ? delta : worldDeltaToLocal(dragStart, delta);
             ShapePoint point = points.get(dragging.point());
-            points.set(dragging.point(), new ShapePoint(point.x() + localDelta.x,
-                    point.y() + localDelta.y, point.z() + localDelta.z));
+            points.set(dragging.point(), new ShapePoint(point.x() + pointDelta.x,
+                    point.y() + pointDelta.y, point.z() + pointDelta.z));
             return with(dragStart, null, null, null, null, points);
         }
         if (dragging.operation() == Operation.ROTATE) {
@@ -473,10 +517,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private static ShapeState withPointDelta(ShapeState state, int pointIndex, Vec3 worldDelta) {
         List<ShapePoint> points = new ArrayList<>(state.points());
-        Vec3 localDelta = worldDeltaToLocal(state, worldDelta);
+        Vec3 pointDelta = usesAbsolutePoints(state) ? worldDelta : worldDeltaToLocal(state, worldDelta);
         ShapePoint point = points.get(pointIndex);
-        points.set(pointIndex, new ShapePoint(point.x() + localDelta.x,
-                point.y() + localDelta.y, point.z() + localDelta.z));
+        points.set(pointIndex, new ShapePoint(point.x() + pointDelta.x,
+                point.y() + pointDelta.y, point.z() + pointDelta.z));
         return with(state, null, null, null, null, points);
     }
 

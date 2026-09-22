@@ -32,6 +32,10 @@ public record ShapeState(
         List<ShapePoint> points = switch (type) {
             case "line", "line_strip" -> List.of(new ShapePoint(0, 0, 0), new ShapePoint(1, 1, 1));
             case "arrow" -> List.of(new ShapePoint(0, 0, 0), new ShapePoint(0, 1, 0));
+            // Absolute world coordinates (the source selection), not local offsets — see
+            // ShapeGizmoEditor.usesAbsolutePoints. Defaults to a 1x1x1 block centered on the creation
+            // position, i.e. source == destination initially (a no-op projection).
+            case "area" -> List.of(new ShapePoint(x - 0.5, y - 0.5, z - 0.5), new ShapePoint(x + 0.5, y + 0.5, z + 0.5));
             default -> List.of();
         };
         return new ShapeState(type, id, x, y, z, 0, 0, 0,

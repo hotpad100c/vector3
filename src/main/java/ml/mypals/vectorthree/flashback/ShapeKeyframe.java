@@ -10,6 +10,7 @@ import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.shape.TextSettings;
 import ml.mypals.vectorthree.shape.VideoShape;
+import ml.mypals.vectorthree.shape.AreaShape;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImBoolean;
 import imgui.moulberry90.type.ImInt;
@@ -248,6 +249,21 @@ public final class ShapeKeyframe extends Keyframe {
                     changed |= ImGui.sliderFloat("Playback Position (s)", playbackSeconds, 0f, videoDuration);
                 }
                 changed |= ImGui.checkbox("Play Audio", playAudio);
+            }
+            case "area" -> {
+                while (points.size() < 2) points.add(new ShapePoint(state.x() - 0.5, state.y() - 0.5, state.z() - 0.5));
+                changed |= editPoint("Corner 1", points, 0);
+                changed |= editPoint("Corner 2", points, 1);
+                if (ShapeTrackRegistry.shape(state.shapeId()) instanceof AreaShape area) {
+                    ImGui.text("Baked blocks: " + area.blockCount());
+                } else {
+                    ImGui.text("Baked blocks: (not baked yet)");
+                }
+                ImGui.text("Corners are absolute world coordinates: the source region");
+                ImGui.text("(blue box) that gets baked. Also draggable via the Geometry");
+                ImGui.text("gizmo. This shape's own position/rotation/scale is where the");
+                ImGui.text("baked content is projected to (yellow box); moving it is");
+                ImGui.text("cheap and does not re-bake. Only changing the corners does.");
             }
             case "block" -> {
                 ImGui.setNextItemWidth(360);
