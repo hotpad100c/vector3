@@ -2,8 +2,10 @@ package ml.mypals.vectorthree.shape;
 
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import imgui.moulberry90.ImGui;
+import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
 import ml.mypals.ryansrenderingkit.shape.Shape;
+import ml.mypals.ryansrenderingkit.shape.box.BoxWireframeShape;
 import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.Vector3;
@@ -38,6 +40,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private static final Color HOVER_COLOR = new Color(255, 235, 40, 255);
     private static final Color ACTIVE_COLOR = Color.WHITE;
     private static final double ARROW_POINT_GIZMO_SCALE = 0.1;
+    private static final Color AABB_COLOR = new Color(255, 220, 0, 255);
+    private static final Color CENTER_POINT_COLOR = new Color(255, 40, 40, 255);
+    private static final float AABB_EDGE_WIDTH = 1F;
+    private static final double CENTER_POINT_GIZMO_SCALE = 0.25;
 
     private enum Mode { MOVE, ROTATE, SCALE, GEOMETRY }
     private enum Axis { X, Y, Z, NONE }
@@ -62,6 +68,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private double dragAngle;
     private ShapeState previewState;
     private final Set<Integer> heldShortcutKeys = new HashSet<>();
+    private BoxWireframeShape aabbBox;
+    private ObjModelShape centerPoint;
 
     @Override
     public void edit(ShapeKeyframe keyframe, Consumer<Consumer<ShapeKeyframe>> update) {
@@ -104,6 +112,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             String wantedLayout = layoutKey(state);
             if (!wantedLayout.equals(layoutKey)) rebuild(state);
             updateHandles(state);
+            updateAabbMarker(state);
         }
 
         if (dragging == null) {
@@ -123,6 +132,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 previewState = replacement;
                 ShapeTrackRegistry.apply(replacement);
                 updateHandles(replacement);
+                updateAabbMarker(replacement);
             }
         }
     }
@@ -139,6 +149,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         dragging = null;
         rebuild(keyframe.state);
         updateHandles(keyframe.state);
+        updateAabbMarker(keyframe.state);
     }
 
     public void clearSelection() {
@@ -150,6 +161,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         for (Handle handle : handles) handle.shape().discard();
         handles.clear();
         ShapeManagers.removeShapes(Vector3.id("gizmo/" + session));
+        removeAabbMarker();
         keyframe = null;
         hovered = null;
         dragging = null;
@@ -190,6 +202,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         if (keyframe != null) {
             rebuild(keyframe.state);
             updateHandles(keyframe.state);
+            updateAabbMarker(keyframe.state);
         }
     }
 
@@ -275,6 +288,53 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         updateColors();
     }
 
+    private void updateAabbMarker(ShapeState state) {
+        Shape target = ShapeTrackRegistry.shape(state.shapeId());
+        List<Vec3> vertices = target == null ? null : target.getModel(false);
+        Vec3 min;
+        Vec3 max;
+        if (vertices == null || vertices.isEmpty()) {
+            min = max = center(state);
+        } else {
+            min = vertices.get(0);
+            max = vertices.get(0);
+            for (Vec3 vertex : vertices) {
+                min = new Vec3(Math.min(min.x, vertex.x), Math.min(min.y, vertex.y), Math.min(min.z, vertex.z));
+                max = new Vec3(Math.max(max.x, vertex.x), Math.max(max.y, vertex.y), Math.max(max.z, vertex.z));
+            }
+        }
+        ensureAabbMarker();
+        aabbBox.forceSetCorners(min, max);
+        Vec3 markerCenter = min.add(max).scale(0.5);
+        double scale = gizmoScale(markerCenter) * CENTER_POINT_GIZMO_SCALE;
+        centerPoint.forceSetWorldPosition(markerCenter);
+        centerPoint.forceSetWorldScale(new Vec3(scale, scale, scale));
+    }
+
+    private void ensureAabbMarker() {
+        if (aabbBox != null) return;
+        aabbBox = ShapeGenerator.generateBoxWireframe()
+                .aabb(Vec3.ZERO, new Vec3(1, 1, 1))
+                .edgeWidth(AABB_EDGE_WIDTH)
+                .color(AABB_COLOR)
+                .seeThrough(true)
+                .build(Shape.RenderingType.BATCH);
+        ShapeManagers.addShape(Vector3.id("gizmo_aabb/" + session), aabbBox);
+        centerPoint = new ObjModelShape(Shape.RenderingType.BATCH, transformer -> {},
+                CENTER_MODEL, Vec3.ZERO, CENTER_POINT_COLOR, true);
+        ShapeManagers.addShape(Vector3.id("gizmo_center/" + session), centerPoint);
+    }
+
+    private void removeAabbMarker() {
+        if (aabbBox == null) return;
+        aabbBox.discard();
+        centerPoint.discard();
+        ShapeManagers.removeShapes(Vector3.id("gizmo_aabb/" + session));
+        ShapeManagers.removeShapes(Vector3.id("gizmo_center/" + session));
+        aabbBox = null;
+        centerPoint = null;
+    }
+
     private Vec3 handlePosition(ShapeState state, Handle handle) {
         Vec3 center = center(state);
         if (handle.operation() == Operation.POINT) return localToWorld(state, state.points().get(handle.point()));
@@ -294,9 +354,15 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private Vector3f handleRotation(ShapeState state, Handle handle) {
         float x = 0, y = 0, z = 0;
-        if (handle.axis() == Axis.X) z = -90;
-        if (handle.axis() == Axis.Z) x = 90;
-        if (handle.operation() == Operation.ROTATE && handle.axis() == Axis.Z) z = 90;
+        if (handle.operation() == Operation.ROTATE) {
+            // rotation.obj's ring lies in the Y-Z plane by default (normal along X), unlike the
+            // move/scale arrow models below which default to pointing along Y.
+            if (handle.axis() == Axis.Y) z = 90;
+            else if (handle.axis() == Axis.Z) y = 90;
+        } else {
+            if (handle.axis() == Axis.X) z = -90;
+            if (handle.axis() == Axis.Z) x = 90;
+        }
         if (mode == Mode.GEOMETRY) {
             x += state.pitch(); y += state.yaw(); z += state.roll();
         }
@@ -446,7 +512,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         if (size == null) size = new float[]{(float) state.sizeX(), (float) state.sizeY(), (float) state.sizeZ()};
         if (points == null) points = state.points();
         return state.with(position, rotation, scale, size, state.segments(), state.lineWidth(), state.color(),
-                points, state.text(), state.parentShapeId(), state.seeThrough(), state.visible());
+                points, state.text(), state.parentShapeId(), state.seeThrough(), state.visible(), state.playAudio(),
+                state.manualPlayback(), state.noLoop(), state.playbackSeconds());
     }
 
     private static Vec3 center(ShapeState state) { return new Vec3(state.x(), state.y(), state.z()); }

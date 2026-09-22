@@ -2,6 +2,8 @@ package ml.mypals.vectorthree.shape;
 
 import com.mojang.renderpearl.api.pipeline.ColorTargetState;
 import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.CompareOp;
+import com.mojang.renderpearl.api.pipeline.DepthStencilState;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManager;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManagers;
@@ -23,6 +25,7 @@ import ml.mypals.ryansrenderingkit.shape.round.LineCircleShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.ryansrenderingkit.shapeManagers.VertexBuilderGetter;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
+import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -41,7 +44,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.Arrays;
-import java.util.Optional;
 import java.util.function.Function;
 
 public final class ShapeTrackRegistry {
@@ -68,6 +70,7 @@ public final class ShapeTrackRegistry {
     public static void registerDefaults() {
         VertexBuilderGetter.registerEmptyShapeBuilder(FontTextShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         VertexBuilderGetter.registerEmptyShapeBuilder(ImageShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        VertexBuilderGetter.registerEmptyShapeBuilder(VideoShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
         register("box", "Solid Box", state -> ShapeGenerator.generateBoxFace()
                 .pos(new Vec3(state.x(), state.y(), state.z()))
@@ -125,10 +128,13 @@ public final class ShapeTrackRegistry {
                 state.lineWidth(), (float) state.sizeX(), new Color(state.color(), true), state.seeThrough()));
         register("image", "Image", state -> new ImageShape(state.model(),
                 new Color(state.color(), true), state.seeThrough()));
+        register("video", "Video", state -> new VideoShape(state.model(),
+                new Color(state.color(), true), state.seeThrough()));
     }
 
     public static Iterable<Definition> definitions() { return TYPES.values(); }
     public static Definition definition(String id) { return TYPES.get(id); }
+    public static Shape shape(String shapeId) { return SHAPES.get(shapeId); }
     public static Iterable<String> shapeIds() { return List.copyOf(SHAPES.keySet()); }
     public static String typeOf(String shapeId) { return SHAPE_TYPES.get(shapeId); }
     public static void previewHighlight(String shapeId) { previewHighlightId = shapeId; }
@@ -208,6 +214,7 @@ public final class ShapeTrackRegistry {
     public static void clear() {
         for (String shapeId : List.copyOf(SHAPES.keySet())) {
             ShapeManagers.removeShapes(Identifier.parse(shapeId));
+            SHAPES.get(shapeId).discard();
         }
         SHAPES.clear();
         SHAPE_TYPES.clear();
@@ -225,12 +232,14 @@ public final class ShapeTrackRegistry {
                 && previous.lineWidth() != state.lineWidth();
         boolean modelChanged = previous != null
                 && (state.shapeType().equals("obj") || state.shapeType().equals("block")
-                        || state.shapeType().equals("item") || state.shapeType().equals("image"))
+                        || state.shapeType().equals("item") || state.shapeType().equals("image")
+                        || state.shapeType().equals("video"))
                 && (!java.util.Objects.equals(previous.model(), state.model())
                         || !java.util.Objects.equals(previous.blockProperties(), state.blockProperties()));
         if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId()))
                 || immutableWidthChanged || modelChanged)) {
             ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
+            shape.discard();
             SHAPES.remove(state.shapeId());
             shape = null;
         }
@@ -290,6 +299,8 @@ public final class ShapeTrackRegistry {
         }
         if (shape instanceof ArrowShape arrow)
             arrow.forceSet(point(state, 0), point(state, 1), state.lineWidth(), (float) state.sizeX());
+        if (shape instanceof VideoShape video) video.setPlayback(state.videoStartTick(),
+                !state.manualPlayback(), !state.noLoop(), (float) state.playbackSeconds());
         if (shape instanceof TextShape textShape) {
             TextSettings settings = state.text() == null ? TextSettings.defaults() : state.text();
             textShape.contents.clear();
@@ -301,7 +312,17 @@ public final class ShapeTrackRegistry {
             textShape.setBillboardMode(TextShape.BillBoardMode.valueOf(settings.billboard()));
             if (textShape instanceof FontTextShape fontShape) fontShape.font = settings.fontOrDefault();
         }
-        shape.seeThrough = state.seeThrough();
+        if (previous != null && previous.seeThrough() != state.seeThrough()) {
+            // ShapeManager buckets a shape into its normal/see-through ConcurrentHashMap only at
+            // addShape() time; flipping Shape.seeThrough on an already-registered shape doesn't move it
+            // between buckets. Re-register the same instance so it gets rebucketed under the new value
+            // instead of silently staying in whichever bucket it was first added to.
+            ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
+            shape.seeThrough = state.seeThrough();
+            ShapeManagers.addShape(Identifier.parse(state.shapeId()), shape);
+        } else {
+            shape.seeThrough = state.seeThrough();
+        }
         applyParent(shape, state.parentShapeId());
         shape.syncLastToTarget();
         Color color = new Color(state.color(), true);
@@ -329,6 +350,8 @@ public final class ShapeTrackRegistry {
             VertexBuilderGetter.registerEmptyShapeBuilder(FontTextShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof ImageShape)
             VertexBuilderGetter.registerEmptyShapeBuilder(ImageShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        else if (shape instanceof VideoShape)
+            VertexBuilderGetter.registerEmptyShapeBuilder(VideoShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof ArrowShape)
             VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
     }
@@ -399,7 +422,9 @@ public final class ShapeTrackRegistry {
     }
 
     private static void fixSeeThroughPipelines() {
-        if (fixedSeeThroughPipelines || BuilderManagers.LINES_BUILDER_MANAGER == null) return;
+        if (fixedSeeThroughPipelines || BuilderManagers.LINES_BUILDER_MANAGER == null
+                || BuilderManagers.LINE_STRIP_BUILDER_MANAGER == null
+                || BuilderManagers.TRIANGLES_BUILDER_MANAGER == null) return;
         replacePipelines(BuilderManagers.LINES_BUILDER_MANAGER, "lines_translucent", RenderPipelines.LINES_SNIPPET);
         replacePipelines(BuilderManagers.LINE_STRIP_BUILDER_MANAGER, "line_strip_translucent", RenderPipelines.LINES_SNIPPET);
         replacePipelines(BuilderManagers.TRIANGLES_BUILDER_MANAGER, "triangles_translucent", RenderPipelines.DEBUG_FILLED_SNIPPET);
@@ -411,6 +436,14 @@ public final class ShapeTrackRegistry {
         RenderPipeline normalPipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
                 .withLocation(Identifier.fromNamespaceAndPath("vector3", name))
                 .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+                // RenderPipelines.DEBUG_FILLED_SNIPPET (used for the triangles manager) sets
+                // writeDepth=false, since it's meant for debug overlays that shouldn't persist in the
+                // depth buffer. That's wrong for real scene shapes (box/sphere/arrow/obj icons): without
+                // a depth write they leave no trace for anything drawn afterward (other batch shapes, or
+                // Image/VideoShape's later pass) to test against, so later draws can paint over them even
+                // when they're genuinely closer to the camera. Force the normal write-enabled default
+                // regardless of which snippet this pipeline is based on.
+                .withDepthStencilState(DepthStencilState.DEFAULT)
                 .withCull(old.cullFace())
                 .withVertexBinding(0, old.format())
                 .withPrimitiveTopology(old.mode())
@@ -418,7 +451,11 @@ public final class ShapeTrackRegistry {
         RenderPipeline seeThroughPipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
                 .withLocation(Identifier.fromNamespaceAndPath("vector3", name + "_see_through"))
                 .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
-                .withDepthStencilState(Optional.empty())
+                // Ignore whatever is already in the depth buffer (so it draws through walls) but still
+                // write true depth, so shapes rendered afterward in a LATER pass (e.g. Image/VideoShape,
+                // which always draw after batched shapes like this one) still depth-test against it
+                // correctly instead of unconditionally painting over it.
+                .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true))
                 .withCull(old.cullFace())
                 .withVertexBinding(0, old.format())
                 .withPrimitiveTopology(old.mode())
@@ -433,5 +470,35 @@ public final class ShapeTrackRegistry {
         RenderType seeThrough = RenderType.create(name + "_see_through", seeThroughSetup.createRenderSetup());
         manager.renderMethod = new RenderMethod(seeThrough, normal,
                 old.mode(), old.format(), old.cullFace());
+    }
+
+    private static RenderPipeline imageSeeThroughPipeline;
+
+    /**
+     * A textured translucent RenderType that actually ignores existing depth (test always passes) while
+     * still writing its own, for {@link ImageShape}/{@link VideoShape} when seeThrough is on.
+     * {@code RenderTypes.entityTranslucent(Identifier)} — what those shapes used before — is NOT an
+     * x-ray type: its pipeline inherits the same normal depth test/write as entityTranslucentCull (the
+     * only difference between the two is face culling), so it never actually drew through walls. This
+     * mirrors vanilla's entityTranslucentCull pipeline construction exactly, only replacing the depth
+     * state, so it stays otherwise identical (same shader, blend, texture/lightmap/overlay bindings).
+     */
+    static RenderType imageSeeThroughType(Identifier textureId) {
+        if (imageSeeThroughPipeline == null) {
+            imageSeeThroughPipeline = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.ENTITY_SNIPPET)
+                    .withLocation(Identifier.fromNamespaceAndPath("vector3", "entity_translucent_see_through"))
+                    .withShaderDefine("ALPHA_CUTOUT", 0.1f)
+                    .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
+                    .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+                    .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true))
+                    .build());
+        }
+        RenderSetup setup = RenderSetup.builder(imageSeeThroughPipeline)
+                .withTexture("Sampler0", textureId)
+                .useLightmap()
+                .useOverlay()
+                .sortOnUpload()
+                .createRenderSetup();
+        return RenderType.create("vector3_image_see_through", setup);
     }
 }

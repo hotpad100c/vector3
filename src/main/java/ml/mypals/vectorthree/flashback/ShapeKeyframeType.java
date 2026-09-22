@@ -6,6 +6,7 @@ import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
 import com.moulberry.flashback.editor.ui.ReplayUI;
+import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
 import imgui.moulberry90.ImGui;
 import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
@@ -64,7 +65,8 @@ public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
         Vec3 cameraPosition = camera.position();
         Vector3fc forward = camera.forwardVector();
         ShapeState state = ShapeState.create(shapeType, "vector3:timeline/" + UUID.randomUUID(),
-                cameraPosition.x + forward.x(), cameraPosition.y + forward.y(), cameraPosition.z + forward.z());
+                cameraPosition.x + forward.x(), cameraPosition.y + forward.y(), cameraPosition.z + forward.z())
+                .withVideoStartTick(TimelineWindow.getCursorTick());
         ShapeTrackRegistry.apply(state);
         return new ShapeKeyframe(state);
     }

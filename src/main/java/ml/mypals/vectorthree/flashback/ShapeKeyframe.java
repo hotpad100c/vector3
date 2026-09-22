@@ -9,6 +9,7 @@ import ml.mypals.vectorthree.shape.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.shape.TextSettings;
+import ml.mypals.vectorthree.shape.VideoShape;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImBoolean;
 import imgui.moulberry90.type.ImInt;
@@ -133,6 +134,17 @@ public final class ShapeKeyframe extends Keyframe {
                 ? state.model() : "ryansrenderingkit:models/monkey.obj", 512);
         ImString imageFile = new ImString(state.shapeType().equals("image") && state.model() != null
                 ? state.model() : "", 1024);
+        ImString videoFile = new ImString(state.shapeType().equals("video") && state.model() != null
+                ? state.model() : "", 1024);
+        ImInt videoStartTick = new ImInt(state.videoStartTick());
+        ImBoolean playAudio = new ImBoolean(state.playAudio());
+        ImBoolean videoAutoPlay = new ImBoolean(!state.manualPlayback());
+        ImBoolean videoLoop = new ImBoolean(!state.noLoop());
+        VideoShape liveVideoShape = state.shapeType().equals("video")
+                && ShapeTrackRegistry.shape(state.shapeId()) instanceof VideoShape shape ? shape : null;
+        float videoDuration = liveVideoShape != null && liveVideoShape.duration() > 0
+                ? (float) liveVideoShape.duration() : 3600f;
+        float[] playbackSeconds = {(float) state.playbackSeconds()};
         ImString font = new ImString(currentText.fontOrDefault(), 256);
         String[] content = {switch (selectedType[0]) {
             case "block" -> state.shapeType().equals("block") && state.model() != null && !state.model().isBlank()
@@ -226,6 +238,17 @@ public final class ShapeKeyframe extends Keyframe {
             }
             case "obj" -> changed |= ImGui.inputText("OBJ Resource", model);
             case "image" -> changed |= ImGui.inputText("Image File", imageFile);
+            case "video" -> {
+                changed |= ImGui.inputText("Video File", videoFile);
+                changed |= ImGui.checkbox("Auto Play", videoAutoPlay);
+                if (videoAutoPlay.get()) {
+                    changed |= ImGui.inputInt("Start Tick", videoStartTick);
+                    changed |= ImGui.checkbox("Loop", videoLoop);
+                } else {
+                    changed |= ImGui.sliderFloat("Playback Position (s)", playbackSeconds, 0f, videoDuration);
+                }
+                changed |= ImGui.checkbox("Play Audio", playAudio);
+            }
             case "block" -> {
                 ImGui.setNextItemWidth(360);
                 if (ImGui.beginCombo("Block", content[0])) {
@@ -280,17 +303,22 @@ public final class ShapeKeyframe extends Keyframe {
                                     textOutline.get(), billboard[0], font.get())
                             : state.text(),
                     parentId[0],
-                    seeThrough.get(), visible.get())
+                    seeThrough.get(), visible.get(), playAudio.get(),
+                    selectedType[0].equals("video") ? !videoAutoPlay.get() : state.manualPlayback(),
+                    selectedType[0].equals("video") ? !videoLoop.get() : state.noLoop(),
+                    selectedType[0].equals("video") ? playbackSeconds[0] : state.playbackSeconds())
                     .withIdentity(selectedType[0], selectedId[0])
                     .withModel(switch (selectedType[0]) {
                         case "obj" -> model.get().isBlank()
                                 ? "ryansrenderingkit:models/monkey.obj" : model.get();
                         case "block", "item" -> content[0];
                         case "image" -> imageFile.get();
+                        case "video" -> videoFile.get();
                         default -> state.model();
                     })
                     .withBlockProperties(selectedType[0].equals("block")
-                            ? blockProperties : state.blockProperties());
+                            ? blockProperties : state.blockProperties())
+                    .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick());
             ShapeTrackRegistry.apply(replacement);
             update.accept(keyframe -> ((ShapeKeyframe) keyframe).state = replacement);
         }

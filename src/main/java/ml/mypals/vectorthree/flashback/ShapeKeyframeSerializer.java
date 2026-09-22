@@ -46,7 +46,8 @@ public final class ShapeKeyframeSerializer implements JsonSerializer<ShapeKeyfra
                     },
                     state.blockProperties() == null ? java.util.Map.of() : state.blockProperties(),
                     state.parentShapeId() == null ? "" : state.parentShapeId(),
-                    state.seeThrough(), state.visible());
+                    state.seeThrough(), state.visible(), state.videoStartTick(), state.playAudio(),
+                    state.manualPlayback(), state.noLoop(), state.playbackSeconds());
         }
         InterpolationType interpolation = json.has("interpolation_type")
                 ? context.deserialize(json.get("interpolation_type"), InterpolationType.class)

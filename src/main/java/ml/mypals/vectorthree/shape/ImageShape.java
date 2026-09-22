@@ -89,7 +89,7 @@ public final class ImageShape extends Shape implements EmptyMesh {
         int argb = baseColor.getRGB();
         float halfWidth = texture.aspect() * 0.5f;
         submits.submitCustomGeometry(poseStack,
-                seeThrough ? RenderTypes.entityTranslucent(texture.id()) : RenderTypes.entityTranslucentCull(texture.id()),
+                seeThrough ? ShapeTrackRegistry.imageSeeThroughType(texture.id()) : RenderTypes.entityTranslucentCull(texture.id()),
                 (pose, consumer) -> quad(pose, consumer, halfWidth, argb));
         Helpers.renderFeatures(minecraft, submits);
     }

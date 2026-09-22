@@ -22,7 +22,11 @@ public record ShapeState(
         String model,
         Map<String, String> blockProperties,
         String parentShapeId,
-        boolean seeThrough, boolean visible
+        boolean seeThrough, boolean visible,
+        int videoStartTick, boolean playAudio,
+        // Named so the Java/Gson-missing-field default (false) reproduces today's behavior
+        // (auto-play, looping) for saves written before these fields existed.
+        boolean manualPlayback, boolean noLoop, double playbackSeconds
 ) {
     public static ShapeState create(String type, String id, double x, double y, double z) {
         List<ShapePoint> points = switch (type) {
@@ -38,7 +42,7 @@ public record ShapeState(
                     case "block" -> "minecraft:stone";
                     case "item" -> "minecraft:diamond";
                     default -> "";
-                }, Map.of(), "", false, true);
+                }, Map.of(), "", false, true, 0, false, false, false, 0);
     }
 
     public ShapeState interpolate(ShapeState target, double amount) {
@@ -59,7 +63,12 @@ public record ShapeState(
                 amount >= 1.0 ? target.blockProperties : blockProperties,
                 amount >= 1.0 ? target.parentShapeId : parentShapeId,
                 amount < 0.5 ? seeThrough : target.seeThrough,
-                amount < 0.5 ? visible : target.visible);
+                amount < 0.5 ? visible : target.visible,
+                amount >= 1.0 ? target.videoStartTick : videoStartTick,
+                amount < 0.5 ? playAudio : target.playAudio,
+                amount < 0.5 ? manualPlayback : target.manualPlayback,
+                amount < 0.5 ? noLoop : target.noLoop,
+                lerp(playbackSeconds, target.playbackSeconds, amount));
     }
 
     public static ShapeState smooth(ShapeState p0, ShapeState p1, ShapeState p2, ShapeState p3,
@@ -88,7 +97,13 @@ public record ShapeState(
                 amount >= 1.0f ? p2.blockProperties : p1.blockProperties,
                 amount >= 1.0f ? p2.parentShapeId : p1.parentShapeId,
                 amount < 0.5f ? p1.seeThrough : p2.seeThrough,
-                amount < 0.5f ? p1.visible : p2.visible);
+                amount < 0.5f ? p1.visible : p2.visible,
+                amount >= 1.0f ? p2.videoStartTick : p1.videoStartTick,
+                amount < 0.5f ? p1.playAudio : p2.playAudio,
+                amount < 0.5f ? p1.manualPlayback : p2.manualPlayback,
+                amount < 0.5f ? p1.noLoop : p2.noLoop,
+                cat(p0.playbackSeconds, p1.playbackSeconds, p2.playbackSeconds, p3.playbackSeconds,
+                        t1, t2, t3, amount));
     }
 
     public static ShapeState hermite(Map<Float, ShapeState> states, float amount) {
@@ -114,38 +129,53 @@ public record ShapeState(
                 base.model,
                 base.blockProperties,
                 base.parentShapeId,
-                base.seeThrough, base.visible);
+                base.seeThrough, base.visible,
+                base.videoStartTick, base.playAudio,
+                base.manualPlayback, base.noLoop,
+                hermite(states, amount, s -> s.playbackSeconds));
     }
 
     public ShapeState with(float[] position, float[] rotation, float[] scale, float[] size,
             int segments, float lineWidth, int color, List<ShapePoint> points,
-            TextSettings text, String parentShapeId, boolean seeThrough, boolean visible) {
+            TextSettings text, String parentShapeId, boolean seeThrough, boolean visible, boolean playAudio,
+            boolean manualPlayback, boolean noLoop, double playbackSeconds) {
         return new ShapeState(shapeType, shapeId,
                 position[0], position[1], position[2], rotation[0], rotation[1], rotation[2],
                 scale[0], scale[1], scale[2], size[0], size[1], size[2],
                 segments, lineWidth, color, List.copyOf(points), text, model,
                 blockProperties == null ? Map.of() : Map.copyOf(blockProperties),
-                parentShapeId, seeThrough, visible);
+                parentShapeId, seeThrough, visible, videoStartTick, playAudio,
+                manualPlayback, noLoop, playbackSeconds);
     }
 
     public ShapeState withIdentity(String shapeType, String shapeId) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points == null ? List.of() : points, text, model, blockProperties,
-                parentShapeId, seeThrough, visible);
+                parentShapeId, seeThrough, visible, videoStartTick, playAudio,
+                manualPlayback, noLoop, playbackSeconds);
     }
 
     public ShapeState withModel(String model) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
-                color, points, text, model, blockProperties, parentShapeId, seeThrough, visible);
+                color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
+                videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds);
     }
 
     public ShapeState withBlockProperties(Map<String, String> properties) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, properties == null ? Map.of() : Map.copyOf(properties),
-                parentShapeId, seeThrough, visible);
+                parentShapeId, seeThrough, visible, videoStartTick, playAudio,
+                manualPlayback, noLoop, playbackSeconds);
+    }
+
+    public ShapeState withVideoStartTick(int videoStartTick) {
+        return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
+                scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
+                color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
+                videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds);
     }
 
     private List<ShapePoint> interpolatePoints(ShapeState target, double amount) {
