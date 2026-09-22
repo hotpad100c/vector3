@@ -5,8 +5,9 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 public final class AreaSuppression {
@@ -18,15 +19,47 @@ public final class AreaSuppression {
         }
     }
 
-    private static final Map<String, Bounds> ACTIVE = new LinkedHashMap<>();
+    private static final Map<String, Bounds> ACTIVE = new ConcurrentHashMap<>();
+    private static final Set<String> DIRTY = ConcurrentHashMap.newKeySet();
+    private static boolean bypassing;
 
     private AreaSuppression() {}
 
     public static boolean isSuppressed(BlockPos pos) {
+        if (bypassing) return false;
         for (Bounds bounds : ACTIVE.values()) {
             if (bounds.contains(pos)) return true;
         }
         return false;
+    }
+
+    /**
+     * Runs {@code action} with suppression checks disabled. AreaShape's own bake and destination-draw
+     * calls go through the exact tesselateBlock/tesselate/submit methods the suppression mixins guard
+     * (to hide the source content in-place) — without this, a shape would suppress its own source
+     * content while baking or re-drawing block entities, since that content sits inside its own
+     * (already-active) suppressed AABB.
+     */
+    public static void bypassing(Runnable action) {
+        boolean previous = bypassing;
+        bypassing = true;
+        try {
+            action.run();
+        } finally {
+            bypassing = previous;
+        }
+    }
+
+    /** Marks every shape whose source AABB contains {@code pos} as needing a re-bake. */
+    public static void markDirtyIfInside(BlockPos pos) {
+        for (Map.Entry<String, Bounds> entry : ACTIVE.entrySet()) {
+            if (entry.getValue().contains(pos)) DIRTY.add(entry.getKey());
+        }
+    }
+
+    /** Returns and clears whether this shape was marked dirty; call from the render thread only. */
+    public static boolean consumeDirty(String shapeId) {
+        return DIRTY.remove(shapeId);
     }
 
     /** Marks this shape's AABB as suppressed and forces the affected chunk sections to recompile. */
@@ -39,6 +72,7 @@ public final class AreaSuppression {
 
     public static void clear(String shapeId) {
         Bounds bounds = ACTIVE.remove(shapeId);
+        DIRTY.remove(shapeId);
         if (bounds != null) touch(bounds);
     }
 

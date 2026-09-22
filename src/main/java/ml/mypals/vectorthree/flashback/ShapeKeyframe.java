@@ -251,19 +251,23 @@ public final class ShapeKeyframe extends Keyframe {
                 changed |= ImGui.checkbox("Play Audio", playAudio);
             }
             case "area" -> {
-                while (points.size() < 2) points.add(new ShapePoint(state.x() - 0.5, state.y() - 0.5, state.z() - 0.5));
-                changed |= editPoint("Corner 1", points, 0);
-                changed |= editPoint("Corner 2", points, 1);
+                while (points.size() < 2) {
+                    points.add(new ShapePoint(Math.round(state.x() - 0.5), Math.round(state.y() - 0.5), Math.round(state.z() - 0.5)));
+                }
+                changed |= editAreaPoint("Corner 1", points, 0);
+                changed |= editAreaPoint("Corner 2", points, 1);
+                if (ImGui.button("Center")) {
+                    ShapePoint corner1 = points.get(0), corner2 = points.get(1);
+                    position[0] = (float) ((corner1.x() + corner2.x()) / 2.0);
+                    position[1] = (float) ((corner1.y() + corner2.y()) / 2.0);
+                    position[2] = (float) ((corner1.z() + corner2.z()) / 2.0);
+                    changed = true;
+                }
                 if (ShapeTrackRegistry.shape(state.shapeId()) instanceof AreaShape area) {
                     ImGui.text("Baked blocks: " + area.blockCount());
                 } else {
                     ImGui.text("Baked blocks: (not baked yet)");
                 }
-                ImGui.text("Corners are absolute world coordinates: the source region");
-                ImGui.text("(blue box) that gets baked. Also draggable via the Geometry");
-                ImGui.text("gizmo. This shape's own position/rotation/scale is where the");
-                ImGui.text("baked content is projected to (yellow box); moving it is");
-                ImGui.text("cheap and does not re-bake. Only changing the corners does.");
             }
             case "block" -> {
                 ImGui.setNextItemWidth(360);
@@ -350,6 +354,15 @@ public final class ShapeKeyframe extends Keyframe {
         float[] value = {(float) point.x(), (float) point.y(), (float) point.z()};
         if (!ImGui.dragFloat3(label, value, 0.05f)) return false;
         points.set(index, new ShapePoint(value[0], value[1], value[2]));
+        return true;
+    }
+
+    /** AreaShape's corners are absolute-world and always whole blocks. */
+    private static boolean editAreaPoint(String label, List<ShapePoint> points, int index) {
+        ShapePoint point = points.get(index);
+        float[] value = {(float) point.x(), (float) point.y(), (float) point.z()};
+        if (!ImGui.dragFloat3(label, value, 1.0f)) return false;
+        points.set(index, new ShapePoint(Math.round(value[0]), Math.round(value[1]), Math.round(value[2])));
         return true;
     }
 

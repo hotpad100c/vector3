@@ -2,17 +2,25 @@ package ml.mypals.vectorthree.shape;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import ml.mypals.ryansrenderingkit.builders.vertexBuilders.VertexBuilder;
 import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
+import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.Vector3;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.StagedVertexBuffer;
+import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
+import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -26,7 +34,9 @@ import java.util.OptionalDouble;
 
 
 public final class AreaShape extends Shape implements EmptyMesh {
-    private final AreaGpuMesh mesh = new AreaGpuMesh();
+    private final AreaGpuMesh solidMesh = new AreaGpuMesh();
+    private final AreaGpuMesh cutoutMesh = new AreaGpuMesh();
+    private final AreaTranslucentGpuMesh translucentMesh = new AreaTranslucentGpuMesh();
     private final String shapeId;
     private int blockCount;
     private Vec3 localMin = new Vec3(-0.5, -0.5, -0.5);
@@ -35,6 +45,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
     private Vec3 destCenter = Vec3.ZERO;
     private final Quaternionf destRotation = new Quaternionf();
     private Vec3 destScale = new Vec3(1, 1, 1);
+    private List<BlockEntity> blockEntities = List.of();
 
     public AreaShape(ShapeState state, Color color, boolean seeThrough) {
         super(RenderingType.BATCH, transformer -> {}, color, Vec3.ZERO, seeThrough);
@@ -48,7 +59,6 @@ public final class AreaShape extends Shape implements EmptyMesh {
         return blockCount;
     }
 
-    /** Updates the destination transform without touching the bake; cheap, called every apply(). */
     public void updateTransform(ShapeState state) {
         destCenter = new Vec3(state.x(), state.y(), state.z());
         destRotation.identity().rotateXYZ((float) Math.toRadians(state.pitch()),
@@ -56,10 +66,12 @@ public final class AreaShape extends Shape implements EmptyMesh {
         destScale = new Vec3(state.scaleX(), state.scaleY(), state.scaleZ());
     }
 
+    private BlockPos bakedMin = BlockPos.ZERO;
+    private BlockPos bakedMax = BlockPos.ZERO;
+
     private void bake(ShapeState state) {
-        ClientLevel level = Minecraft.getInstance().level;
         List<ShapePoint> points = state.points();
-        if (level == null || points == null || points.size() < 2) return;
+        if (Minecraft.getInstance().level == null || points == null || points.size() < 2) return;
 
         Vec3 a = points.get(0).vec3(), b = points.get(1).vec3();
         Vec3 worldMin = new Vec3(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z));
@@ -69,13 +81,30 @@ public final class AreaShape extends Shape implements EmptyMesh {
         localMin = halfSize.scale(-1);
         localMax = halfSize;
 
-        BlockPos min = BlockPos.containing(worldMin.x, worldMin.y, worldMin.z);
-        BlockPos max = BlockPos.containing(worldMax.x - 1.0e-6, worldMax.y - 1.0e-6, worldMax.z - 1.0e-6);
+        bakedMin = BlockPos.containing(worldMin.x, worldMin.y, worldMin.z);
+        bakedMax = BlockPos.containing(worldMax.x - 1.0e-6, worldMax.y - 1.0e-6, worldMax.z - 1.0e-6);
+        rebakeRegion();
+    }
 
-        AreaBaker.Result result = new AreaBaker().bake(level, min, max);
-        mesh.upload(result.mesh());
+    private void rebakeRegion() {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
+        AreaBaker.Result result = new AreaBaker().bake(level, bakedMin, bakedMax);
+        solidMesh.upload(result.solidMesh());
+        cutoutMesh.upload(result.cutoutMesh());
+        translucentMesh.upload(result.translucentMesh());
         blockCount = result.blockCount();
-        AreaSuppression.set(shapeId, min, max);
+        blockEntities = result.blockEntities();
+        AreaSuppression.set(shapeId, bakedMin, bakedMax);
+    }
+
+    private Matrix4f destinationModel(Vec3 cameraPos) {
+        return new Matrix4f()
+                .translate((float) (destCenter.x - cameraPos.x), (float) (destCenter.y - cameraPos.y),
+                        (float) (destCenter.z - cameraPos.z))
+                .rotate(destRotation)
+                .scale((float) destScale.x, (float) destScale.y, (float) destScale.z)
+                .translate((float) -sourceCenter.x, (float) -sourceCenter.y, (float) -sourceCenter.z);
     }
 
     @Override
@@ -96,37 +125,90 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
     @Override
     protected void drawInternal(VertexBuilder builder) {
-        // This manual RenderPass sequence is the riskiest, least-precedented part of AreaShape (no
-        // other shape in this mod opens its own command encoder). If it ever throws, disable further
-        // attempts for this instance instead of risking crashing the whole frame every frame.
-        if (mesh.isEmpty() || drawFailed) return;
-        try {
-            drawMesh();
-        } catch (Exception exception) {
-            drawFailed = true;
-            Vector3.LOGGER.warn("AreaShape draw failed, disabling further draws for this shape", exception);
+        if (AreaSuppression.consumeDirty(shapeId)) rebakeRegion();
+        if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
+            try {
+                drawMesh();
+            } catch (Exception exception) {
+                drawFailed = true;
+                Vector3.LOGGER.warn("AreaShape draw failed, disabling further draws for this shape", exception);
+            }
+        }
+        if (!blockEntities.isEmpty() && !blockEntityDrawFailed) {
+            try {
+                drawBlockEntities();
+            } catch (Exception exception) {
+                blockEntityDrawFailed = true;
+                Vector3.LOGGER.warn("AreaShape block entity draw failed, disabling further attempts for this shape", exception);
+            }
         }
     }
 
+    private boolean blockEntityDrawFailed;
+
+    private void drawBlockEntities() {
+        Minecraft minecraft = Minecraft.getInstance();
+        Camera camera = minecraft.gameRenderer.mainCamera();
+        Vec3 cameraPos = camera.position();
+        Matrix4f model = destinationModel(cameraPos);
+
+        CameraRenderState cameraRenderState = new CameraRenderState();
+        cameraRenderState.pos = cameraPos;
+        cameraRenderState.orientation = new Quaternionf(camera.rotation());
+
+        BlockEntityRenderDispatcher dispatcher = minecraft.getBlockEntityRenderDispatcher();
+        float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        SubmitNodeStorage submits = new SubmitNodeStorage();
+
+        AreaSuppression.bypassing(() -> {
+            for (BlockEntity blockEntity : blockEntities) {
+                BlockEntityRenderState state = dispatcher.tryExtractRenderState(blockEntity, partialTick, null, false);
+                if (state == null) continue;
+                BlockPos pos = blockEntity.getBlockPos();
+                Vector3f destPos = model.transformPosition(new Vector3f(pos.getX(), pos.getY(), pos.getZ()), new Vector3f());
+                PoseStack poseStack = new PoseStack();
+                poseStack.translate(destPos.x, destPos.y, destPos.z);
+                poseStack.rotate(destRotation);
+                poseStack.scale((float) destScale.x, (float) destScale.y, (float) destScale.z);
+                dispatcher.submit(state, poseStack, submits, cameraRenderState);
+            }
+        });
+        Helpers.renderFeatures(minecraft, submits);
+    }
+
     private void drawMesh() {
-        RenderType renderType = AreaRenderType.get();
-        PreparedRenderType prepared = renderType.prepare();
+        Vec3 cameraPos = Minecraft.getInstance().gameRenderer.mainCamera().position();
+        Matrix4f model = destinationModel(cameraPos);
+        Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrixCopy()).mul(model);
         Vector4f colorModulator = colorToVector4f(baseColor);
 
-        // Baked vertices are literal absolute-world coordinates anchored at sourceCenter (see
-        // AreaBaker/bake()). getModelViewMatrixCopy() is rotation-only here (confirmed: it maps the
-        // camera's own world position to a nonzero point, not the origin), so vertices must already be
-        // camera-relative before it's applied — fold that into the translation, refetched every frame
-        // since the camera moves.
-        Vec3 cameraPos = Minecraft.getInstance().gameRenderer.mainCamera().position();
-        Matrix4f model = new Matrix4f()
-                .translate((float) (destCenter.x - cameraPos.x), (float) (destCenter.y - cameraPos.y),
-                        (float) (destCenter.z - cameraPos.z))
-                .rotate(destRotation)
-                .scale((float) destScale.x, (float) destScale.y, (float) destScale.z)
-                .translate((float) -sourceCenter.x, (float) -sourceCenter.y, (float) -sourceCenter.z);
-        Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrixCopy()).mul(model);
+        if (!translucentMesh.isEmpty()) {
+            Vector3f meshSpaceViewPoint = new Matrix4f(model).invert().transformPosition(new Vector3f());
+            translucentMesh.resort(meshSpaceViewPoint);
+        }
 
+        Minecraft minecraft = Minecraft.getInstance();
+        RenderTarget target = minecraft.gameRenderer.mainRenderTarget();
+        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                () -> "vector3_area", target.getColorTextureView(), Optional.empty(),
+                target.hasDepth() ? target.getDepthTextureView() : null, OptionalDouble.empty())) {
+            RenderSystem.bindDefaultUniforms(pass);
+            // Solid, then cutout, then the depth-sorted translucent bucket — matching vanilla's own
+            // per-layer draw order. Draw order within solid/cutout doesn't matter, only across layers.
+            if (!solidMesh.isEmpty()) {
+                drawOpaque(pass, modelView, colorModulator, AreaRenderType.getSolid(), solidMesh);
+            }
+            if (!cutoutMesh.isEmpty()) {
+                drawOpaque(pass, modelView, colorModulator, AreaRenderType.getCutout(), cutoutMesh);
+            }
+            if (!translucentMesh.isEmpty()) {
+                drawTranslucent(pass, modelView, colorModulator);
+            }
+        }
+    }
+
+    private void drawOpaque(RenderPass pass, Matrix4f modelView, Vector4f colorModulator, RenderType renderType, AreaGpuMesh mesh) {
+        PreparedRenderType prepared = renderType.prepare();
         var transformSlice = RenderSystem.getDynamicUniforms().writeTransform(
                 modelView, colorModulator, new Vector3f(), new Matrix4f());
         PreparedRenderType tinted = new PreparedRenderType(prepared.name(), prepared.pipeline(),
@@ -137,17 +219,22 @@ public final class AreaShape extends Shape implements EmptyMesh {
         var sequentialIndices = RenderSystem.getSequentialBuffer(mesh.topology());
         sequentialIndices.requestIndexCount(mesh.indexCount());
         sequentialIndices.resizeToRequestedIndexCount();
-        StagedVertexBuffer.ExecuteInfo info = new StagedVertexBuffer.ExecuteInfo(
-                mesh.vertexBuffer(), null, sequentialIndices.type(), 0, 0, mesh.indexCount(), mesh.topology());
+        StagedVertexBuffer.ExecuteInfo info = new StagedVertexBuffer.ExecuteInfo(mesh.vertexBuffer(), null,
+                sequentialIndices.type(), 0, 0, mesh.indexCount(), mesh.topology());
+        tinted.drawFromBuffer(info, pass);
+    }
 
-        Minecraft minecraft = Minecraft.getInstance();
-        RenderTarget target = minecraft.gameRenderer.mainRenderTarget();
-        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                () -> "vector3_area", target.getColorTextureView(), Optional.empty(),
-                target.hasDepth() ? target.getDepthTextureView() : null, OptionalDouble.empty())) {
-            RenderSystem.bindDefaultUniforms(pass);
-            tinted.drawFromBuffer(info, pass);
-        }
+    private void drawTranslucent(RenderPass pass, Matrix4f modelView, Vector4f colorModulator) {
+        PreparedRenderType prepared = AreaRenderType.get().prepare();
+        var transformSlice = RenderSystem.getDynamicUniforms().writeTransform(
+                modelView, colorModulator, new Vector3f(), new Matrix4f());
+        PreparedRenderType tinted = new PreparedRenderType(prepared.name(), prepared.pipeline(),
+                prepared.oitPipelineSet(), transformSlice, prepared.scissorState(), prepared.textures());
+
+        StagedVertexBuffer.ExecuteInfo info = new StagedVertexBuffer.ExecuteInfo(translucentMesh.vertexBuffer(),
+                translucentMesh.indexBuffer(), translucentMesh.indexType(), 0, 0,
+                translucentMesh.indexCount(), translucentMesh.topology());
+        tinted.drawFromBuffer(info, pass);
     }
 
     private static Vector4f colorToVector4f(Color color) {
@@ -158,7 +245,9 @@ public final class AreaShape extends Shape implements EmptyMesh {
     @Override
     public void discard() {
         AreaSuppression.clear(shapeId);
-        mesh.close();
+        solidMesh.close();
+        cutoutMesh.close();
+        translucentMesh.close();
         super.discard();
     }
 }

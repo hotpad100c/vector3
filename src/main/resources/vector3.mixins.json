@@ -10,7 +10,9 @@
 		"flashback.TimelineWindowMixin",
 		"area.AreaSuppressBlockMixin",
 		"area.AreaSuppressFluidMixin",
-		"area.AreaSuppressBlockEntityMixin"
+		"area.AreaSuppressBlockEntityMixin",
+		"area.AreaSuppressRenderSectionRegionMixin",
+		"area.AreaSourceChangeMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

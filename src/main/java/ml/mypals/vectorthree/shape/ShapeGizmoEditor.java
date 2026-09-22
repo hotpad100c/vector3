@@ -398,15 +398,13 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private Vector3f handleRotation(ShapeState state, Handle handle) {
         float x = 0, y = 0, z = 0;
         if (handle.operation() == Operation.ROTATE) {
-            // rotation.obj's ring lies in the Y-Z plane by default (normal along X), unlike the
-            // move/scale arrow models below which default to pointing along Y.
             if (handle.axis() == Axis.Y) z = 90;
             else if (handle.axis() == Axis.Z) y = 90;
         } else {
             if (handle.axis() == Axis.X) z = -90;
             if (handle.axis() == Axis.Z) x = 90;
         }
-        if (mode == Mode.GEOMETRY) {
+        if (mode == Mode.GEOMETRY && !usesAbsolutePoints(state)) {
             x += state.pitch(); y += state.yaw(); z += state.roll();
         }
         return new Vector3f(x, y, z);
@@ -478,8 +476,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             List<ShapePoint> points = new ArrayList<>(dragStart.points());
             Vec3 pointDelta = usesAbsolutePoints(dragStart) ? delta : worldDeltaToLocal(dragStart, delta);
             ShapePoint point = points.get(dragging.point());
-            points.set(dragging.point(), new ShapePoint(point.x() + pointDelta.x,
-                    point.y() + pointDelta.y, point.z() + pointDelta.z));
+            points.set(dragging.point(), movedPoint(dragStart, point, pointDelta));
             return with(dragStart, null, null, null, null, points);
         }
         if (dragging.operation() == Operation.ROTATE) {
@@ -519,9 +516,15 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         List<ShapePoint> points = new ArrayList<>(state.points());
         Vec3 pointDelta = usesAbsolutePoints(state) ? worldDelta : worldDeltaToLocal(state, worldDelta);
         ShapePoint point = points.get(pointIndex);
-        points.set(pointIndex, new ShapePoint(point.x() + pointDelta.x,
-                point.y() + pointDelta.y, point.z() + pointDelta.z));
+        points.set(pointIndex, movedPoint(state, point, pointDelta));
         return with(state, null, null, null, null, points);
+    }
+
+    private static ShapePoint movedPoint(ShapeState state, ShapePoint point, Vec3 delta) {
+        double x = point.x() + delta.x, y = point.y() + delta.y, z = point.z() + delta.z;
+        return usesAbsolutePoints(state)
+                ? new ShapePoint(Math.round(x), Math.round(y), Math.round(z))
+                : new ShapePoint(x, y, z);
     }
 
     private static ShapeState withDimensionDelta(ShapeState state, Axis axis, double worldDelta) {

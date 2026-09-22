@@ -6,19 +6,46 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 
 final class AreaRenderType {
-    private static RenderType type;
+    private static RenderType translucentType;
+    private static RenderType solidType;
+    private static RenderType cutoutType;
 
     private AreaRenderType() {}
 
     static RenderType get() {
-        if (type == null) {
+        if (translucentType == null) {
             RenderSetup setup = RenderSetup.builder(RenderPipelines.TRANSLUCENT_BLOCK)
                     .useLightmap()
                     .withTexture("Sampler0", TextureAtlas.LOCATION_BLOCKS)
                     .affectsCrumbling()
                     .createRenderSetup();
-            type = RenderType.create("vector3_area_translucent", setup);
+            translucentType = RenderType.create("vector3_area_translucent", setup);
         }
-        return type;
+        return translucentType;
+    }
+
+    static RenderType getSolid() {
+        if (solidType == null) {
+            RenderSetup setup = RenderSetup.builder(RenderPipelines.SOLID_BLOCK)
+                    .useLightmap()
+                    .withTexture("Sampler0", TextureAtlas.LOCATION_BLOCKS)
+                    .affectsCrumbling()
+                    .createRenderSetup();
+            solidType = RenderType.create("vector3_area_solid", setup);
+        }
+        return solidType;
+    }
+
+    /** Alpha-tested (leaves, glass panes, ...) — SOLID_BLOCK doesn't discard, so these need their own pipeline. */
+    static RenderType getCutout() {
+        if (cutoutType == null) {
+            RenderSetup setup = RenderSetup.builder(RenderPipelines.CUTOUT_BLOCK)
+                    .useLightmap()
+                    .withTexture("Sampler0", TextureAtlas.LOCATION_BLOCKS)
+                    .affectsCrumbling()
+                    .createRenderSetup();
+            cutoutType = RenderType.create("vector3_area_cutout", setup);
+        }
+        return cutoutType;
     }
 }
