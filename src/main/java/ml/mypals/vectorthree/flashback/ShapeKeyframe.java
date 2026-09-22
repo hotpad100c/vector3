@@ -14,9 +14,12 @@ import imgui.moulberry90.type.ImBoolean;
 import imgui.moulberry90.type.ImInt;
 import imgui.moulberry90.type.ImString;
 import org.jetbrains.annotations.Nullable;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -125,7 +128,21 @@ public final class ShapeKeyframe extends Keyframe {
         ImBoolean holdText = new ImBoolean(currentText.holdText());
         ImBoolean textShadow = new ImBoolean(currentText.shadow());
         ImBoolean textOutline = new ImBoolean(currentText.outline());
-        ImString model = new ImString(state.model() == null ? "" : state.model(), 512);
+        ImString model = new ImString(state.shapeType().equals("obj")
+                && state.model() != null && !state.model().isBlank()
+                ? state.model() : "ryansrenderingkit:models/monkey.obj", 512);
+        ImString imageFile = new ImString(state.shapeType().equals("image") && state.model() != null
+                ? state.model() : "", 1024);
+        ImString font = new ImString(currentText.fontOrDefault(), 256);
+        String[] content = {switch (selectedType[0]) {
+            case "block" -> state.shapeType().equals("block") && state.model() != null && !state.model().isBlank()
+                    ? state.model() : "minecraft:stone";
+            case "item" -> state.shapeType().equals("item") && state.model() != null && !state.model().isBlank()
+                    ? state.model() : "minecraft:diamond";
+            default -> state.model() == null ? "" : state.model();
+        }};
+        Map<String, String> blockProperties = new LinkedHashMap<>(state.shapeType().equals("block")
+                && state.blockProperties() != null ? state.blockProperties() : Map.of());
         String[] billboard = {currentText.billboard()};
 
         changed |= ImGui.dragFloat3("Position", position, 0.05f);
@@ -166,11 +183,13 @@ public final class ShapeKeyframe extends Keyframe {
                 if (selectedType[0].endsWith("wireframe"))
                     changed |= ImGui.dragFloat("Line Width", width, 0.01f, 0.001f, 100.0f);
             }
-            case "line" -> {
+            case "line", "arrow" -> {
                 while (points.size() < 2) points.add(new ShapePoint(0, 0, 0));
                 changed |= editPoint("Start", points, 0);
                 changed |= editPoint("End", points, 1);
                 changed |= ImGui.dragFloat("Line Width", width, 0.01f, 0.001f, 100.0f);
+                if (selectedType[0].equals("arrow"))
+                    changed |= ImGui.dragFloat("Head Size", size, 0.01f, 0.01f, 100.0f);
             }
             case "line_strip" -> {
                 while (points.size() < 2) points.add(new ShapePoint(points.size(), points.size(), points.size()));
@@ -193,6 +212,7 @@ public final class ShapeKeyframe extends Keyframe {
                 changed |= ImGui.checkbox("Hold Text", holdText);
                 changed |= ImGui.checkbox("Shadow", textShadow);
                 changed |= ImGui.checkbox("Outline", textOutline);
+                changed |= ImGui.inputText("Font Resource", font);
                 ImGui.setNextItemWidth(180);
                 if (ImGui.beginCombo("Billboard", billboard[0])) {
                     for (String mode : List.of("FIXED", "VERTICAL", "HORIZONTAL", "ALL")) {
@@ -205,6 +225,47 @@ public final class ShapeKeyframe extends Keyframe {
                 }
             }
             case "obj" -> changed |= ImGui.inputText("OBJ Resource", model);
+            case "image" -> changed |= ImGui.inputText("Image File", imageFile);
+            case "block" -> {
+                ImGui.setNextItemWidth(360);
+                if (ImGui.beginCombo("Block", content[0])) {
+                    for (String id : ShapeTrackRegistry.blockIds()) {
+                        if (ImGui.selectable(id, id.equals(content[0]))) {
+                            content[0] = id;
+                            blockProperties.clear();
+                            changed = true;
+                        }
+                    }
+                    ImGui.endCombo();
+                }
+                BlockState blockState = ShapeTrackRegistry.blockState(content[0], blockProperties);
+                for (Property<?> property : blockState.getProperties()) {
+                    String name = property.getName();
+                    String value = blockProperties.getOrDefault(name, propertyValue(blockState, property));
+                    ImGui.setNextItemWidth(220);
+                    if (ImGui.beginCombo(name, value)) {
+                        for (String option : propertyValues(property)) {
+                            if (ImGui.selectable(option, option.equals(value))) {
+                                blockProperties.put(name, option);
+                                changed = true;
+                            }
+                        }
+                        ImGui.endCombo();
+                    }
+                }
+            }
+            case "item" -> {
+                ImGui.setNextItemWidth(360);
+                if (ImGui.beginCombo("Item", content[0])) {
+                    for (String id : ShapeTrackRegistry.itemIds()) {
+                        if (ImGui.selectable(id, id.equals(content[0]))) {
+                            content[0] = id;
+                            changed = true;
+                        }
+                    }
+                    ImGui.endCombo();
+                }
+            }
         }
         changed |= ImGui.checkbox("See Through", seeThrough);
         changed |= ImGui.checkbox("Visible", visible);
@@ -216,14 +277,20 @@ public final class ShapeKeyframe extends Keyframe {
                     Math.max(3, segments.get()), Math.max(0.001f, width[0]), argb,
                     points, selectedType[0].equals("text")
                             ? new TextSettings(textValue.get(), holdText.get(), textShadow.get(),
-                                    textOutline.get(), billboard[0])
+                                    textOutline.get(), billboard[0], font.get())
                             : state.text(),
                     parentId[0],
                     seeThrough.get(), visible.get())
                     .withIdentity(selectedType[0], selectedId[0])
-                    .withModel(selectedType[0].equals("obj")
-                            ? model.get().isBlank() ? "ryansrenderingkit:models/monkey.obj" : model.get()
-                            : state.model());
+                    .withModel(switch (selectedType[0]) {
+                        case "obj" -> model.get().isBlank()
+                                ? "ryansrenderingkit:models/monkey.obj" : model.get();
+                        case "block", "item" -> content[0];
+                        case "image" -> imageFile.get();
+                        default -> state.model();
+                    })
+                    .withBlockProperties(selectedType[0].equals("block")
+                            ? blockProperties : state.blockProperties());
             ShapeTrackRegistry.apply(replacement);
             update.accept(keyframe -> ((ShapeKeyframe) keyframe).state = replacement);
         }
@@ -240,5 +307,13 @@ public final class ShapeKeyframe extends Keyframe {
         if (!ImGui.dragFloat3(label, value, 0.05f)) return false;
         points.set(index, new ShapePoint(value[0], value[1], value[2]));
         return true;
+    }
+
+    private static <T extends Comparable<T>> String propertyValue(BlockState state, Property<T> property) {
+        return property.getName(state.getValue(property));
+    }
+
+    private static <T extends Comparable<T>> List<String> propertyValues(Property<T> property) {
+        return property.getPossibleValues().stream().map(property::getName).toList();
     }
 }

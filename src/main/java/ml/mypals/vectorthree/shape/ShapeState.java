@@ -20,18 +20,25 @@ public record ShapeState(
         List<ShapePoint> points,
         TextSettings text,
         String model,
+        Map<String, String> blockProperties,
         String parentShapeId,
         boolean seeThrough, boolean visible
 ) {
     public static ShapeState create(String type, String id, double x, double y, double z) {
         List<ShapePoint> points = switch (type) {
             case "line", "line_strip" -> List.of(new ShapePoint(0, 0, 0), new ShapePoint(1, 1, 1));
+            case "arrow" -> List.of(new ShapePoint(0, 0, 0), new ShapePoint(0, 1, 0));
             default -> List.of();
         };
         return new ShapeState(type, id, x, y, z, 0, 0, 0,
                 1, 1, 1, 1, 1, 1, 32, 0.05f, 0xFFFFFFFF, points,
                 type.equals("text") ? TextSettings.defaults() : null,
-                type.equals("obj") ? "ryansrenderingkit:models/monkey.obj" : "", "", false, true);
+                switch (type) {
+                    case "obj" -> "ryansrenderingkit:models/monkey.obj";
+                    case "block" -> "minecraft:stone";
+                    case "item" -> "minecraft:diamond";
+                    default -> "";
+                }, Map.of(), "", false, true);
     }
 
     public ShapeState interpolate(ShapeState target, double amount) {
@@ -49,6 +56,7 @@ public record ShapeState(
                 interpolatePoints(target, amount),
                 TextSettings.transition(text, target.text, amount),
                 amount >= 1.0 ? target.model : model,
+                amount >= 1.0 ? target.blockProperties : blockProperties,
                 amount >= 1.0 ? target.parentShapeId : parentShapeId,
                 amount < 0.5 ? seeThrough : target.seeThrough,
                 amount < 0.5 ? visible : target.visible);
@@ -77,6 +85,7 @@ public record ShapeState(
                 smoothPoints(p0, p1, p2, p3, t1, t2, t3, amount),
                 TextSettings.transition(p1.text, p2.text, amount),
                 amount >= 1.0f ? p2.model : p1.model,
+                amount >= 1.0f ? p2.blockProperties : p1.blockProperties,
                 amount >= 1.0f ? p2.parentShapeId : p1.parentShapeId,
                 amount < 0.5f ? p1.seeThrough : p2.seeThrough,
                 amount < 0.5f ? p1.visible : p2.visible);
@@ -103,6 +112,7 @@ public record ShapeState(
                 hermiteColor(states, amount), hermitePoints(states, amount, base),
                 hermiteText(sorted, amount, base),
                 base.model,
+                base.blockProperties,
                 base.parentShapeId,
                 base.seeThrough, base.visible);
     }
@@ -113,19 +123,29 @@ public record ShapeState(
         return new ShapeState(shapeType, shapeId,
                 position[0], position[1], position[2], rotation[0], rotation[1], rotation[2],
                 scale[0], scale[1], scale[2], size[0], size[1], size[2],
-                segments, lineWidth, color, List.copyOf(points), text, model, parentShapeId, seeThrough, visible);
+                segments, lineWidth, color, List.copyOf(points), text, model,
+                blockProperties == null ? Map.of() : Map.copyOf(blockProperties),
+                parentShapeId, seeThrough, visible);
     }
 
     public ShapeState withIdentity(String shapeType, String shapeId) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
-                color, points == null ? List.of() : points, text, model, parentShapeId, seeThrough, visible);
+                color, points == null ? List.of() : points, text, model, blockProperties,
+                parentShapeId, seeThrough, visible);
     }
 
     public ShapeState withModel(String model) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
-                color, points, text, model, parentShapeId, seeThrough, visible);
+                color, points, text, model, blockProperties, parentShapeId, seeThrough, visible);
+    }
+
+    public ShapeState withBlockProperties(Map<String, String> properties) {
+        return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
+                scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
+                color, points, text, model, properties == null ? Map.of() : Map.copyOf(properties),
+                parentShapeId, seeThrough, visible);
     }
 
     private List<ShapePoint> interpolatePoints(ShapeState target, double amount) {

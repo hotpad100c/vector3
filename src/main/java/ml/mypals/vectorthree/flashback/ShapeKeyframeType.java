@@ -63,7 +63,9 @@ public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
         Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
         Vec3 cameraPosition = camera.position();
         Vector3fc forward = camera.forwardVector();
-        return new ShapeKeyframe(ShapeState.create(shapeType, "vector3:timeline/" + UUID.randomUUID(),
-                cameraPosition.x + forward.x(), cameraPosition.y + forward.y(), cameraPosition.z + forward.z()));
+        ShapeState state = ShapeState.create(shapeType, "vector3:timeline/" + UUID.randomUUID(),
+                cameraPosition.x + forward.x(), cameraPosition.y + forward.y(), cameraPosition.z + forward.z());
+        ShapeTrackRegistry.apply(state);
+        return new ShapeKeyframe(state);
     }
 }

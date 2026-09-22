@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.mixin;
 
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
+import ml.mypals.vectorthree.shape.FontTextShape;
 import ml.mypals.vectorthree.shape.TextFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.util.FormattedCharSequence;
@@ -14,7 +15,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class TextShapeMixin {
     @Inject(method = "getRenderMessages", at = @At("HEAD"), cancellable = true)
     private void vector3$parseStyledText(CallbackInfoReturnable<FormattedCharSequence[]> cir) {
-        cir.setReturnValue(TextFormatting.format(((TextShape) (Object) this).contents));
+        TextShape shape = (TextShape) (Object) this;
+        cir.setReturnValue(TextFormatting.format(shape.contents,
+                shape instanceof FontTextShape fontShape ? fontShape.font : "minecraft:default"));
     }
 
     @Inject(method = "enabled", at = @At("HEAD"), cancellable = true)
@@ -25,6 +28,8 @@ public class TextShapeMixin {
     @Redirect(method = "drawInternal", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/gui/Font;width(Ljava/lang/String;)I"))
     private int vector3$measureStyledText(Font font, String text) {
-        return font.width(TextFormatting.formatLine(text));
+        TextShape shape = (TextShape) (Object) this;
+        return font.width(TextFormatting.formatLine(text,
+                shape instanceof FontTextShape fontShape ? fontShape.font : "minecraft:default"));
     }
 }

@@ -3,6 +3,7 @@ package ml.mypals.vectorthree.flashback;
 import com.google.gson.*;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import ml.mypals.vectorthree.shape.ShapeState;
+import ml.mypals.vectorthree.shape.TextSettings;
 
 import java.lang.reflect.Type;
 
@@ -20,7 +21,15 @@ public final class ShapeKeyframeSerializer implements JsonSerializer<ShapeKeyfra
 
     public static ShapeKeyframe read(JsonObject json, JsonDeserializationContext context) {
         ShapeState state = context.deserialize(json.get("shape"), ShapeState.class);
-        if (state.segments() <= 0 || state.lineWidth() <= 0 || state.model() == null) {
+        if (state.segments() <= 0 || state.lineWidth() <= 0 || state.model() == null
+                || state.blockProperties() == null
+                || state.shapeType().equals("text") && (state.text() == null || state.text().font() == null)) {
+            TextSettings text = state.text();
+            if (state.shapeType().equals("text")) {
+                if (text == null) text = TextSettings.defaults();
+                else if (text.font() == null) text = new TextSettings(text.value(), text.holdText(),
+                        text.shadow(), text.outline(), text.billboard(), "minecraft:default");
+            }
             state = new ShapeState(state.shapeType(), state.shapeId(), state.x(), state.y(), state.z(),
                     state.pitch(), state.yaw(), state.roll(), state.scaleX(), state.scaleY(), state.scaleZ(),
                     state.sizeX(), state.sizeY(), state.sizeZ(),
@@ -28,10 +37,14 @@ public final class ShapeKeyframeSerializer implements JsonSerializer<ShapeKeyfra
                     state.lineWidth() <= 0 ? 0.05f : state.lineWidth(),
                     state.color() == 0 ? 0xFFFFFFFF : state.color(),
                     state.points() == null ? java.util.List.of() : state.points(),
-                    state.text(),
-                    state.model() == null && state.shapeType().equals("obj")
-                            ? "ryansrenderingkit:models/monkey.obj"
-                            : state.model() == null ? "" : state.model(),
+                    text,
+                    state.model() != null ? state.model() : switch (state.shapeType()) {
+                        case "obj" -> "ryansrenderingkit:models/monkey.obj";
+                        case "block" -> "minecraft:stone";
+                        case "item" -> "minecraft:diamond";
+                        default -> "";
+                    },
+                    state.blockProperties() == null ? java.util.Map.of() : state.blockProperties(),
                     state.parentShapeId() == null ? "" : state.parentShapeId(),
                     state.seeThrough(), state.visible());
         }

@@ -12,6 +12,7 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
+import com.mojang.blaze3d.platform.InputConstants;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -19,7 +20,9 @@ import org.joml.Vector4f;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -34,10 +37,11 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private static final Color PROPERTY_COLOR = new Color(255, 155, 35, 240);
     private static final Color HOVER_COLOR = new Color(255, 235, 40, 255);
     private static final Color ACTIVE_COLOR = Color.WHITE;
+    private static final double ARROW_POINT_GIZMO_SCALE = 0.1;
 
     private enum Mode { MOVE, ROTATE, SCALE, GEOMETRY }
     private enum Axis { X, Y, Z, NONE }
-    private enum Operation { MOVE_AXIS, MOVE_FREE, ROTATE, SCALE_AXIS, RADIUS, HEIGHT, DIMENSION, POINT }
+    private enum Operation { MOVE_AXIS, MOVE_FREE, ROTATE, SCALE_AXIS, SCALE_UNIFORM, RADIUS, HEIGHT, DIMENSION, POINT }
 
     private record Handle(Operation operation, Axis axis, int point, ObjModelShape shape, Color color) {}
 
@@ -57,22 +61,24 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private double dragParameter;
     private double dragAngle;
     private ShapeState previewState;
+    private final Set<Integer> heldShortcutKeys = new HashSet<>();
 
     @Override
     public void edit(ShapeKeyframe keyframe, Consumer<Consumer<ShapeKeyframe>> update) {
         select(keyframe, replacement -> update.accept(changed -> changed.state = replacement));
 
         ImGui.text("Viewport Gizmo");
-        setModeButton("Move", Mode.MOVE); ImGui.sameLine();
-        setModeButton("Rotate", Mode.ROTATE); ImGui.sameLine();
-        setModeButton("Scale", Mode.SCALE); ImGui.sameLine();
-        setModeButton("Geometry", Mode.GEOMETRY);
+        setModeButton("Move (G)", Mode.MOVE); ImGui.sameLine();
+        setModeButton("Rotate (R)", Mode.ROTATE); ImGui.sameLine();
+        setModeButton("Scale (S)", Mode.SCALE); ImGui.sameLine();
+        setModeButton("Geometry (M)", Mode.GEOMETRY);
 
     }
 
     public void frame() {
         if (!ReplayUI.isActive()) return;
         Minecraft minecraft = Minecraft.getInstance();
+        handleShortcuts();
         if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) {
             ReplayUI.imguiWindower.ungrab();
         }
@@ -154,12 +160,36 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private void setModeButton(String label, Mode candidate) {
         if (ImGui.radioButton(label + "##shape_gizmo", mode == candidate) && mode != candidate) {
-            mode = candidate;
-            dragging = null;
-            if (keyframe != null) {
-                rebuild(keyframe.state);
-                updateHandles(keyframe.state);
-            }
+            setMode(candidate);
+        }
+    }
+
+    private void handleShortcuts() {
+        if (keyframe == null || dragging != null || ImGui.getIO().getWantTextInput() || ImGui.isAnyItemActive()) return;
+        // Flashback only forwards key events to ImGui's IO while a Minecraft Screen is open; in the
+        // viewport (no screen open) it routes keys straight to the game instead, so ImGui.isKeyPressed
+        // never fires for G/S/R/M here. Poll the platform key state directly to sidestep that routing.
+        boolean move = keyJustPressed(InputConstants.KEY_G);
+        boolean scale = keyJustPressed(InputConstants.KEY_S);
+        boolean rotate = keyJustPressed(InputConstants.KEY_R);
+        boolean geometry = keyJustPressed(InputConstants.KEY_M);
+        Mode requested = move ? Mode.MOVE : scale ? Mode.SCALE : rotate ? Mode.ROTATE : geometry ? Mode.GEOMETRY : null;
+        if (requested != null) setMode(requested);
+    }
+
+    private boolean keyJustPressed(int key) {
+        boolean down = InputConstants.isKeyDown(key);
+        boolean wasDown = down ? !heldShortcutKeys.add(key) : heldShortcutKeys.remove(key);
+        return down && !wasDown;
+    }
+
+    private void setMode(Mode requested) {
+        if (mode == requested) return;
+        mode = requested;
+        dragging = null;
+        if (keyframe != null) {
+            rebuild(keyframe.state);
+            updateHandles(keyframe.state);
         }
     }
 
@@ -189,6 +219,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 add(Operation.SCALE_AXIS, Axis.X, -1, SCALE_MODEL, X_COLOR);
                 add(Operation.SCALE_AXIS, Axis.Y, -1, SCALE_MODEL, Y_COLOR);
                 add(Operation.SCALE_AXIS, Axis.Z, -1, SCALE_MODEL, Z_COLOR);
+                add(Operation.SCALE_UNIFORM, Axis.NONE, -1, CENTER_MODEL, PROPERTY_COLOR);
             }
             case GEOMETRY -> addGeometryHandles(state);
         }
@@ -207,7 +238,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             }
             case "face_circle", "line_circle" -> add(Operation.RADIUS, Axis.Y, -1, SCALE_MODEL, PROPERTY_COLOR);
             case "sphere" -> add(Operation.RADIUS, Axis.X, -1, SCALE_MODEL, PROPERTY_COLOR);
-            case "line", "line_strip" -> {
+            case "line", "line_strip", "arrow" -> {
                 int count = state.points() == null ? 0 : state.points().size();
                 for (int i = 0; i < count; i++) {
                     add(Operation.POINT, Axis.X, i, MOVE_MODEL, X_COLOR);
@@ -232,8 +263,11 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         double scale = gizmoScale(center);
         for (Handle handle : handles) {
             Vec3 position = handlePosition(state, handle);
-            double handleScale = handle.operation() == Operation.POINT && handle.axis() == Axis.NONE
-                    ? scale * 0.5 : scale;
+            double handleScale = scale;
+            if (handle.operation() == Operation.POINT && state.shapeType().equals("arrow"))
+                handleScale *= ARROW_POINT_GIZMO_SCALE;
+            if (handle.operation() == Operation.POINT && handle.axis() == Axis.NONE
+                    || handle.operation() == Operation.SCALE_UNIFORM) handleScale *= 0.5;
             handle.shape().forceSetWorldPosition(position);
             handle.shape().forceSetWorldScale(new Vec3(handleScale, handleScale, handleScale));
             handle.shape().forceSetWorldRotation(handleRotation(state, handle));
@@ -307,7 +341,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         dragging = handle;
         dragStart = state;
         dragOrigin = handle.operation() == Operation.POINT ? handlePosition(state, handle) : center(state);
-        dragAxis = handle.axis() == Axis.NONE ? Vec3.ZERO
+        dragAxis = handle.operation() == Operation.SCALE_UNIFORM
+                ? new Vec3(camera.leftVector()).scale(-1)
+                : handle.axis() == Axis.NONE ? Vec3.ZERO
                 : mode == Mode.GEOMETRY ? localAxis(state, handle.axis()) : axis(handle.axis());
         dragPlaneNormal = new Vec3(camera.forwardVector());
         if (handle.operation() == Operation.MOVE_FREE
@@ -352,6 +388,13 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 float[] scale = {(float) dragStart.scaleX(), (float) dragStart.scaleY(), (float) dragStart.scaleZ()};
                 int index = index(dragging.axis());
                 scale[index] = Math.max(0.001f, scale[index] + (float) delta);
+                yield with(dragStart, null, null, scale, null, null);
+            }
+            case SCALE_UNIFORM -> {
+                float factor = (float) Math.max(0.001,
+                        1 + delta / Math.max(0.05, gizmoScale(dragOrigin) * 3));
+                float[] scale = {(float) dragStart.scaleX() * factor,
+                        (float) dragStart.scaleY() * factor, (float) dragStart.scaleZ() * factor};
                 yield with(dragStart, null, null, scale, null, null);
             }
             case DIMENSION -> withDimensionDelta(dragStart, dragging.axis(), delta);

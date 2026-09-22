@@ -1,14 +1,16 @@
 package ml.mypals.vectorthree.shape;
 
 public record TextSettings(String value, boolean holdText, boolean shadow,
-        boolean outline, String billboard) {
+        boolean outline, String billboard, String font) {
     public static TextSettings defaults() {
-        return new TextSettings("Text", false, true, false, "ALL");
+        return new TextSettings("Text", false, true, false, "ALL", "minecraft:default");
     }
 
     public TextSettings withValue(String value) {
-        return new TextSettings(value, holdText, shadow, outline, billboard);
+        return new TextSettings(value, holdText, shadow, outline, billboard, fontOrDefault());
     }
+
+    public String fontOrDefault() { return font == null || font.isBlank() ? "minecraft:default" : font; }
 
     public static TextSettings transition(TextSettings from, TextSettings to, double amount) {
         if (from == null && to == null) return null;
@@ -24,7 +26,8 @@ public record TextSettings(String value, boolean holdText, boolean shadow,
             int show = (int) Math.floor(visibleLength(to.value) * ((amount - 0.5) * 2.0));
             value = visiblePrefix(to.value, show);
         }
-        return new TextSettings(value, to.holdText, to.shadow, to.outline, to.billboard);
+        return new TextSettings(value, to.holdText, to.shadow, to.outline, to.billboard,
+                amount >= 1.0 ? to.fontOrDefault() : from.fontOrDefault());
     }
 
     private static int visibleLength(String text) {

@@ -21,11 +21,18 @@ import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shape.round.FaceCircleShape;
 import ml.mypals.ryansrenderingkit.shape.round.LineCircleShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
+import ml.mypals.ryansrenderingkit.shapeManagers.VertexBuilderGetter;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
@@ -44,6 +51,8 @@ public final class ShapeTrackRegistry {
     private static final Map<String, Shape> SHAPES = new LinkedHashMap<>();
     private static final Map<String, String> SHAPE_TYPES = new LinkedHashMap<>();
     private static final Map<String, ShapeState> LAST_STATES = new LinkedHashMap<>();
+    private static List<String> blockIds;
+    private static List<String> itemIds;
     private static String previewHighlightId;
     private static boolean fixedSeeThroughPipelines;
 
@@ -57,6 +66,9 @@ public final class ShapeTrackRegistry {
     }
 
     public static void registerDefaults() {
+        VertexBuilderGetter.registerEmptyShapeBuilder(FontTextShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        VertexBuilderGetter.registerEmptyShapeBuilder(ImageShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
         register("box", "Solid Box", state -> ShapeGenerator.generateBoxFace()
                 .pos(new Vec3(state.x(), state.y(), state.z()))
                 .size(new Vec3(state.sizeX(), state.sizeY(), state.sizeZ()))
@@ -100,15 +112,18 @@ public final class ShapeTrackRegistry {
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("text", "Text", state -> {
             TextSettings settings = state.text() == null ? TextSettings.defaults() : state.text();
-            return ShapeGenerator.generateText()
-                    .texts(Arrays.asList(settings.value().split("\\R", -1)))
-                    .textColors(new Color(state.color(), true))
-                    .billBoardMode(TextShape.BillBoardMode.valueOf(settings.billboard()))
-                    .shadow(settings.shadow()).outline(settings.outline())
-                    .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH);
+            return new FontTextShape(settings, new Color(state.color(), true), state.seeThrough());
         });
+        register("block", "Block", state -> ShapeGenerator.generateBlock()
+                .block(blockState(state.model(), state.blockProperties())).build());
+        register("item", "Item", state -> ShapeGenerator.generateItem()
+                .itemStack(new ItemStack(item(state))).build());
         register("obj", "OBJ Model", state -> new ObjModelShape(Shape.RenderingType.BATCH,
                 transformer -> {}, objModelId(state.model()), Vec3.ZERO,
+                new Color(state.color(), true), state.seeThrough()));
+        register("arrow", "Arrow", state -> new ArrowShape(point(state, 0), point(state, 1),
+                state.lineWidth(), (float) state.sizeX(), new Color(state.color(), true), state.seeThrough()));
+        register("image", "Image", state -> new ImageShape(state.model(),
                 new Color(state.color(), true), state.seeThrough()));
     }
 
@@ -198,6 +213,7 @@ public final class ShapeTrackRegistry {
         SHAPE_TYPES.clear();
         LAST_STATES.clear();
         previewHighlightId = null;
+        ImageShape.clearTextures();
     }
 
     public static void apply(ShapeState state) {
@@ -207,8 +223,11 @@ public final class ShapeTrackRegistry {
         boolean immutableWidthChanged = previous != null
                 && (state.shapeType().equals("box_wireframe") || state.shapeType().equals("wireframed_box"))
                 && previous.lineWidth() != state.lineWidth();
-        boolean modelChanged = previous != null && state.shapeType().equals("obj")
-                && !java.util.Objects.equals(previous.model(), state.model());
+        boolean modelChanged = previous != null
+                && (state.shapeType().equals("obj") || state.shapeType().equals("block")
+                        || state.shapeType().equals("item") || state.shapeType().equals("image"))
+                && (!java.util.Objects.equals(previous.model(), state.model())
+                        || !java.util.Objects.equals(previous.blockProperties(), state.blockProperties()));
         if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId()))
                 || immutableWidthChanged || modelChanged)) {
             ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
@@ -219,6 +238,7 @@ public final class ShapeTrackRegistry {
             Definition definition = TYPES.get(state.shapeType());
             if (definition == null) return;
             shape = definition.factory().apply(state);
+            ensureCustomManager(shape);
             ShapeManagers.addShape(Identifier.parse(state.shapeId()), shape);
             SHAPES.put(state.shapeId(), shape);
             SHAPE_TYPES.put(state.shapeId(), state.shapeType());
@@ -268,6 +288,8 @@ public final class ShapeTrackRegistry {
             strip.setVertexes(points(state));
             strip.forceSetLineWidth(state.lineWidth());
         }
+        if (shape instanceof ArrowShape arrow)
+            arrow.forceSet(point(state, 0), point(state, 1), state.lineWidth(), (float) state.sizeX());
         if (shape instanceof TextShape textShape) {
             TextSettings settings = state.text() == null ? TextSettings.defaults() : state.text();
             textShape.contents.clear();
@@ -277,6 +299,7 @@ public final class ShapeTrackRegistry {
             textShape.shadow = settings.shadow();
             textShape.outline = settings.outline();
             textShape.setBillboardMode(TextShape.BillBoardMode.valueOf(settings.billboard()));
+            if (textShape instanceof FontTextShape fontShape) fontShape.font = settings.fontOrDefault();
         }
         shape.seeThrough = state.seeThrough();
         applyParent(shape, state.parentShapeId());
@@ -301,6 +324,15 @@ public final class ShapeTrackRegistry {
 
     }
 
+    private static void ensureCustomManager(Shape shape) {
+        if (shape instanceof FontTextShape)
+            VertexBuilderGetter.registerEmptyShapeBuilder(FontTextShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        else if (shape instanceof ImageShape)
+            VertexBuilderGetter.registerEmptyShapeBuilder(ImageShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        else if (shape instanceof ArrowShape)
+            VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
+    }
+
     private static Vec3 size(ShapeState state) {
         return new Vec3(state.sizeX(), state.sizeY(), state.sizeZ());
     }
@@ -317,6 +349,39 @@ public final class ShapeTrackRegistry {
     private static Identifier objModelId(String value) {
         Identifier id = value == null ? null : Identifier.tryParse(value);
         return id == null ? Identifier.fromNamespaceAndPath("ryansrenderingkit", "models/monkey.obj") : id;
+    }
+
+    public static BlockState blockState(String blockId, Map<String, String> properties) {
+        Identifier id = Identifier.tryParse(blockId);
+        BlockState result = (id == null ? Blocks.STONE : BuiltInRegistries.BLOCK.getValue(id)).defaultBlockState();
+        Map<String, String> values = properties == null ? Map.of() : properties;
+        for (Property<?> property : result.getProperties()) {
+            String value = values.get(property.getName());
+            if (value != null) result = setProperty(result, property, value);
+        }
+        return result;
+    }
+
+    public static List<String> blockIds() {
+        if (blockIds == null) blockIds = BuiltInRegistries.BLOCK.keySet().stream()
+                .map(Identifier::toString).sorted().toList();
+        return blockIds;
+    }
+
+    public static List<String> itemIds() {
+        if (itemIds == null) itemIds = BuiltInRegistries.ITEM.keySet().stream()
+                .map(Identifier::toString).sorted().toList();
+        return itemIds;
+    }
+
+    private static <T extends Comparable<T>> BlockState setProperty(
+            BlockState state, Property<T> property, String value) {
+        return property.getValue(value).map(parsed -> state.setValue(property, parsed)).orElse(state);
+    }
+
+    private static net.minecraft.world.item.Item item(ShapeState state) {
+        Identifier id = Identifier.tryParse(state.model());
+        return id == null ? Items.DIAMOND : BuiltInRegistries.ITEM.getValue(id);
     }
 
     private static void applyParent(Shape shape, String parentId) {
