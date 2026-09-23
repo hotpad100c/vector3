@@ -32,14 +32,9 @@ public final class EditorCameraController {
 
     private ViewportCamera camera = new ViewportCamera();
     private Drag dragging = Drag.NONE;
-    /** Our own edge-detected mouse/key state — ImGui's own isMouseClicked()/isMouseDoubleClicked()
-     *  go stale across an EDITOR_GRABBED cursor-capture cycle (see frame() below), so drag start/end
-     *  can't be trusted to ImGui here the way the rest of the codebase normally would. */
     private boolean mouseWasDown;
     private boolean focusKeyWasDown;
 
-    /** Drops any drag in progress and forgets the current focus point, so a stale orbit target from
-     *  one replay never leaks into the next. */
     public void reset() {
         if (dragging != Drag.NONE) ReplayUI.imguiWindower.ungrab();
         dragging = Drag.NONE;
@@ -64,8 +59,6 @@ public final class EditorCameraController {
                 mouseWasDown = false;
                 return;
             }
-            // ImGui's own mouse delta stops updating while EDITOR_GRABBED — the grabbed delta is the
-            // same primitive Flashback's own free-look reads while its cursor is captured.
             double dx = ReplayUI.imguiWindower.getGrabbedMouseDeltaX();
             double dy = ReplayUI.imguiWindower.getGrabbedMouseDeltaY();
             if (dragging == Drag.ORBIT) camera.orbit(dx, dy);
@@ -75,27 +68,19 @@ public final class EditorCameraController {
             return;
         }
 
-        // Flashback's own free-look only engages in MouseHandledBy.GAME; make sure we're not sitting
-        // in that state (e.g. left over from before Editor Mode was toggled on) while otherwise idle.
         if (ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
 
         boolean hotkeysAllowed = !ImGui.getIO().getWantTextInput() && !ImGui.isAnyItemActive();
-        if (inViewport && hotkeysAllowed && keyJustPressed(InputConstants.KEY_F)) {
+        if (hotkeysAllowed && keyJustPressed(InputConstants.KEY_F)) {
             focus(mcCamera);
         }
 
-        // Raw edge detection instead of ImGui.isMouseClicked(0): right after ungrab() above, ImGui's
-        // own click bookkeeping is one frame stale from having been shut out during EDITOR_GRABBED, so
-        // isMouseClicked() swallows the first real click back — the user has to click twice to resume
-        // dragging. Tracking the raw down/up edge ourselves sidesteps that staleness entirely.
         boolean justPressed = mouseDownNow && !mouseWasDown;
         mouseWasDown = mouseDownNow;
 
         if (inViewport && justPressed) {
             if (syncCamera(mcCamera)) {
                 dragging = InputHelper.isShiftDownRaw() ? Drag.PAN : Drag.ORBIT;
-                // EDITOR_GRABBED hides/captures the cursor (comfortable for a drag) without letting
-                // Flashback's own vanilla camera-look see the resulting deltas.
                 ReplayUI.imguiWindower.setGrabbed(false, 0, -1, -1);
             }
             return;
@@ -110,9 +95,6 @@ public final class EditorCameraController {
             }
         }
 
-        // Idle: keep holding the last computed pose every frame, not just while actively dragging —
-        // otherwise Flashback's own flight (WASD/jump/shift, or plain gravity) can still nudge the
-        // entity between drags, since key suppression alone isn't an airtight guarantee.
         if (camera.isPrimed()) applyCamera(mcCamera);
     }
 
@@ -123,8 +105,6 @@ public final class EditorCameraController {
         return down && !wasDown;
     }
 
-    /** F focuses the orbit camera on whatever's under the cursor — a vector3 shape first (reusing the
-     *  same pick vector3's gizmo/select tooling already uses), falling back to a world block. */
     private void focus(Camera mcCamera) {
         Vec3 direction = mouseLookVector();
         if (direction == null) return;
@@ -184,10 +164,6 @@ public final class EditorCameraController {
         entity.setYHeadRot(camera.yaw());
     }
 
-    /** Forces vanilla's WASD/Space/Shift flight keys to read as released every frame, so Flashback's
-     *  normal movement can't fight the entity position this class is setting via applyCamera(). This
-     *  has to be repeated every frame (not just once on entry) since a real GLFW key-down callback
-     *  would otherwise flip the mapping back to "held" as long as the physical key stays pressed. */
     private static void suppressMovementKeys() {
         Options options = Minecraft.getInstance().options;
         options.keyUp.setDown(false);

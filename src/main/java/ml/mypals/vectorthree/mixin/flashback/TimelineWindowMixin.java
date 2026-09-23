@@ -64,6 +64,7 @@ public abstract class TimelineWindowMixin {
     private static void vector3$selectClickedShape(CallbackInfo ci) {
         Vector3.GIZMO_EDITOR.frame();
         if (ShapeManagerWindow.isEditorMode()) Vector3.EDITOR_CAMERA.frame();
+        ShapeTrackRegistry.rebakeAreaShapesIfIrisShaderToggled();
         String shapeId = ShapeTimelineSelection.consume();
         if (shapeId != null) {
             int cursor = TimelineWindow.getCursorTick();

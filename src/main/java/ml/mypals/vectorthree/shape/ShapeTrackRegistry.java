@@ -58,8 +58,33 @@ public final class ShapeTrackRegistry {
     private static List<String> itemIds;
     private static String previewHighlightId;
     private static boolean fixedSeeThroughPipelines;
+    private static Boolean lastIrisShaderState;
 
     private ShapeTrackRegistry() {}
+
+    /**
+     * AreaShape bakes its mesh once from a live {@code BufferBuilder} snapshot; if the player toggles
+     * an Iris shader pack on/off afterward, that baked vertex data was captured under the wrong mode
+     * and needs to be rebaked. Call once per frame regardless of whether anything else changed — a
+     * shader-pack toggle happens entirely inside Iris's own UI, with no natural vector3-side trigger
+     * to piggyback on (unlike an edited keyframe, which already goes through {@code apply()}).
+     */
+    public static void rebakeAreaShapesIfIrisShaderToggled() {
+        boolean current = IrisApi.getInstance().isShaderPackInUse();
+        boolean changed = lastIrisShaderState != null && lastIrisShaderState != current;
+        lastIrisShaderState = current;
+        if (!changed) return;
+        for (String shapeId : List.copyOf(SHAPE_TYPES.keySet())) {
+            if (!"area".equals(SHAPE_TYPES.get(shapeId))) continue;
+            Shape shape = SHAPES.get(shapeId);
+            ShapeState state = LAST_STATES.get(shapeId);
+            if (shape == null || state == null) continue;
+            ShapeManagers.removeShapes(Identifier.parse(shapeId));
+            shape.discard();
+            SHAPES.remove(shapeId);
+            apply(state);
+        }
+    }
 
     public static void register(String type, String name, Function<ShapeState, Shape> factory) {
         Definition definition = new Definition(type, name, factory);
