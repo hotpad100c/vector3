@@ -1,10 +1,6 @@
 package ml.mypals.vectorthree.shape;
 
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.CompareOp;
-import com.mojang.renderpearl.api.pipeline.DepthStencilState;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.*;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManager;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManagers;
 import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
@@ -554,8 +550,13 @@ public final class ShapeTrackRegistry {
                 .build());
         // Tell Iris how to treat these custom pipelines — otherwise it can't find a shader override
         // for them at all and logs a "Missing program ... in override list" warning on every draw.
-        IrisProgram irisProgram = old.mode() == com.mojang.renderpearl.api.pipeline.PrimitiveTopology.TRIANGLES
-                ? IrisProgram.TRANSLUCENT : IrisProgram.LINES;
+        // IrisProgram.TRANSLUCENT is NOT a generic translucent bucket — it maps straight to Iris's
+        // water gbuffer program, which shader packs customize heavily (wave distortion, a fixed water
+        // tint, and often ignoring per-vertex color/alpha entirely), which is exactly what turned the
+        // gizmo axes black and the sphere flat gray with no transparency. PARTICLES_TRANSLUCENT maps
+        // to a generic vertex-colored translucent program packs treat as a plain passthrough instead.
+        IrisProgram irisProgram = old.mode() == PrimitiveTopology.TRIANGLES
+                ? IrisProgram.PARTICLES_TRANSLUCENT : IrisProgram.LINES;
         IrisApi.getInstance().assignPipeline(normalPipeline, irisProgram);
         IrisApi.getInstance().assignPipeline(seeThroughPipeline, irisProgram);
 

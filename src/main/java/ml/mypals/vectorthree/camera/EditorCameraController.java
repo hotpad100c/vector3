@@ -1,8 +1,12 @@
 package ml.mypals.vectorthree.camera;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
+import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
+import ml.mypals.vectorthree.shape.ShapeState;
+import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Camera;
@@ -15,6 +19,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 
@@ -27,12 +32,19 @@ public final class EditorCameraController {
 
     private ViewportCamera camera = new ViewportCamera();
     private Drag dragging = Drag.NONE;
+    /** Our own edge-detected mouse/key state — ImGui's own isMouseClicked()/isMouseDoubleClicked()
+     *  go stale across an EDITOR_GRABBED cursor-capture cycle (see frame() below), so drag start/end
+     *  can't be trusted to ImGui here the way the rest of the codebase normally would. */
+    private boolean mouseWasDown;
+    private boolean focusKeyWasDown;
 
     /** Drops any drag in progress and forgets the current focus point, so a stale orbit target from
      *  one replay never leaks into the next. */
     public void reset() {
         if (dragging != Drag.NONE) ReplayUI.imguiWindower.ungrab();
         dragging = Drag.NONE;
+        mouseWasDown = false;
+        focusKeyWasDown = false;
         camera = new ViewportCamera();
     }
 
@@ -43,22 +55,23 @@ public final class EditorCameraController {
 
         Camera mcCamera = Minecraft.getInstance().gameRenderer.mainCamera();
         boolean inViewport = mouseInViewport();
+        boolean mouseDownNow = InputHelper.isMouseDownRaw(0);
 
         if (dragging != Drag.NONE) {
-            // Mouse-down state is read raw (not via ImGui) because the cursor is captured through
-            // Flashback's own EDITOR_GRABBED mode below, which ImGui itself isn't "allowed" to see.
-            if (!InputHelper.isMouseDownRaw(0)) {
+            if (!mouseDownNow) {
                 ReplayUI.imguiWindower.ungrab();
                 dragging = Drag.NONE;
+                mouseWasDown = false;
                 return;
             }
-            // Likewise, ImGui's own mouse delta stops updating while EDITOR_GRABBED — the grabbed
-            // delta is the same primitive Flashback's own free-look reads while its cursor is captured.
+            // ImGui's own mouse delta stops updating while EDITOR_GRABBED — the grabbed delta is the
+            // same primitive Flashback's own free-look reads while its cursor is captured.
             double dx = ReplayUI.imguiWindower.getGrabbedMouseDeltaX();
             double dy = ReplayUI.imguiWindower.getGrabbedMouseDeltaY();
             if (dragging == Drag.ORBIT) camera.orbit(dx, dy);
             else camera.pan(dx, dy, viewportHeight(), mcCamera.getFov());
             applyCamera(mcCamera);
+            mouseWasDown = true;
             return;
         }
 
@@ -66,12 +79,19 @@ public final class EditorCameraController {
         // in that state (e.g. left over from before Editor Mode was toggled on) while otherwise idle.
         if (ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
 
-        if (inViewport && ImGui.isMouseDoubleClicked(0)) {
-            retarget(mcCamera);
-            return;
+        boolean hotkeysAllowed = !ImGui.getIO().getWantTextInput() && !ImGui.isAnyItemActive();
+        if (inViewport && hotkeysAllowed && keyJustPressed(InputConstants.KEY_F)) {
+            focus(mcCamera);
         }
 
-        if (inViewport && ImGui.isMouseClicked(0)) {
+        // Raw edge detection instead of ImGui.isMouseClicked(0): right after ungrab() above, ImGui's
+        // own click bookkeeping is one frame stale from having been shut out during EDITOR_GRABBED, so
+        // isMouseClicked() swallows the first real click back — the user has to click twice to resume
+        // dragging. Tracking the raw down/up edge ourselves sidesteps that staleness entirely.
+        boolean justPressed = mouseDownNow && !mouseWasDown;
+        mouseWasDown = mouseDownNow;
+
+        if (inViewport && justPressed) {
             if (syncCamera(mcCamera)) {
                 dragging = InputHelper.isShiftDownRaw() ? Drag.PAN : Drag.ORBIT;
                 // EDITOR_GRABBED hides/captures the cursor (comfortable for a drag) without letting
@@ -96,6 +116,46 @@ public final class EditorCameraController {
         if (camera.isPrimed()) applyCamera(mcCamera);
     }
 
+    private boolean keyJustPressed(int key) {
+        boolean down = InputConstants.isKeyDown(key);
+        boolean wasDown = focusKeyWasDown;
+        focusKeyWasDown = down;
+        return down && !wasDown;
+    }
+
+    /** F focuses the orbit camera on whatever's under the cursor — a vector3 shape first (reusing the
+     *  same pick vector3's gizmo/select tooling already uses), falling back to a world block. */
+    private void focus(Camera mcCamera) {
+        Vec3 direction = mouseLookVector();
+        if (direction == null) return;
+        Vec3 eye = mcCamera.position();
+
+        String shapeId = ShapeTrackRegistry.pickShape(new RayModelIntersection.Ray(eye, direction));
+        if (shapeId != null) {
+            ShapeState state = ShapeTrackRegistry.state(shapeId);
+            if (state != null) {
+                camera.reset(eye, shapeWorldPosition(state));
+                applyCamera(mcCamera);
+                return;
+            }
+        }
+
+        Entity entity = mcCamera.entity();
+        Level level = Minecraft.getInstance().level;
+        if (entity == null || level == null) return;
+        BlockHitResult hit = level.clip(new ClipContext(eye, eye.add(direction.scale(RETARGET_RANGE)),
+                ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, entity));
+        if (hit.getType() != HitResult.Type.BLOCK) return;
+        camera.reset(eye, Vec3.atCenterOf(hit.getBlockPos()));
+        applyCamera(mcCamera);
+    }
+
+    private static Vec3 shapeWorldPosition(ShapeState state) {
+        Matrix4f world = ShapeTrackRegistry.worldTransformOrIdentity(state.parentShapeId());
+        Vector3f worldPos = world.transformPosition(new Vector3f((float) state.x(), (float) state.y(), (float) state.z()));
+        return new Vec3(worldPos.x, worldPos.y, worldPos.z);
+    }
+
     private boolean syncCamera(Camera mcCamera) {
         Entity entity = mcCamera.entity();
         if (entity == null) return false;
@@ -114,19 +174,6 @@ public final class EditorCameraController {
             if (hit.getType() == HitResult.Type.BLOCK) return Vec3.atCenterOf(hit.getBlockPos());
         }
         return eye.add(direction.scale(DEFAULT_FOCUS_DISTANCE));
-    }
-
-    private void retarget(Camera mcCamera) {
-        Entity entity = mcCamera.entity();
-        Level level = Minecraft.getInstance().level;
-        Vec3 direction = mouseLookVector();
-        if (entity == null || level == null || direction == null) return;
-        Vec3 eye = mcCamera.position();
-        BlockHitResult hit = level.clip(new ClipContext(eye, eye.add(direction.scale(RETARGET_RANGE)),
-                ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, entity));
-        if (hit.getType() != HitResult.Type.BLOCK) return;
-        camera.reset(eye, Vec3.atCenterOf(hit.getBlockPos()));
-        applyCamera(mcCamera);
     }
 
     private void applyCamera(Camera mcCamera) {
