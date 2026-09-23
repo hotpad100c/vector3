@@ -15,8 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class AreaSuppressBlockMixin {
     @Inject(method = "tesselateBlock", at = @At("HEAD"), cancellable = true)
     private void vector3$suppressArea(BlockQuadOutput output, float x, float y, float z,
-            BlockAndTintGetter level, BlockPos pos, BlockState state, BlockStateModel model, long seed,
-            CallbackInfo ci) {
+                                      BlockAndTintGetter level, BlockPos pos, BlockState blockState, BlockStateModel model, long seed,
+                                      CallbackInfo ci) {
         if (AreaSuppression.isSuppressed(pos)) ci.cancel();
     }
 }

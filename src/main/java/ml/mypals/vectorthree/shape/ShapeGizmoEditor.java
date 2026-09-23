@@ -12,6 +12,7 @@ import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -77,11 +78,11 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     public void edit(ShapeKeyframe keyframe, Consumer<Consumer<ShapeKeyframe>> update) {
         select(keyframe, replacement -> update.accept(changed -> changed.state = replacement));
 
-        ImGui.text("Viewport Gizmo");
-        setModeButton("Move (G)", Mode.MOVE); ImGui.sameLine();
-        setModeButton("Rotate (R)", Mode.ROTATE); ImGui.sameLine();
-        setModeButton("Scale (B)", Mode.SCALE); ImGui.sameLine();
-        setModeButton("Geometry (M)", Mode.GEOMETRY);
+        ImGui.text(I18n.get("vector3.gizmo.viewport_gizmo"));
+        setModeButton(I18n.get("vector3.gizmo.move"), Mode.MOVE); ImGui.sameLine();
+        setModeButton(I18n.get("vector3.gizmo.rotate"), Mode.ROTATE); ImGui.sameLine();
+        setModeButton(I18n.get("vector3.gizmo.scale"), Mode.SCALE); ImGui.sameLine();
+        setModeButton(I18n.get("vector3.gizmo.geometry"), Mode.GEOMETRY);
 
     }
 

@@ -12,6 +12,7 @@ import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3fc;
 
@@ -28,7 +29,7 @@ public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
     @Override public boolean supportsHandler(KeyframeHandler handler) { return handler instanceof MinecraftKeyframeHandler; }
     @Override public boolean allowApplyingDuplicateKeyframeChanges() { return true; }
     @Override public String icon() { return "▣"; }
-    @Override public String name() { return "Shapes"; }
+    @Override public String name() { return I18n.get("vector3.keyframe_type.name"); }
     @Override public String id() { return ID; }
 
     @Override
@@ -45,17 +46,17 @@ public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
         return () -> {
             ShapeTrackRegistry.Definition current = ShapeTrackRegistry.definition(selected[0]);
             ImGui.setNextItemWidth(240);
-            if (ImGui.beginCombo("Shape", current.name())) {
+            if (ImGui.beginCombo(I18n.get("vector3.keyframe.shape"), I18n.get(current.name()))) {
                 for (ShapeTrackRegistry.Definition definition : definitions) {
-                    if (ImGui.selectable(definition.name(), definition.id().equals(selected[0]))) {
+                    if (ImGui.selectable(I18n.get(definition.name()), definition.id().equals(selected[0]))) {
                         selected[0] = definition.id();
                     }
                 }
                 ImGui.endCombo();
             }
-            if (ImGui.button("Add") || ReplayUI.consumeConfirm()) return create(selected[0]);
+            if (ImGui.button(I18n.get("vector3.keyframe_type.add")) || ReplayUI.consumeConfirm()) return create(selected[0]);
             ImGui.sameLine();
-            if (ImGui.button("Cancel") || ReplayUI.consumeCancel()) ImGui.closeCurrentPopup();
+            if (ImGui.button(I18n.get("vector3.keyframe_type.cancel")) || ReplayUI.consumeCancel()) ImGui.closeCurrentPopup();
             return null;
         };
     }

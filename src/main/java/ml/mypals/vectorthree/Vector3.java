@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree;
 
+import ml.mypals.vectorthree.camera.EditorCameraController;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
@@ -15,6 +16,7 @@ import org.slf4j.LoggerFactory;
 public class Vector3 implements ClientModInitializer {
 	public static final String MOD_ID = "vector3";
 	public static final ShapeGizmoEditor GIZMO_EDITOR = new ShapeGizmoEditor();
+	public static final EditorCameraController EDITOR_CAMERA = new EditorCameraController();
 
 	// This logger is used to write text to the console and the log file.
 	// It is considered best practice to use your mod id as the logger's name.
@@ -28,6 +30,7 @@ public class Vector3 implements ClientModInitializer {
 		ShapeKeyframe.setEditor(GIZMO_EDITOR);
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			GIZMO_EDITOR.clear();
+			EDITOR_CAMERA.reset();
 			ShapeTrackRegistry.clear();
 		});
 		LOGGER.info("Registered RyansRenderingKit shape tracks with Flashback");

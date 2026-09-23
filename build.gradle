@@ -32,6 +32,9 @@ dependencies {
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 	implementation "maven.modrinth:CdJaAf0y:6C2XnOsN"
 	implementation "maven.modrinth:4das1Fjq:${project.flashback_version}"
+
+	implementation "maven.modrinth:AANobbMI:v4PSXean"
+	implementation "maven.modrinth:YL57xq9U:bAdKrpw8"
 }
 
 processResources {

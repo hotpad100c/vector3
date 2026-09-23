@@ -16,6 +16,7 @@ import imgui.moulberry90.type.ImBoolean;
 import imgui.moulberry90.type.ImInt;
 import imgui.moulberry90.type.ImString;
 import org.jetbrains.annotations.Nullable;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 
@@ -68,9 +69,9 @@ public final class ShapeKeyframe extends Keyframe {
         ShapeTrackRegistry.Definition selectedDefinition = ShapeTrackRegistry.definition(selectedType[0]);
         boolean changed = false;
         ImGui.setNextItemWidth(240);
-        if (selectedDefinition != null && ImGui.beginCombo("Shape", selectedDefinition.name())) {
+        if (selectedDefinition != null && ImGui.beginCombo(I18n.get("vector3.keyframe.shape"), I18n.get(selectedDefinition.name()))) {
             for (ShapeTrackRegistry.Definition definition : ShapeTrackRegistry.definitions()) {
-                if (ImGui.selectable(definition.name(), definition.id().equals(selectedType[0]))) {
+                if (ImGui.selectable(I18n.get(definition.name()), definition.id().equals(selectedType[0]))) {
                     selectedType[0] = definition.id();
                     changed = true;
                 }
@@ -80,7 +81,7 @@ public final class ShapeKeyframe extends Keyframe {
 
         ShapeTrackRegistry.previewHighlight(null);
         ImGui.setNextItemWidth(360);
-        if (ImGui.beginCombo("Shape UUID", ShapeTrackRegistry.displayName(selectedId[0]))) {
+        if (ImGui.beginCombo(I18n.get("vector3.keyframe.shape_uuid"), ShapeTrackRegistry.displayName(selectedId[0]))) {
             for (String shapeId : ShapeTrackRegistry.shapeIds()) {
                 if (ImGui.selectable(ShapeTrackRegistry.displayName(shapeId), shapeId.equals(selectedId[0]))) {
                     selectedId[0] = shapeId;
@@ -94,7 +95,7 @@ public final class ShapeKeyframe extends Keyframe {
         }
 
         ImString nameField = new ImString(state.name() == null ? "" : state.name(), 256);
-        changed |= ImGui.inputText("Name", nameField);
+        changed |= ImGui.inputText(I18n.get("vector3.keyframe.name"), nameField);
 
         float[] position = {(float) state.x(), (float) state.y(), (float) state.z()};
         float[] rotation = {state.pitch(), state.yaw(), state.roll()};
@@ -102,9 +103,9 @@ public final class ShapeKeyframe extends Keyframe {
 
         String[] parentId = {state.parentShapeId() == null ? "" : state.parentShapeId()};
         ImGui.setNextItemWidth(360);
-        if (ImGui.beginCombo("Parent Shape UUID",
-                parentId[0].isEmpty() ? "None" : ShapeTrackRegistry.displayName(parentId[0]))) {
-            if (ImGui.selectable("None", parentId[0].isEmpty())) {
+        if (ImGui.beginCombo(I18n.get("vector3.keyframe.parent_shape_uuid"),
+                parentId[0].isEmpty() ? I18n.get("vector3.keyframe.none") : ShapeTrackRegistry.displayName(parentId[0]))) {
+            if (ImGui.selectable(I18n.get("vector3.keyframe.none"), parentId[0].isEmpty())) {
                 ShapeTrackRegistry.convertToNewParent(state, "", position, rotation, scale);
                 parentId[0] = "";
                 changed = true;
@@ -172,76 +173,76 @@ public final class ShapeKeyframe extends Keyframe {
                 && state.blockProperties() != null ? state.blockProperties() : Map.of());
         String[] billboard = {currentText.billboard()};
 
-        changed |= ImGui.dragFloat3("Position", position, 0.05f);
-        changed |= ImGui.dragFloat3("Rotation", rotation, 1.0f);
-        changed |= ImGui.dragFloat3("Scale", scale, 0.01f, 0.001f, 1000.0f);
-        changed |= ImGui.colorEdit4("Color", color);
+        changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.position"), position, 0.05f);
+        changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.rotation"), rotation, 1.0f);
+        changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.scale"), scale, 0.01f, 0.001f, 1000.0f);
+        changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.color"), color);
 
         List<ShapePoint> points = new ArrayList<>(state.points() == null ? List.of() : state.points());
         switch (selectedType[0]) {
             case "box" ->
-                    changed |= ImGui.dragFloat3("Dimensions", size, 0.05f, 0.001f, 1000.0f);
+                    changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.dimensions"), size, 0.05f, 0.001f, 1000.0f);
             case "box_wireframe", "wireframed_box" -> {
-                changed |= ImGui.dragFloat3("Dimensions", size, 0.05f, 0.001f, 1000.0f);
-                changed |= ImGui.dragFloat("Line Width", width, 0.01f, 0.001f, 100.0f);
+                changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.dimensions"), size, 0.05f, 0.001f, 1000.0f);
+                changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
             }
             case "sphere", "face_circle", "line_circle" -> {
                 float[] radius = {(float) state.sizeX() / 2};
-                if (ImGui.dragFloat("Radius", radius, 0.05f, 0.001f, 1000.0f)) {
+                if (ImGui.dragFloat(I18n.get("vector3.keyframe.radius"), radius, 0.05f, 0.001f, 1000.0f)) {
                     size[0] = radius[0] * 2;
                     changed = true;
                 }
-                changed |= ImGui.inputInt("Segments", segments);
+                changed |= ImGui.inputInt(I18n.get("vector3.keyframe.segments"), segments);
                 if (selectedType[0].equals("line_circle"))
-                    changed |= ImGui.dragFloat("Line Width", width, 0.01f, 0.001f, 100.0f);
+                    changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
             }
             case "cylinder", "cylinder_wireframe", "cone", "cone_wireframe" -> {
                 float[] radius = {(float) state.sizeX() / 2};
                 float[] height = {(float) state.sizeY()};
-                if (ImGui.dragFloat("Radius", radius, 0.05f, 0.001f, 1000.0f)) {
+                if (ImGui.dragFloat(I18n.get("vector3.keyframe.radius"), radius, 0.05f, 0.001f, 1000.0f)) {
                     size[0] = radius[0] * 2;
                     changed = true;
                 }
-                if (ImGui.dragFloat("Height", height, 0.05f, 0.001f, 1000.0f)) {
+                if (ImGui.dragFloat(I18n.get("vector3.keyframe.height"), height, 0.05f, 0.001f, 1000.0f)) {
                     size[1] = height[0];
                     changed = true;
                 }
-                changed |= ImGui.inputInt("Segments", segments);
+                changed |= ImGui.inputInt(I18n.get("vector3.keyframe.segments"), segments);
                 if (selectedType[0].endsWith("wireframe"))
-                    changed |= ImGui.dragFloat("Line Width", width, 0.01f, 0.001f, 100.0f);
+                    changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
             }
             case "line", "arrow" -> {
                 while (points.size() < 2) points.add(new ShapePoint(0, 0, 0));
-                changed |= editPoint("Start", points, 0);
-                changed |= editPoint("End", points, 1);
-                changed |= ImGui.dragFloat("Line Width", width, 0.01f, 0.001f, 100.0f);
+                changed |= editPoint(I18n.get("vector3.keyframe.start"), points, 0);
+                changed |= editPoint(I18n.get("vector3.keyframe.end"), points, 1);
+                changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
                 if (selectedType[0].equals("arrow"))
-                    changed |= ImGui.dragFloat("Head Size", size, 0.01f, 0.01f, 100.0f);
+                    changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.head_size"), size, 0.01f, 0.01f, 100.0f);
             }
             case "line_strip" -> {
                 while (points.size() < 2) points.add(new ShapePoint(points.size(), points.size(), points.size()));
                 for (int i = 0; i < points.size(); i++) {
-                    changed |= editPoint("Point " + (i + 1), points, i);
+                    changed |= editPoint(I18n.get("vector3.keyframe.point", i + 1), points, i);
                     ImGui.sameLine();
-                    if (ImGui.button("Remove##point" + i) && points.size() > 2) {
+                    if (ImGui.button(I18n.get("vector3.keyframe.remove") + "##point" + i) && points.size() > 2) {
                         points.remove(i--);
                         changed = true;
                     }
                 }
-                if (ImGui.button("Add Point")) {
+                if (ImGui.button(I18n.get("vector3.keyframe.add_point"))) {
                     points.add(points.isEmpty() ? new ShapePoint(0, 0, 0) : points.getLast());
                     changed = true;
                 }
-                changed |= ImGui.dragFloat("Line Width", width, 0.01f, 0.001f, 100.0f);
+                changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
             }
             case "text" -> {
-                changed |= ImGui.inputTextMultiline("Text", textValue, 420, 100);
-                changed |= ImGui.checkbox("Hold Text", holdText);
-                changed |= ImGui.checkbox("Shadow", textShadow);
-                changed |= ImGui.checkbox("Outline", textOutline);
-                changed |= ImGui.inputText("Font Resource", font);
+                changed |= ImGui.inputTextMultiline(I18n.get("vector3.keyframe.text"), textValue, 420, 100);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.hold_text"), holdText);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.shadow"), textShadow);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), textOutline);
+                changed |= ImGui.inputText(I18n.get("vector3.keyframe.font_resource"), font);
                 ImGui.setNextItemWidth(180);
-                if (ImGui.beginCombo("Billboard", billboard[0])) {
+                if (ImGui.beginCombo(I18n.get("vector3.keyframe.billboard"), billboard[0])) {
                     for (String mode : List.of("FIXED", "VERTICAL", "HORIZONTAL", "ALL")) {
                         if (ImGui.selectable(mode, mode.equals(billboard[0]))) {
                             billboard[0] = mode;
@@ -251,26 +252,26 @@ public final class ShapeKeyframe extends Keyframe {
                     ImGui.endCombo();
                 }
             }
-            case "obj" -> changed |= ImGui.inputText("OBJ Resource", model);
-            case "image" -> changed |= ImGui.inputText("Image File", imageFile);
+            case "obj" -> changed |= ImGui.inputText(I18n.get("vector3.keyframe.obj_resource"), model);
+            case "image" -> changed |= ImGui.inputText(I18n.get("vector3.keyframe.image_file"), imageFile);
             case "video" -> {
-                changed |= ImGui.inputText("Video File", videoFile);
-                changed |= ImGui.checkbox("Auto Play", videoAutoPlay);
+                changed |= ImGui.inputText(I18n.get("vector3.keyframe.video_file"), videoFile);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.auto_play"), videoAutoPlay);
                 if (videoAutoPlay.get()) {
-                    changed |= ImGui.inputInt("Start Tick", videoStartTick);
-                    changed |= ImGui.checkbox("Loop", videoLoop);
+                    changed |= ImGui.inputInt(I18n.get("vector3.keyframe.start_tick"), videoStartTick);
+                    changed |= ImGui.checkbox(I18n.get("vector3.keyframe.loop"), videoLoop);
                 } else {
-                    changed |= ImGui.sliderFloat("Playback Position (s)", playbackSeconds, 0f, videoDuration);
+                    changed |= ImGui.sliderFloat(I18n.get("vector3.keyframe.playback_position"), playbackSeconds, 0f, videoDuration);
                 }
-                changed |= ImGui.checkbox("Play Audio", playAudio);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.play_audio"), playAudio);
             }
             case "area" -> {
                 while (points.size() < 2) {
                     points.add(new ShapePoint(Math.round(state.x() - 0.5), Math.round(state.y() - 0.5), Math.round(state.z() - 0.5)));
                 }
-                changed |= editAreaPoint("Corner 1", points, 0);
-                changed |= editAreaPoint("Corner 2", points, 1);
-                if (ImGui.button("Center")) {
+                changed |= editAreaPoint(I18n.get("vector3.keyframe.corner_1"), points, 0);
+                changed |= editAreaPoint(I18n.get("vector3.keyframe.corner_2"), points, 1);
+                if (ImGui.button(I18n.get("vector3.keyframe.center"))) {
                     ShapePoint corner1 = points.get(0), corner2 = points.get(1);
                     position[0] = (float) ((corner1.x() + corner2.x()) / 2.0);
                     position[1] = (float) ((corner1.y() + corner2.y()) / 2.0);
@@ -278,16 +279,16 @@ public final class ShapeKeyframe extends Keyframe {
                     changed = true;
                 }
                 if (ShapeTrackRegistry.shape(state.shapeId()) instanceof AreaShape area) {
-                    ImGui.text("Baked blocks: " + area.blockCount());
+                    ImGui.text(I18n.get("vector3.keyframe.baked_blocks", area.blockCount()));
                 } else {
-                    ImGui.text("Baked blocks: (not baked yet)");
+                    ImGui.text(I18n.get("vector3.keyframe.baked_blocks_pending"));
                 }
-                changed |= ImGui.checkbox("Outline", outline);
-                if (outline.get()) changed |= ImGui.colorEdit4("Outline Color", outlineColor);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), outline);
+                if (outline.get()) changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.outline_color"), outlineColor);
             }
             case "block" -> {
                 ImGui.setNextItemWidth(360);
-                if (ImGui.beginCombo("Block", content[0])) {
+                if (ImGui.beginCombo(I18n.get("vector3.keyframe.block"), content[0])) {
                     for (String id : ShapeTrackRegistry.blockIds()) {
                         if (ImGui.selectable(id, id.equals(content[0]))) {
                             content[0] = id;
@@ -315,7 +316,7 @@ public final class ShapeKeyframe extends Keyframe {
             }
             case "item" -> {
                 ImGui.setNextItemWidth(360);
-                if (ImGui.beginCombo("Item", content[0])) {
+                if (ImGui.beginCombo(I18n.get("vector3.keyframe.item"), content[0])) {
                     for (String id : ShapeTrackRegistry.itemIds()) {
                         if (ImGui.selectable(id, id.equals(content[0]))) {
                             content[0] = id;
@@ -326,8 +327,8 @@ public final class ShapeKeyframe extends Keyframe {
                 }
             }
         }
-        changed |= ImGui.checkbox("See Through", seeThrough);
-        changed |= ImGui.checkbox("Visible", visible);
+        changed |= ImGui.checkbox(I18n.get("vector3.keyframe.see_through"), seeThrough);
+        changed |= ImGui.checkbox(I18n.get("vector3.keyframe.visible"), visible);
 
         if (changed) {
             int argb = (Math.round(color[3] * 255) << 24) | (Math.round(color[0] * 255) << 16)

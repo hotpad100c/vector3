@@ -25,8 +25,11 @@ import ml.mypals.ryansrenderingkit.shape.round.LineCircleShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.ryansrenderingkit.shapeManagers.VertexBuilderGetter;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
+import net.irisshaders.iris.api.v0.IrisApi;
+import net.irisshaders.iris.api.v0.IrisProgram;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -75,65 +78,65 @@ public final class ShapeTrackRegistry {
         VertexBuilderGetter.registerEmptyShapeBuilder(VideoShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         VertexBuilderGetter.registerEmptyShapeBuilder(AreaShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
-        register("box", "Solid Box", state -> ShapeGenerator.generateBoxFace()
+        register("box", "vector3.shape.box", state -> ShapeGenerator.generateBoxFace()
                 .pos(new Vec3(state.x(), state.y(), state.z()))
                 .size(new Vec3(state.sizeX(), state.sizeY(), state.sizeZ()))
                 .color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough())
                 .build(Shape.RenderingType.BATCH));
-        register("box_wireframe", "Box Wireframe", state -> ShapeGenerator.generateBoxWireframe()
+        register("box_wireframe", "vector3.shape.box_wireframe", state -> ShapeGenerator.generateBoxWireframe()
                 .size(size(state)).edgeWidth(state.lineWidth()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("wireframed_box", "Solid + Wireframe Box", state -> ShapeGenerator.generateWireframedBox()
+        register("wireframed_box", "vector3.shape.wireframed_box", state -> ShapeGenerator.generateWireframedBox()
                 .size(size(state)).edgeWidth(state.lineWidth()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("sphere", "Sphere", state -> ShapeGenerator.generateSphere()
+        register("sphere", "vector3.shape.sphere", state -> ShapeGenerator.generateSphere()
                 .radius((float) state.sizeX() / 2).segments(state.segments()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("face_circle", "Circle", state -> ShapeGenerator.generateFaceCircle()
+        register("face_circle", "vector3.shape.face_circle", state -> ShapeGenerator.generateFaceCircle()
                 .radius((float) state.sizeX() / 2).segments(state.segments()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("line_circle", "Circle Wireframe", state -> ShapeGenerator.generateLineCircle()
+        register("line_circle", "vector3.shape.line_circle", state -> ShapeGenerator.generateLineCircle()
                 .radius((float) state.sizeX() / 2).segments(state.segments()).lineWidth(state.lineWidth())
                 .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("cylinder", "Cylinder", state -> ShapeGenerator.generateCylinder()
+        register("cylinder", "vector3.shape.cylinder", state -> ShapeGenerator.generateCylinder()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
                 .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("cylinder_wireframe", "Cylinder Wireframe", state -> ShapeGenerator.generateCylinderWireframe()
+        register("cylinder_wireframe", "vector3.shape.cylinder_wireframe", state -> ShapeGenerator.generateCylinderWireframe()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
                 .width(state.lineWidth()).color(new Color(state.color(), true)).seeThrough(state.seeThrough())
                 .build(Shape.RenderingType.BATCH));
-        register("cone", "Cone", state -> ShapeGenerator.generateCone()
+        register("cone", "vector3.shape.cone", state -> ShapeGenerator.generateCone()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
                 .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("cone_wireframe", "Cone Wireframe", state -> ShapeGenerator.generateConeWireframe()
+        register("cone_wireframe", "vector3.shape.cone_wireframe", state -> ShapeGenerator.generateConeWireframe()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
                 .width(state.lineWidth()).color(new Color(state.color(), true)).seeThrough(state.seeThrough())
                 .build(Shape.RenderingType.BATCH));
-        register("line", "Line", state -> ShapeGenerator.generateLine()
+        register("line", "vector3.shape.line", state -> ShapeGenerator.generateLine()
                 .start(point(state, 0)).end(point(state, 1)).lineWidth(state.lineWidth()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("line_strip", "Line Strip", state -> ShapeGenerator.generateStripLine()
+        register("line_strip", "vector3.shape.line_strip", state -> ShapeGenerator.generateStripLine()
                 .vertexes(points(state)).lineWidth(state.lineWidth()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("text", "Text", state -> {
+        register("text", "vector3.shape.text", state -> {
             TextSettings settings = state.text() == null ? TextSettings.defaults() : state.text();
             return new FontTextShape(settings, new Color(state.color(), true), state.seeThrough());
         });
-        register("block", "Block", state -> ShapeGenerator.generateBlock()
+        register("block", "vector3.shape.block", state -> ShapeGenerator.generateBlock()
                 .block(blockState(state.model(), state.blockProperties())).build());
-        register("item", "Item", state -> ShapeGenerator.generateItem()
+        register("item", "vector3.shape.item", state -> ShapeGenerator.generateItem()
                 .itemStack(new ItemStack(item(state))).build());
-        register("obj", "OBJ Model", state -> new ObjModelShape(Shape.RenderingType.BATCH,
+        register("obj", "vector3.shape.obj", state -> new ObjModelShape(Shape.RenderingType.BATCH,
                 transformer -> {}, objModelId(state.model()), Vec3.ZERO,
                 new Color(state.color(), true), state.seeThrough()));
-        register("arrow", "Arrow", state -> new ArrowShape(point(state, 0), point(state, 1),
+        register("arrow", "vector3.shape.arrow", state -> new ArrowShape(point(state, 0), point(state, 1),
                 state.lineWidth(), (float) state.sizeX(), new Color(state.color(), true), state.seeThrough()));
-        register("image", "Image", state -> new ImageShape(state.model(),
+        register("image", "vector3.shape.image", state -> new ImageShape(state.model(),
                 new Color(state.color(), true), state.seeThrough()));
-        register("video", "Video", state -> new VideoShape(state.model(),
+        register("video", "vector3.shape.video", state -> new VideoShape(state.model(),
                 new Color(state.color(), true), state.seeThrough()));
-        register("area", "Area (Baked Region)", state -> new AreaShape(state,
+        register("area", "vector3.shape.area", state -> new AreaShape(state,
                 new Color(state.color(), true), state.seeThrough()));
     }
 
@@ -152,7 +155,8 @@ public final class ShapeTrackRegistry {
         if (name != null && !name.isBlank()) return name;
         String type = state != null ? state.shapeType() : SHAPE_TYPES.get(shapeId);
         Definition definition = type != null ? TYPES.get(type) : null;
-        String label = definition != null ? definition.name() : (type != null ? type : "Shape");
+        String label = definition != null ? I18n.get(definition.name())
+                : type != null ? type : I18n.get("vector3.shape.unknown");
         return label + " (" + shortId(shapeId) + ")";
     }
 
@@ -548,6 +552,13 @@ public final class ShapeTrackRegistry {
                 .withVertexBinding(0, old.format())
                 .withPrimitiveTopology(old.mode())
                 .build());
+        // Tell Iris how to treat these custom pipelines — otherwise it can't find a shader override
+        // for them at all and logs a "Missing program ... in override list" warning on every draw.
+        IrisProgram irisProgram = old.mode() == com.mojang.renderpearl.api.pipeline.PrimitiveTopology.TRIANGLES
+                ? IrisProgram.TRANSLUCENT : IrisProgram.LINES;
+        IrisApi.getInstance().assignPipeline(normalPipeline, irisProgram);
+        IrisApi.getInstance().assignPipeline(seeThroughPipeline, irisProgram);
+
         RenderSetup.RenderSetupBuilder normalSetup = RenderSetup.builder(normalPipeline);
         RenderSetup.RenderSetupBuilder seeThroughSetup = RenderSetup.builder(seeThroughPipeline);
         if (old.mode() == com.mojang.renderpearl.api.pipeline.PrimitiveTopology.TRIANGLES) {
@@ -580,6 +591,7 @@ public final class ShapeTrackRegistry {
                     .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
                     .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true))
                     .build());
+            IrisApi.getInstance().assignPipeline(imageSeeThroughPipeline, IrisProgram.ENTITIES_TRANSLUCENT);
         }
         RenderSetup setup = RenderSetup.builder(imageSeeThroughPipeline)
                 .withTexture("Sampler0", textureId)
