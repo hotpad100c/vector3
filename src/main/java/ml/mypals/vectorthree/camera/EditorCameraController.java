@@ -70,8 +70,9 @@ public final class EditorCameraController {
 
         if (ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
 
-        boolean hotkeysAllowed = !ImGui.getIO().getWantTextInput() && !ImGui.isAnyItemActive();
-        if (hotkeysAllowed && keyJustPressed(InputConstants.KEY_F)) {
+        boolean focusPressed = keyJustPressed(InputConstants.KEY_F);
+        boolean hotkeysAllowed = !ImGui.getIO().getWantTextInput() && (inViewport || !ImGui.isAnyItemActive());
+        if (hotkeysAllowed && focusPressed) {
             focus(mcCamera);
         }
 

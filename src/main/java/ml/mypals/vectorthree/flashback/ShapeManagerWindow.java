@@ -76,7 +76,7 @@ public final class ShapeManagerWindow {
 
         ImGui.pushID(shapeId);
         boolean open = ImGui.treeNodeEx("##node", flags, label);
-        if (ImGui.isItemClicked(0)) ShapeTimelineSelection.request(shapeId);
+        if (ImGui.isItemClicked(0) && !ImGui.isItemToggledOpen()) ShapeTimelineSelection.request(shapeId);
         if (ImGui.isItemClicked(1)) ImGui.setClipboardText(shapeId);
         if (ImGui.isItemHovered()) ImGui.setTooltip(shapeId + "\n" + I18n.get("vector3.shape_manager.copy_hint"));
         if (!children.isEmpty() && open) {

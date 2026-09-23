@@ -296,21 +296,30 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private void updateAabbMarker(ShapeState state) {
         Shape target = ShapeTrackRegistry.shape(state.shapeId());
         List<Vec3> vertices = target == null ? null : target.getModel(false);
-        Vec3 min;
-        Vec3 max;
-        if (vertices == null || vertices.isEmpty()) {
-            min = max = center(state);
-        } else {
-            min = vertices.get(0);
-            max = vertices.get(0);
+        Vec3 origin = center(state);
+        Quaternionf orientation = usesAbsolutePoints(state) ? new Quaternionf() : rotation(state);
+        Quaternionf toLocal = new Quaternionf(orientation).invert();
+        Vector3f min = new Vector3f();
+        Vector3f max = new Vector3f();
+        if (vertices != null && !vertices.isEmpty()) {
+            min.set(Float.POSITIVE_INFINITY);
+            max.set(Float.NEGATIVE_INFINITY);
             for (Vec3 vertex : vertices) {
-                min = new Vec3(Math.min(min.x, vertex.x), Math.min(min.y, vertex.y), Math.min(min.z, vertex.z));
-                max = new Vec3(Math.max(max.x, vertex.x), Math.max(max.y, vertex.y), Math.max(max.z, vertex.z));
+                Vector3f local = vertex.subtract(origin).toVector3f().rotate(toLocal);
+                min.min(local);
+                max.max(local);
             }
         }
+        Vector3f localCenter = new Vector3f(min).add(max).mul(0.5f);
+        Vector3f worldOffset = new Vector3f(localCenter).rotate(orientation);
+        Vec3 markerCenter = origin.add(worldOffset.x, worldOffset.y, worldOffset.z);
+        Vec3 halfSize = new Vec3(new Vector3f(max).sub(min).mul(0.5f));
+
         ensureAabbMarker();
-        aabbBox.forceSetCorners(min, max);
-        Vec3 markerCenter = min.add(max).scale(0.5);
+        aabbBox.forceSetCorners(markerCenter.subtract(halfSize), markerCenter.add(halfSize));
+        Vector3f euler = orientation.getEulerAnglesXYZ(new Vector3f());
+        aabbBox.forceSetWorldRotation(new Vector3f((float) Math.toDegrees(euler.x),
+                (float) Math.toDegrees(euler.y), (float) Math.toDegrees(euler.z)));
         double scale = gizmoScale(markerCenter) * CENTER_POINT_GIZMO_SCALE;
         centerPoint.forceSetWorldPosition(markerCenter);
         centerPoint.forceSetWorldScale(new Vec3(scale, scale, scale));

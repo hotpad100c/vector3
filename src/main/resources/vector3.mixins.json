@@ -25,10 +25,13 @@
 		"flashback.FlashbackGsonMixin",
 		"flashback.KeyframeTypeAdapterMixin",
 		"flashback.TimelineWindowMixin",
-		"iris.BuilderManagerIrisBypassMixin",
 		"iris.BufferedVertexBuilderIrisBypassMixin",
+		"iris.BuilderManagerIrisBypassMixin",
 		"iris.HelpersIrisBypassMixin",
-		"iris.LevelRendererIrisBypassMixin"
+		"iris.LevelRendererIrisBypassMixin",
+		"iris.skyOverride.HorizonRendererMixin",
+		"iris.skyOverride.IrisRenderingPipelineMixin",
+		"iris.skyOverride.PropertiesMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
