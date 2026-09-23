@@ -14,7 +14,7 @@ import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import java.util.OptionalDouble;
 import ml.mypals.vectorthree.Vector3;
-import net.irisshaders.iris.api.v0.IrisApi;
+import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.vertices.ImmediateState;
 import net.minecraft.client.Minecraft;
 import org.joml.Vector4f;
@@ -42,8 +42,10 @@ public final class IrisBypassTarget {
 
     private IrisBypassTarget() {}
 
+    /** Iris's own pack-in-use flag — the one its shader override and vertex widening check — rather than
+     *  the public API's, which can disagree with it for a few frames while a pack is being toggled. */
     public static boolean isActive() {
-        return IrisApi.getInstance().isShaderPackInUse();
+        return Iris.isPackInUseQuick();
     }
 
     public static void beginIrisBypass() {

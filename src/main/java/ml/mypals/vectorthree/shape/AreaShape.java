@@ -10,6 +10,8 @@ import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.render.IrisBypassTarget;
+import net.irisshaders.iris.Iris;
+import net.irisshaders.iris.vertices.ImmediateState;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -93,9 +95,18 @@ public final class AreaShape extends Shape implements EmptyMesh {
         rebakeRegion();
     }
 
+    private Boolean bakedExtended;
+
+    private static boolean irisExtendsNow() {
+        return Iris.isPackInUseQuick() && ImmediateState.isRenderingLevel && !ImmediateState.skipExtension.get();
+    }
+
     private void rebakeRegion() {
         ClientLevel level = Minecraft.getInstance().level;
         if (level == null) return;
+        bakedExtended = irisExtendsNow();
+        drawFailed = false;
+        blockEntityDrawFailed = false;
         AreaBaker.Result result = new AreaBaker().bake(level, bakedMin, bakedMax);
         solidMesh.upload(result.solidMesh());
         cutoutMesh.upload(result.cutoutMesh());
@@ -133,13 +144,17 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
     @Override
     protected void drawInternal(VertexBuilder builder) {
-        if (AreaSuppression.consumeDirty(shapeId)) rebakeRegion();
+        // Rebaking here, inside the level render, means the mesh is always built in the same vertex
+        // layout the draw below binds — including the frames right after a shader pack is toggled,
+        // which previously drew the old layout until a UI-side rebake caught up (stretched triangles).
+        boolean dirty = AreaSuppression.consumeDirty(shapeId);
+        if (dirty || (bakedExtended != null && bakedExtended != irisExtendsNow())) rebakeRegion();
         if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
             try {
                 drawMesh();
             } catch (Exception exception) {
                 drawFailed = true;
-                Vector3.LOGGER.warn("AreaShape draw failed, disabling further draws for this shape", exception);
+                Vector3.LOGGER.warn("AreaShape draw failed, pausing its draws until the next rebake", exception);
             }
         }
         if (!blockEntities.isEmpty() && !blockEntityDrawFailed) {
@@ -147,7 +162,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 drawBlockEntities();
             } catch (Exception exception) {
                 blockEntityDrawFailed = true;
-                Vector3.LOGGER.warn("AreaShape block entity draw failed, disabling further attempts for this shape", exception);
+                Vector3.LOGGER.warn("AreaShape block entity draw failed, pausing them until the next rebake", exception);
             }
         }
     }
