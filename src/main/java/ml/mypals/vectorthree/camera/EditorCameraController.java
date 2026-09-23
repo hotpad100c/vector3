@@ -179,10 +179,13 @@ public final class EditorCameraController {
         return Math.max(1, ReplayUI.viewportSizeY);
     }
 
+    /** Inside the viewport rect and not over an ImGui window (e.g. a keyframe popup drawn on top of it),
+     *  which Flashback reports by handing the mouse to ImGui instead of the game. */
     private static boolean mouseInViewport() {
         var mouse = ReplayUI.getMouseViewportFraction();
         return ReplayUI.isActive() && mouse != null
-                && mouse.x >= 0 && mouse.x <= 1 && mouse.y >= 0 && mouse.y <= 1;
+                && mouse.x >= 0 && mouse.x <= 1 && mouse.y >= 0 && mouse.y <= 1
+                && ReplayUI.imguiWindower.getMouseHandledBy().allowGame();
     }
 
     private static Vec3 mouseLookVector() {

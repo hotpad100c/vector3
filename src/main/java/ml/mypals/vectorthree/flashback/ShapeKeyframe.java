@@ -5,6 +5,7 @@ import com.moulberry.flashback.keyframe.KeyframeType;
 import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import ml.mypals.vectorthree.shape.ShapeState;
+import ml.mypals.vectorthree.text.FontOptions;
 import ml.mypals.vectorthree.shape.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
@@ -240,7 +241,18 @@ public final class ShapeKeyframe extends Keyframe {
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.hold_text"), holdText);
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.shadow"), textShadow);
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), textOutline);
-                changed |= ImGui.inputText(I18n.get("vector3.keyframe.font_resource"), font);
+                if (textOutline.get()) changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.outline_color") + "##text", outlineColor);
+                if (ImGui.beginCombo(I18n.get("vector3.keyframe.font_resource"), font.get())) {
+                    for (FontOptions.Option option : FontOptions.list()) {
+                        String label = option.sdf() ? option.spec() + "  (SDF)" : option.spec();
+                        if (ImGui.selectable(label, option.spec().equals(font.get()))) {
+                            font.set(option.spec());
+                            changed = true;
+                        }
+                    }
+                    ImGui.endCombo();
+                }
+                changed |= ImGui.inputText(I18n.get("vector3.keyframe.font_custom"), font);
                 ImGui.setNextItemWidth(180);
                 if (ImGui.beginCombo(I18n.get("vector3.keyframe.billboard"), billboard[0])) {
                     for (String mode : List.of("FIXED", "VERTICAL", "HORIZONTAL", "ALL")) {

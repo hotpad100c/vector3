@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.mixin;
 
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
+import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.shape.FontTextShape;
 import ml.mypals.vectorthree.shape.TextFormatting;
 import net.minecraft.client.gui.Font;
@@ -23,6 +24,13 @@ public class TextShapeMixin {
     @Inject(method = "enabled", at = @At("HEAD"), cancellable = true)
     private void vector3$honorVisibility(CallbackInfoReturnable<Boolean> cir) {
         cir.setReturnValue(((TextShape) (Object) this).enabled);
+    }
+
+    /** RRK's vanilla outline uses 0.8× the text color; use the shape's configured outline color instead. */
+    @Redirect(method = "drawInternal", at = @At(value = "INVOKE",
+            target = "Lml/mypals/ryansrenderingkit/utils/Helpers;multiplyRGB(IF)I"))
+    private int vector3$configuredOutlineColor(int color, float shade) {
+        return (Object) this instanceof FontTextShape fontShape ? fontShape.outlineColor : Helpers.multiplyRGB(color, shade);
     }
 
     @Redirect(method = "drawInternal", at = @At(value = "INVOKE",

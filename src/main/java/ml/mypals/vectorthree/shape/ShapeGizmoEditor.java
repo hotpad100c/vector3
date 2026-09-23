@@ -654,10 +654,12 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         return angle;
     }
 
+    /** Inside the viewport rect and not over an ImGui window drawn on top of it (see EditorCameraController). */
     private static boolean mouseInViewport() {
         var mouse = ReplayUI.getMouseViewportFraction();
         return ReplayUI.isActive() && mouse != null
-                && mouse.x >= 0 && mouse.x <= 1 && mouse.y >= 0 && mouse.y <= 1;
+                && mouse.x >= 0 && mouse.x <= 1 && mouse.y >= 0 && mouse.y <= 1
+                && ReplayUI.imguiWindower.getMouseHandledBy().allowGame();
     }
 
     private static Vec3 unboundedMouseLookVector() {

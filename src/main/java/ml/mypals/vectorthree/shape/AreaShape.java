@@ -9,6 +9,7 @@ import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.render.IrisBypassTarget;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -190,6 +191,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 Helpers.renderFeatures(minecraft, submits);
             }
         });
+        IrisBypassTarget.markMainDepthChanged();
     }
 
     private void drawMesh() {
@@ -221,6 +223,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 drawTranslucent(pass, modelView, colorModulator);
             }
         }
+        IrisBypassTarget.markMainDepthChanged();
     }
 
     /** Whether this shape has outline content to contribute this frame; checked by AreaOutlineSubmitMixin. */

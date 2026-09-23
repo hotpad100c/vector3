@@ -9,6 +9,7 @@ import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
+import ml.mypals.vectorthree.text.FontOptions;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 
@@ -30,6 +31,7 @@ public class Vector3 implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		FontOptions.ensureFontFolder();
 		ShapeTrackRegistry.registerDefaults();
 		ShapeKeyframeType.register();
 		ShapeKeyframe.setEditor(GIZMO_EDITOR);

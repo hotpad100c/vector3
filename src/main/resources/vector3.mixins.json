@@ -24,6 +24,7 @@
 		"flashback.EditorStateManagerMixin",
 		"flashback.FlashbackGsonMixin",
 		"flashback.KeyframeTypeAdapterMixin",
+		"flashback.MainMenuBarMixin",
 		"flashback.TimelineWindowMixin",
 		"iris.BufferedVertexBuilderIrisBypassMixin",
 		"iris.BuilderManagerIrisBypassMixin",

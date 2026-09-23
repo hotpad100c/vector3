@@ -204,6 +204,7 @@ public final class ShapeTrackRegistry {
     }
 
     private static double hitDistance(RayModelIntersection.Ray ray, Shape shape, ShapeState state) {
+        if (shape instanceof FontTextShape text) return text.hitDistance(ray);
         List<Vec3> model = shape.getModel(false);
         int[] indices = shape.indexBuffer;
         if (indices == null || indices.length == 0) {
@@ -372,7 +373,10 @@ public final class ShapeTrackRegistry {
             textShape.shadow = settings.shadow();
             textShape.outline = settings.outline();
             textShape.setBillboardMode(TextShape.BillBoardMode.valueOf(settings.billboard()));
-            if (textShape instanceof FontTextShape fontShape) fontShape.font = settings.fontOrDefault();
+            if (textShape instanceof FontTextShape fontShape) {
+                fontShape.font = settings.fontOrDefault();
+                fontShape.outlineColor = state.outlineColor();
+            }
         }
         if (previous != null && previous.seeThrough() != state.seeThrough()) {
             ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));

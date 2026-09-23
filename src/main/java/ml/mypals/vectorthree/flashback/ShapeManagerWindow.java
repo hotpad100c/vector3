@@ -22,14 +22,20 @@ public final class ShapeManagerWindow {
     private static final ImString search = new ImString("", 128);
     private static final ImBoolean editorMode = new ImBoolean(false);
     private static final ImBoolean debugBypassOnly = new ImBoolean(false);
+    private static final ImBoolean open = new ImBoolean(false);
 
     private ShapeManagerWindow() {}
 
     public static boolean isEditorMode() { return editorMode.get(); }
 
+    public static void renderMenuItem() {
+        if (ImGui.menuItem(I18n.get("vector3.shape_manager.title"))) open.set(!open.get());
+    }
+
     public static void render() {
+        if (!open.get()) return;
         ImGui.setNextWindowSize(360, 320, ImGuiCond.FirstUseEver);
-        if (ImGui.begin(I18n.get("vector3.shape_manager.title"))) {
+        if (ImGui.begin(I18n.get("vector3.shape_manager.title"), open)) {
             ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode);
             ImGui.checkbox(I18n.get("vector3.shape_manager.debug_bypass_only"), debugBypassOnly);
             IrisBypassTarget.debugShowOnly = debugBypassOnly.get();
