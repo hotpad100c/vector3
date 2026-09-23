@@ -49,7 +49,7 @@ public final class ShapeKeyframeSerializer implements JsonSerializer<ShapeKeyfra
                     state.seeThrough(), state.visible(), state.outline(),
                     state.outlineColor() == 0 ? 0xFFFFFFFF : state.outlineColor(),
                     state.videoStartTick(), state.playAudio(),
-                    state.manualPlayback(), state.noLoop(), state.playbackSeconds());
+                    state.manualPlayback(), state.noLoop(), state.playbackSeconds(), state.name());
         }
         InterpolationType interpolation = json.has("interpolation_type")
                 ? context.deserialize(json.get("interpolation_type"), InterpolationType.class)

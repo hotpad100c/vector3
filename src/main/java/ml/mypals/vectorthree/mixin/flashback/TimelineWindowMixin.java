@@ -16,6 +16,7 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeChange;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
+import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
 import ml.mypals.vectorthree.shape.ShapeTimelineSelection;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.Vector3;
@@ -107,6 +108,7 @@ public abstract class TimelineWindowMixin {
 
     @Inject(method = "render", at = @At("RETURN"))
     private static void vector3$refreshShapesAfterTimelineUnlock(CallbackInfo ci) {
+        ShapeManagerWindow.render();
         if (ShapeTimelineSelection.consumeRefresh()) vector3$refreshKeyframes = true;
         if (!vector3$refreshKeyframes || editorState == null) return;
         vector3$refreshKeyframes = false;

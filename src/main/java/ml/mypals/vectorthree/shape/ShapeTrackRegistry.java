@@ -143,6 +143,24 @@ public final class ShapeTrackRegistry {
     public static Iterable<String> shapeIds() { return List.copyOf(SHAPES.keySet()); }
     public static String typeOf(String shapeId) { return SHAPE_TYPES.get(shapeId); }
     public static void previewHighlight(String shapeId) { previewHighlightId = shapeId; }
+    public static ShapeState state(String shapeId) { return LAST_STATES.get(shapeId); }
+
+    public static String displayName(String shapeId) {
+        if (shapeId == null) return "";
+        ShapeState state = LAST_STATES.get(shapeId);
+        String name = state != null ? state.name() : null;
+        if (name != null && !name.isBlank()) return name;
+        String type = state != null ? state.shapeType() : SHAPE_TYPES.get(shapeId);
+        Definition definition = type != null ? TYPES.get(type) : null;
+        String label = definition != null ? definition.name() : (type != null ? type : "Shape");
+        return label + " (" + shortId(shapeId) + ")";
+    }
+
+    private static String shortId(String shapeId) {
+        int slash = shapeId.lastIndexOf('/');
+        String id = slash >= 0 ? shapeId.substring(slash + 1) : shapeId;
+        return id.length() > 8 ? id.substring(0, 8) : id;
+    }
 
     public static String pickShape(RayModelIntersection.Ray ray) {
         String closestId = null;

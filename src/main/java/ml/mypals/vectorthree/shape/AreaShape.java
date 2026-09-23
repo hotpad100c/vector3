@@ -239,14 +239,13 @@ public final class AreaShape extends Shape implements EmptyMesh {
     }
 
     private void drawOpaque(RenderPass pass, Matrix4f modelView, Vector4f colorModulator, RenderType renderType, AreaGpuMesh mesh) {
+        if (colorModulator.w() < 1.0f) renderType = AreaRenderType.get();
         PreparedRenderType prepared = renderType.prepare();
         var transformSlice = RenderSystem.getDynamicUniforms().writeTransform(
                 modelView, colorModulator, new Vector3f(), new Matrix4f());
         PreparedRenderType tinted = new PreparedRenderType(prepared.name(), prepared.pipeline(),
                 prepared.oitPipelineSet(), transformSlice, prepared.scissorState(), prepared.textures());
 
-        // No owned index buffer (see AreaGpuMesh) — draw against the shared sequential buffer for this
-        // topology, the same one ExecuteInfo.indexBuffer() falls back to for a null custom buffer.
         var sequentialIndices = RenderSystem.getSequentialBuffer(mesh.topology());
         sequentialIndices.requestIndexCount(mesh.indexCount());
         sequentialIndices.resizeToRequestedIndexCount();

@@ -80,9 +80,9 @@ public final class ShapeKeyframe extends Keyframe {
 
         ShapeTrackRegistry.previewHighlight(null);
         ImGui.setNextItemWidth(360);
-        if (ImGui.beginCombo("Shape UUID", selectedId[0])) {
+        if (ImGui.beginCombo("Shape UUID", ShapeTrackRegistry.displayName(selectedId[0]))) {
             for (String shapeId : ShapeTrackRegistry.shapeIds()) {
-                if (ImGui.selectable(shapeId, shapeId.equals(selectedId[0]))) {
+                if (ImGui.selectable(ShapeTrackRegistry.displayName(shapeId), shapeId.equals(selectedId[0]))) {
                     selectedId[0] = shapeId;
                     String existingType = ShapeTrackRegistry.typeOf(shapeId);
                     if (existingType != null) selectedType[0] = existingType;
@@ -93,13 +93,17 @@ public final class ShapeKeyframe extends Keyframe {
             ImGui.endCombo();
         }
 
+        ImString nameField = new ImString(state.name() == null ? "" : state.name(), 256);
+        changed |= ImGui.inputText("Name", nameField);
+
         float[] position = {(float) state.x(), (float) state.y(), (float) state.z()};
         float[] rotation = {state.pitch(), state.yaw(), state.roll()};
         float[] scale = {(float) state.scaleX(), (float) state.scaleY(), (float) state.scaleZ()};
 
         String[] parentId = {state.parentShapeId() == null ? "" : state.parentShapeId()};
         ImGui.setNextItemWidth(360);
-        if (ImGui.beginCombo("Parent Shape UUID", parentId[0].isEmpty() ? "None" : parentId[0])) {
+        if (ImGui.beginCombo("Parent Shape UUID",
+                parentId[0].isEmpty() ? "None" : ShapeTrackRegistry.displayName(parentId[0]))) {
             if (ImGui.selectable("None", parentId[0].isEmpty())) {
                 ShapeTrackRegistry.convertToNewParent(state, "", position, rotation, scale);
                 parentId[0] = "";
@@ -107,7 +111,7 @@ public final class ShapeKeyframe extends Keyframe {
             }
             for (String shapeId : ShapeTrackRegistry.shapeIds()) {
                 if (shapeId.equals(selectedId[0])) continue;
-                if (ImGui.selectable(shapeId, shapeId.equals(parentId[0]))) {
+                if (ImGui.selectable(ShapeTrackRegistry.displayName(shapeId), shapeId.equals(parentId[0]))) {
                     ShapeTrackRegistry.convertToNewParent(state, shapeId, position, rotation, scale);
                     parentId[0] = shapeId;
                     changed = true;
@@ -352,7 +356,8 @@ public final class ShapeKeyframe extends Keyframe {
                     })
                     .withBlockProperties(selectedType[0].equals("block")
                             ? blockProperties : state.blockProperties())
-                    .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick());
+                    .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick())
+                    .withName(nameField.get().isBlank() ? null : nameField.get());
             ShapeTrackRegistry.apply(replacement);
             update.accept(keyframe -> ((ShapeKeyframe) keyframe).state = replacement);
         }
