@@ -193,7 +193,6 @@ public final class EditorCameraController {
     private static Vec3 unboundedMouseLookVector() {
         if (ReplayUI.lastProjectionMatrix == null || ReplayUI.lastViewQuaternion == null) return null;
         var mouse = ReplayUI.getMouseViewportFraction();
-        if (mouse == null) return null;
         Vector4f projected = new Vector4f(mouse.x * 2 - 1, mouse.y * 2 - 1, 0, 1)
                 .mul(new Matrix4f(ReplayUI.lastProjectionMatrix).invert());
         return ReplayUI.getMouseLookVectorFromForwards(

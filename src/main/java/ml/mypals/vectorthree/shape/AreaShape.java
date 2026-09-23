@@ -165,8 +165,13 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
         BlockEntityRenderDispatcher dispatcher = minecraft.getBlockEntityRenderDispatcher();
         float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
-        SubmitNodeStorage submits = new SubmitNodeStorage();
+        Vector4f modulator = colorToVector4f(baseColor);
+        boolean translucent = modulator.w() < 1.0f;
+        SubmitNodeStorage submits = translucent ? new AreaTranslucentSubmitNodeStorage() : new SubmitNodeStorage();
 
+        // The feature render below must stay inside the bypass too: Sodium tessellates block-model parts
+        // at render time through NonTerrainBlockRenderContext#tesselateBlock with the block entity's
+        // source position, which is inside this shape's own suppressed AABB.
         AreaSuppression.bypassing(() -> {
             for (BlockEntity blockEntity : blockEntities) {
                 BlockEntityRenderState state = dispatcher.tryExtractRenderState(blockEntity, partialTick, null, false);
@@ -179,8 +184,12 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 poseStack.scale((float) destScale.x, (float) destScale.y, (float) destScale.z);
                 dispatcher.submit(state, poseStack, submits, cameraRenderState);
             }
+            if (translucent) {
+                AreaBlockEntityTranslucency.withModulator(modulator, () -> Helpers.renderFeatures(minecraft, submits));
+            } else {
+                Helpers.renderFeatures(minecraft, submits);
+            }
         });
-        Helpers.renderFeatures(minecraft, submits);
     }
 
     private void drawMesh() {

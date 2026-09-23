@@ -8,11 +8,10 @@ import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.render.IrisBypassTarget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
 
@@ -90,10 +89,9 @@ public final class VideoShape extends Shape implements EmptyMesh {
         poseStack.mulPose(builder.getPositionMatrix());
         int argb = baseColor.getRGB();
         float halfWidth = aspect * 0.5f;
-        submits.submitCustomGeometry(poseStack,
-                seeThrough ? ShapeTrackRegistry.imageSeeThroughType(textureId) : RenderTypes.entityTranslucentCull(textureId),
+        submits.submitCustomGeometry(poseStack, ShapeTrackRegistry.imageType(textureId, seeThrough),
                 (pose, consumer) -> quad(pose, consumer, halfWidth, argb));
-        Helpers.renderFeatures(minecraft, submits);
+        IrisBypassTarget.renderFeatures(() -> Helpers.renderFeatures(minecraft, submits));
     }
 
     private static void quad(PoseStack.Pose pose, VertexConsumer consumer, float halfWidth, int argb) {
@@ -105,8 +103,7 @@ public final class VideoShape extends Shape implements EmptyMesh {
 
     private static void vertex(VertexConsumer consumer, PoseStack.Pose pose,
             float x, float y, float u, float v, int argb) {
-        consumer.addVertex(pose, x, y, 0).setColor(argb).setUv(u, v)
-                .setOverlay(OverlayTexture.NO_OVERLAY).setLight(0xF000F0).setNormal(pose, 0, 0, 1);
+        consumer.addVertex(pose, x, y, 0).setUv(u, v).setColor(argb);
     }
 
     @Override

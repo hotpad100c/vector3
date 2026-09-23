@@ -5,6 +5,7 @@ import imgui.moulberry90.flag.ImGuiCond;
 import imgui.moulberry90.flag.ImGuiTreeNodeFlags;
 import imgui.moulberry90.type.ImBoolean;
 import imgui.moulberry90.type.ImString;
+import ml.mypals.vectorthree.render.IrisBypassTarget;
 import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.shape.ShapeTimelineSelection;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
@@ -20,19 +21,18 @@ import java.util.Set;
 public final class ShapeManagerWindow {
     private static final ImString search = new ImString("", 128);
     private static final ImBoolean editorMode = new ImBoolean(false);
+    private static final ImBoolean debugBypassOnly = new ImBoolean(false);
 
     private ShapeManagerWindow() {}
 
-    /** Not wired to any behavior yet — a placeholder toggle for a future editor mode. */
     public static boolean isEditorMode() { return editorMode.get(); }
 
     public static void render() {
-        // Begin() returns false when the window is collapsed or has no visible area — Flashback's
-        // custom ImGui B3D backend throws on a zero-size scissor rect instead of silently clipping, so
-        // content must not be drawn in that case. End() is still required unconditionally.
         ImGui.setNextWindowSize(360, 320, ImGuiCond.FirstUseEver);
         if (ImGui.begin(I18n.get("vector3.shape_manager.title"))) {
             ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode);
+            ImGui.checkbox(I18n.get("vector3.shape_manager.debug_bypass_only"), debugBypassOnly);
+            IrisBypassTarget.debugShowOnly = debugBypassOnly.get();
             ImGui.separator();
 
             ImGui.setNextItemWidth(-1);
@@ -51,10 +51,7 @@ public final class ShapeManagerWindow {
         List<String> roots = new ArrayList<>();
         for (String shapeId : ShapeTrackRegistry.shapeIds()) {
             ShapeState state = ShapeTrackRegistry.state(shapeId);
-            String parentId = state != null ? state.parentShapeId() : null;
-            // A parent that isn't itself a live shape (deleted, or not applied yet) is treated as no
-            // parent, so its children still show up as roots instead of silently vanishing.
-            if (parentId != null && !parentId.isEmpty() && ShapeTrackRegistry.shape(parentId) != null) {
+            String parentId = state != null ? state.parentShapeId() : null;if (parentId != null && !parentId.isEmpty() && ShapeTrackRegistry.shape(parentId) != null) {
                 childrenByParent.computeIfAbsent(parentId, id -> new ArrayList<>()).add(shapeId);
             } else {
                 roots.add(shapeId);
@@ -78,8 +75,6 @@ public final class ShapeManagerWindow {
         if (children.isEmpty()) flags |= ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen;
 
         ImGui.pushID(shapeId);
-        // OpenOnArrow + OpenOnDoubleClick keeps a single click on the label from toggling the node, so
-        // a left click is free to mean "select" instead of "expand/collapse".
         boolean open = ImGui.treeNodeEx("##node", flags, label);
         if (ImGui.isItemClicked(0)) ShapeTimelineSelection.request(shapeId);
         if (ImGui.isItemClicked(1)) ImGui.setClipboardText(shapeId);

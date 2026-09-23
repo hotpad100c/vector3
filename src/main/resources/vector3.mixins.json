@@ -4,12 +4,16 @@
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
 		"TextShapeMixin",
+		"area.AreaBlockEntityAlphaMixin",
 		"area.AreaOutlineSubmitMixin",
 		"area.AreaSourceChangeMixin",
 		"area.AreaSuppressBlockEntityMixin",
 		"area.AreaSuppressBlockMixin",
 		"area.AreaSuppressFluidMixin",
 		"area.AreaSuppressRenderSectionRegionMixin",
+		"area.RenderSetupAccessor",
+		"area.RenderTypeAccessor",
+		"area.TextureBindingAccessor",
 		"area.sodium.BlockOcclusionCacheMixin",
 		"area.sodium.BlockRendererMixin",
 		"area.sodium.ChunkBuilderMeshingTaskMixin",
@@ -20,7 +24,11 @@
 		"flashback.EditorStateManagerMixin",
 		"flashback.FlashbackGsonMixin",
 		"flashback.KeyframeTypeAdapterMixin",
-		"flashback.TimelineWindowMixin"
+		"flashback.TimelineWindowMixin",
+		"iris.BuilderManagerIrisBypassMixin",
+		"iris.BufferedVertexBuilderIrisBypassMixin",
+		"iris.HelpersIrisBypassMixin",
+		"iris.LevelRendererIrisBypassMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

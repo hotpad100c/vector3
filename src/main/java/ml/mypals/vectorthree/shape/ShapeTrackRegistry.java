@@ -271,7 +271,6 @@ public final class ShapeTrackRegistry {
         ImageShape.clearTextures();
     }
 
-    /** Discards any registered shape whose id isn't in {@code liveShapeIds} — e.g. its last keyframe was deleted. */
     public static void retainOnly(java.util.Set<String> liveShapeIds) {
         for (String shapeId : List.copyOf(SHAPES.keySet())) {
             if (liveShapeIds.contains(shapeId)) continue;
@@ -296,10 +295,6 @@ public final class ShapeTrackRegistry {
                         || state.shapeType().equals("video"))
                 && (!java.util.Objects.equals(previous.model(), state.model())
                         || !java.util.Objects.equals(previous.blockProperties(), state.blockProperties()));
-        // AreaShape's two Geometry points are the source selection (the blue box) and are what get
-        // baked; the shape's own position/rotation/scale is just the destination preview (the yellow
-        // box) and is applied at draw time via AreaShape.updateTransform below, so only a points change
-        // needs a full re-bake.
         boolean areaBoundsChanged = previous != null && state.shapeType().equals("area")
                 && !java.util.Objects.equals(previous.points(), state.points());
         if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId()))
@@ -380,10 +375,6 @@ public final class ShapeTrackRegistry {
             if (textShape instanceof FontTextShape fontShape) fontShape.font = settings.fontOrDefault();
         }
         if (previous != null && previous.seeThrough() != state.seeThrough()) {
-            // ShapeManager buckets a shape into its normal/see-through ConcurrentHashMap only at
-            // addShape() time; flipping Shape.seeThrough on an already-registered shape doesn't move it
-            // between buckets. Re-register the same instance so it gets rebucketed under the new value
-            // instead of silently staying in whichever bucket it was first added to.
             ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
             shape.seeThrough = state.seeThrough();
             ShapeManagers.addShape(Identifier.parse(state.shapeId()), shape);
@@ -483,12 +474,6 @@ public final class ShapeTrackRegistry {
         if (parent == null) shape.setParent(null); else parent.addChild(shape);
     }
 
-    /**
-     * Rewrites position/rotation/scale in place so reparenting (whose numeric x/y/z/rotation/scale are
-     * always relative to whatever parent is set, per Shape.forceSetWorldPosition combined with
-     * Shape.applyHierarchyTransforms walking the whole ancestor chain at draw time) doesn't visually
-     * move the shape — only its parentage changes, not where it appears.
-     */
     public static void convertToNewParent(ShapeState state, String newParentId,
             float[] position, float[] rotation, float[] scale) {
         Matrix4f oldWorld = worldTransformOrIdentity(state.parentShapeId())
@@ -552,13 +537,6 @@ public final class ShapeTrackRegistry {
         RenderPipeline normalPipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
                 .withLocation(Identifier.fromNamespaceAndPath("vector3", name))
                 .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
-                // RenderPipelines.DEBUG_FILLED_SNIPPET (used for the triangles manager) sets
-                // writeDepth=false, since it's meant for debug overlays that shouldn't persist in the
-                // depth buffer. That's wrong for real scene shapes (box/sphere/arrow/obj icons): without
-                // a depth write they leave no trace for anything drawn afterward (other batch shapes, or
-                // Image/VideoShape's later pass) to test against, so later draws can paint over them even
-                // when they're genuinely closer to the camera. Force the normal write-enabled default
-                // regardless of which snippet this pipeline is based on.
                 .withDepthStencilState(DepthStencilState.DEFAULT)
                 .withCull(old.cullFace())
                 .withVertexBinding(0, old.format())
@@ -573,13 +551,6 @@ public final class ShapeTrackRegistry {
                 .withVertexBinding(0, old.format())
                 .withPrimitiveTopology(old.mode())
                 .build());
-        // Tell Iris how to treat these custom pipelines — otherwise it can't find a shader override
-        // for them at all and logs a "Missing program ... in override list" warning on every draw.
-        // IrisProgram.TRANSLUCENT is NOT a generic translucent bucket — it maps straight to Iris's
-        // water gbuffer program, which shader packs customize heavily (wave distortion, a fixed water
-        // tint, and often ignoring per-vertex color/alpha entirely), which is exactly what turned the
-        // gizmo axes black and the sphere flat gray with no transparency. PARTICLES_TRANSLUCENT maps
-        // to a generic vertex-colored translucent program packs treat as a plain passthrough instead.
         IrisProgram irisProgram = old.mode() == PrimitiveTopology.TRIANGLES
                 ? IrisProgram.PARTICLES_TRANSLUCENT : IrisProgram.LINES;
         IrisApi.getInstance().assignPipeline(normalPipeline, irisProgram);
@@ -597,34 +568,31 @@ public final class ShapeTrackRegistry {
                 old.mode(), old.format(), old.cullFace());
     }
 
+    private static RenderPipeline imagePipeline;
     private static RenderPipeline imageSeeThroughPipeline;
 
-    /**
-     * A textured translucent RenderType that actually ignores existing depth (test always passes) while
-     * still writing its own, for {@link ImageShape}/{@link VideoShape} when seeThrough is on.
-     * {@code RenderTypes.entityTranslucent(Identifier)} — what those shapes used before — is NOT an
-     * x-ray type: its pipeline inherits the same normal depth test/write as entityTranslucentCull (the
-     * only difference between the two is face culling), so it never actually drew through walls. This
-     * mirrors vanilla's entityTranslucentCull pipeline construction exactly, only replacing the depth
-     * state, so it stays otherwise identical (same shader, blend, texture/lightmap/overlay bindings).
-     */
-    static RenderType imageSeeThroughType(Identifier textureId) {
-        if (imageSeeThroughPipeline == null) {
-            imageSeeThroughPipeline = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.ENTITY_SNIPPET)
-                    .withLocation(Identifier.fromNamespaceAndPath("vector3", "entity_translucent_see_through"))
-                    .withShaderDefine("ALPHA_CUTOUT", 0.1f)
-                    .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
-                    .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
-                    .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true))
-                    .build());
-            IrisApi.getInstance().assignPipeline(imageSeeThroughPipeline, IrisProgram.ENTITIES_TRANSLUCENT);
+
+    static RenderType imageType(Identifier textureId, boolean seeThrough) {
+        if (imagePipeline == null) {
+            imagePipeline = registerImagePipeline("image_translucent", DepthStencilState.DEFAULT);
+            imageSeeThroughPipeline = registerImagePipeline("image_translucent_see_through",
+                    new DepthStencilState(CompareOp.ALWAYS_PASS, true));
         }
-        RenderSetup setup = RenderSetup.builder(imageSeeThroughPipeline)
+        RenderSetup setup = RenderSetup.builder(seeThrough ? imageSeeThroughPipeline : imagePipeline)
                 .withTexture("Sampler0", textureId)
-                .useLightmap()
-                .useOverlay()
                 .sortOnUpload()
                 .createRenderSetup();
-        return RenderType.create("vector3_image_see_through", setup);
+        return RenderType.create(seeThrough ? "vector3_image_see_through" : "vector3_image", setup);
+    }
+
+    private static RenderPipeline registerImagePipeline(String name, DepthStencilState depth) {
+        RenderPipeline pipeline = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.GUI_TEXTURED_SNIPPET)
+                .withLocation(Identifier.fromNamespaceAndPath("vector3", name))
+                .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+                .withDepthStencilState(depth)
+                .withCull(true)
+                .build());
+        IrisApi.getInstance().assignPipeline(pipeline, IrisProgram.ENTITIES_TRANSLUCENT);
+        return pipeline;
     }
 }

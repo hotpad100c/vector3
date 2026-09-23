@@ -72,6 +72,7 @@
 
   "vector3.shape_manager.title": "形状管理器",
   "vector3.shape_manager.editor_mode": "编辑器模式",
+  "vector3.shape_manager.debug_bypass_only": "调试：仅显示 Iris 旁路目标",
   "vector3.shape_manager.copy_hint": "右键复制 ID",
 
   "vector3.gizmo.viewport_gizmo": "视口操纵器",

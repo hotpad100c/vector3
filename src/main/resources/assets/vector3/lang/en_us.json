@@ -72,6 +72,7 @@
 
   "vector3.shape_manager.title": "Shape Manager",
   "vector3.shape_manager.editor_mode": "Editor Mode",
+  "vector3.shape_manager.debug_bypass_only": "Debug: Iris Bypass Target Only",
   "vector3.shape_manager.copy_hint": "Right-click to copy ID",
 
   "vector3.gizmo.viewport_gizmo": "Viewport Gizmo",
