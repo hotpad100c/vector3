@@ -17,6 +17,7 @@ import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeChange;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.shape.ShapeTimelineSelection;
+import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.Vector3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Final;
@@ -26,8 +27,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Mixin(value = TimelineWindow.class, remap = false)
 public abstract class TimelineWindowMixin {
@@ -108,6 +111,19 @@ public abstract class TimelineWindowMixin {
         if (!vector3$refreshKeyframes || editorState == null) return;
         vector3$refreshKeyframes = false;
         editorState.applyKeyframes(vector3$shapeHandler, TimelineWindow.getCursorTick());
+        vector3$pruneDeletedShapes();
+    }
+
+    private static void vector3$pruneDeletedShapes() {
+        if (editorScene == null) return;
+        Set<String> liveShapeIds = new HashSet<>();
+        for (KeyframeTrack track : editorScene.keyframeTracks) {
+            if (track.keyframeType != ShapeKeyframeType.INSTANCE) continue;
+            for (Keyframe keyframe : track.keyframesByTick.values()) {
+                if (keyframe instanceof ShapeKeyframe shape) liveShapeIds.add(shape.state.shapeId());
+            }
+        }
+        ShapeTrackRegistry.retainOnly(liveShapeIds);
     }
 
     @Redirect(method = "renderInner", at = @At(value = "INVOKE",

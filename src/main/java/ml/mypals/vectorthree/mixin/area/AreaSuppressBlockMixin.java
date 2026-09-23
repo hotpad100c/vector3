@@ -11,8 +11,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-/** Skips normal chunk-mesh tessellation for blocks claimed by an {@link ml.mypals.vectorthree.shape.AreaShape}. */
 @Mixin(ModelBlockRenderer.class)
 public class AreaSuppressBlockMixin {
     @Inject(method = "tesselateBlock", at = @At("HEAD"), cancellable = true)

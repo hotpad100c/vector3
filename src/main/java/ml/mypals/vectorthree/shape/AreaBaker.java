@@ -23,9 +23,14 @@ import java.util.List;
 
 
 final class AreaBaker {
-    /** Split so AreaShape can draw solid/cutout unsorted and re-sort the translucent bucket per frame. */
+    /** Split so AreaShape can draw solid/cutout unsorted and re-sort the translucent bucket per frame.
+     *  outlineVertices is CPU-side (position+uv only, see OutlineVertex) rather than a GPU mesh — the
+     *  outline has to be resubmitted through LevelRenderer's own SubmitNodeStorage every frame it's
+     *  visible (see AreaOutlineSubmitMixin), which only accepts immediate per-vertex geometry. */
     record Result(MeshData solidMesh, MeshData cutoutMesh, MeshData translucentMesh,
-            List<BlockEntity> blockEntities, int blockCount) {}
+            List<OutlineVertex> outlineVertices, List<BlockEntity> blockEntities, int blockCount) {}
+
+    record OutlineVertex(float x, float y, float z, float u, float v) {}
 
     private final ModelBlockRenderer modelRenderer;
     private final FluidRenderer fluidRenderer;
@@ -41,6 +46,11 @@ final class AreaBaker {
         BufferBuilder cutoutBuilder = newBuilder(AreaRenderType.getCutout());
         BufferBuilder translucentBuilder = newBuilder(AreaRenderType.get());
         Output output = new Output(solidBuilder, cutoutBuilder, translucentBuilder);
+        // Every quad routes to the same single target regardless of layer — the outline is one
+        // unified silhouette of the whole bake, not split by material. Vertex color is ignored (see
+        // OutlineCapture) since the outline is always filled with the shape's own outlineColor.
+        OutlineCapture outlineCapture = new OutlineCapture();
+        Output outlineOutput = new Output(outlineCapture, outlineCapture, outlineCapture);
         List<BlockEntity> blockEntities = new ArrayList<>();
         int[] blockCount = {0};
 
@@ -61,12 +71,15 @@ final class AreaBaker {
                         if (!state.isAir()) {
                             var model = Minecraft.getInstance().getModelManager().getBlockStateModelSet().get(state);
                             modelRenderer.tesselateBlock(output, x, y, z, view, pos, state, model, pos.asLong());
+                            modelRenderer.tesselateBlock(outlineOutput, x, y, z, view, pos, state, model, pos.asLong());
                             blockCount[0]++;
                         }
                         FluidState fluidState = view.getFluidState(pos);
                         if (!fluidState.isEmpty()) {
                             output.currentFluidPos = pos;
                             fluidRenderer.tesselate(view, pos, output, state, fluidState);
+                            outlineOutput.currentFluidPos = pos;
+                            fluidRenderer.tesselate(view, pos, outlineOutput, state, fluidState);
                         }
                         BlockEntity blockEntity = view.getBlockEntity(pos);
                         if (blockEntity != null) blockEntities.add(blockEntity);
@@ -75,7 +88,7 @@ final class AreaBaker {
             }
         });
         return new Result(solidBuilder.build(), cutoutBuilder.build(), translucentBuilder.build(),
-                blockEntities, blockCount[0]);
+                outlineCapture.finish(), blockEntities, blockCount[0]);
     }
 
     private static BufferBuilder newBuilder(RenderType renderType) {
@@ -83,38 +96,39 @@ final class AreaBaker {
     }
 
     /**
-     * Bridges ModelBlockRenderer/FluidRenderer's per-block output callbacks into the solid/cutout/
-     * translucent buffer triple, routing each quad by its own {@code ChunkSectionLayer} (blocks: from
-     * the BakedQuad's own material info; fluids: from the layer FluidRenderer itself asks for via
-     * getBuilder).
+     * Bridges ModelBlockRenderer/FluidRenderer's per-block output callbacks into up to three
+     * VertexConsumer targets, routing each quad by its own {@code ChunkSectionLayer} (blocks: from the
+     * BakedQuad's own material info; fluids: from the layer FluidRenderer itself asks for via
+     * getBuilder). Works against any VertexConsumer — a GPU-bound BufferBuilder for solid/cutout/
+     * translucent, or an OutlineCapture for the CPU-side outline.
      * <p>
      * FluidRenderer.tesselate writes vertex positions as {@code (pos.getX() & 15, ...)} — section-local
      * 0..15, not the absolute x/y/z we pass ModelBlockRenderer.tesselateBlock/putBlockBakedQuad — since
      * real chunk rendering re-adds the section origin via a per-section transform at draw time, which we
-     * don't have. getBuilder() wraps the chosen builder to add that origin back itself, so fluid vertices
+     * don't have. getBuilder() wraps the chosen target to add that origin back itself, so fluid vertices
      * land in the same absolute-world space as block vertices.
      */
     private static final class Output implements BlockQuadOutput, FluidRenderer.Output {
-        private final BufferBuilder solidBuilder;
-        private final BufferBuilder cutoutBuilder;
-        private final BufferBuilder translucentBuilder;
+        private final VertexConsumer solidTarget;
+        private final VertexConsumer cutoutTarget;
+        private final VertexConsumer translucentTarget;
         private BlockPos currentFluidPos;
 
-        Output(BufferBuilder solidBuilder, BufferBuilder cutoutBuilder, BufferBuilder translucentBuilder) {
-            this.solidBuilder = solidBuilder;
-            this.cutoutBuilder = cutoutBuilder;
-            this.translucentBuilder = translucentBuilder;
+        Output(VertexConsumer solidTarget, VertexConsumer cutoutTarget, VertexConsumer translucentTarget) {
+            this.solidTarget = solidTarget;
+            this.cutoutTarget = cutoutTarget;
+            this.translucentTarget = translucentTarget;
         }
 
-        private BufferBuilder builderFor(ChunkSectionLayer layer) {
-            if (layer == ChunkSectionLayer.TRANSLUCENT) return translucentBuilder;
-            if (layer == ChunkSectionLayer.CUTOUT) return cutoutBuilder;
-            return solidBuilder;
+        private VertexConsumer targetFor(ChunkSectionLayer layer) {
+            if (layer == ChunkSectionLayer.TRANSLUCENT) return translucentTarget;
+            if (layer == ChunkSectionLayer.CUTOUT) return cutoutTarget;
+            return solidTarget;
         }
 
         @Override
         public void put(float x, float y, float z, BakedQuad quad, QuadInstance instance) {
-            builderFor(quad.materialInfo().layer()).putBlockBakedQuad(x, y, z, quad, instance);
+            targetFor(quad.materialInfo().layer()).putBlockBakedQuad(x, y, z, quad, instance);
         }
 
         @Override
@@ -122,7 +136,7 @@ final class AreaBaker {
             float dx = currentFluidPos.getX() - (currentFluidPos.getX() & 15);
             float dy = currentFluidPos.getY() - (currentFluidPos.getY() & 15);
             float dz = currentFluidPos.getZ() - (currentFluidPos.getZ() & 15);
-            return new SectionOffsetVertexConsumer(builderFor(layer), dx, dy, dz);
+            return new SectionOffsetVertexConsumer(targetFor(layer), dx, dy, dz);
         }
     }
 
@@ -182,5 +196,51 @@ final class AreaBaker {
             delegate.setLineWidth(width);
             return this;
         }
+    }
+
+    /**
+     * Records position+uv (only what OutlineVertex needs — the outline is always filled with a flat
+     * outlineColor at submit time, not the baked per-vertex AO color) instead of writing into a GPU
+     * buffer, since the outline has to be replayed through SubmitNodeStorage.submitCustomGeometry's
+     * immediate-mode callback each frame. addVertex starts a new vertex; its attributes arrive via the
+     * following setXxx calls, so each vertex is only committed once the next one starts (or finish()
+     * runs) — the same "pending vertex" pattern BufferBuilder itself uses internally.
+     */
+    private static final class OutlineCapture implements VertexConsumer {
+        private final List<OutlineVertex> vertices = new ArrayList<>();
+        private boolean hasPending;
+        private float px, py, pz, pu, pv;
+
+        @Override
+        public VertexConsumer addVertex(float x, float y, float z) {
+            flushPending();
+            hasPending = true;
+            px = x; py = y; pz = z; pu = 0; pv = 0;
+            return this;
+        }
+
+        private void flushPending() {
+            if (hasPending) vertices.add(new OutlineVertex(px, py, pz, pu, pv));
+            hasPending = false;
+        }
+
+        List<OutlineVertex> finish() {
+            flushPending();
+            return vertices;
+        }
+
+        @Override
+        public VertexConsumer setUv(float u, float v) {
+            pu = u; pv = v;
+            return this;
+        }
+
+        @Override public VertexConsumer setColor(int red, int green, int blue, int alpha) { return this; }
+        @Override public VertexConsumer setColor(int argb) { return this; }
+        @Override public VertexConsumer setUv1(int u, int v) { return this; }
+        @Override public VertexConsumer setUv2(int u, int v) { return this; }
+        @Override public VertexConsumer setUv3(float u, float v) { return this; }
+        @Override public VertexConsumer setNormal(float x, float y, float z) { return this; }
+        @Override public VertexConsumer setLineWidth(float width) { return this; }
     }
 }

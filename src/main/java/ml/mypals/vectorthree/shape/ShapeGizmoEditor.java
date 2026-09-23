@@ -546,9 +546,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         return with(state, null, null, null, size, null);
     }
 
-    private static ShapeState withPosition(ShapeState state, Vec3 position) {
-        return with(state, new float[]{(float) position.x, (float) position.y, (float) position.z},
-                null, null, null, null);
+    /** {@code worldPosition} is where the shape should appear; converted to parent-local before storing. */
+    private static ShapeState withPosition(ShapeState state, Vec3 worldPosition) {
+        Vector3f local = parentWorldTransform(state).invert().transformPosition(worldPosition.toVector3f());
+        return with(state, new float[]{local.x, local.y, local.z}, null, null, null, null);
     }
 
     private static ShapeState with(ShapeState state, float[] position, float[] rotation,
@@ -559,11 +560,22 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         if (size == null) size = new float[]{(float) state.sizeX(), (float) state.sizeY(), (float) state.sizeZ()};
         if (points == null) points = state.points();
         return state.with(position, rotation, scale, size, state.segments(), state.lineWidth(), state.color(),
-                points, state.text(), state.parentShapeId(), state.seeThrough(), state.visible(), state.playAudio(),
+                points, state.text(), state.parentShapeId(), state.seeThrough(), state.visible(),
+                state.outline(), state.outlineColor(), state.playAudio(),
                 state.manualPlayback(), state.noLoop(), state.playbackSeconds());
     }
 
-    private static Vec3 center(ShapeState state) { return new Vec3(state.x(), state.y(), state.z()); }
+    /** state.x/y/z is parent-local (Shape.forceSetWorldPosition combined with the ancestor-chain walk
+     *  at draw time), so the gizmo has to walk the same parent chain to know where to actually draw. */
+    private static Matrix4f parentWorldTransform(ShapeState state) {
+        return ShapeTrackRegistry.worldTransformOrIdentity(state.parentShapeId());
+    }
+
+    private static Vec3 center(ShapeState state) {
+        Vector3f world = parentWorldTransform(state)
+                .transformPosition(new Vector3f((float) state.x(), (float) state.y(), (float) state.z()));
+        return new Vec3(world.x, world.y, world.z);
+    }
 
     private static double size(ShapeState state, Axis axis) {
         return switch (axis) { case X -> state.sizeX(); case Y -> state.sizeY(); case Z -> state.sizeZ(); default -> 0; };
@@ -582,8 +594,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private static Quaternionf rotation(ShapeState state) {
-        return new Quaternionf().rotateXYZ((float) Math.toRadians(state.pitch()),
+        Quaternionf own = new Quaternionf().rotateXYZ((float) Math.toRadians(state.pitch()),
                 (float) Math.toRadians(state.yaw()), (float) Math.toRadians(state.roll()));
+        return parentWorldTransform(state).getNormalizedRotation(new Quaternionf()).mul(own);
     }
 
     private static Vec3 localAxis(ShapeState state, Axis axis) {

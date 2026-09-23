@@ -93,16 +93,22 @@ public final class ShapeKeyframe extends Keyframe {
             ImGui.endCombo();
         }
 
+        float[] position = {(float) state.x(), (float) state.y(), (float) state.z()};
+        float[] rotation = {state.pitch(), state.yaw(), state.roll()};
+        float[] scale = {(float) state.scaleX(), (float) state.scaleY(), (float) state.scaleZ()};
+
         String[] parentId = {state.parentShapeId() == null ? "" : state.parentShapeId()};
         ImGui.setNextItemWidth(360);
         if (ImGui.beginCombo("Parent Shape UUID", parentId[0].isEmpty() ? "None" : parentId[0])) {
             if (ImGui.selectable("None", parentId[0].isEmpty())) {
+                ShapeTrackRegistry.convertToNewParent(state, "", position, rotation, scale);
                 parentId[0] = "";
                 changed = true;
             }
             for (String shapeId : ShapeTrackRegistry.shapeIds()) {
                 if (shapeId.equals(selectedId[0])) continue;
                 if (ImGui.selectable(shapeId, shapeId.equals(parentId[0]))) {
+                    ShapeTrackRegistry.convertToNewParent(state, shapeId, position, rotation, scale);
                     parentId[0] = shapeId;
                     changed = true;
                 }
@@ -111,9 +117,6 @@ public final class ShapeKeyframe extends Keyframe {
             ImGui.endCombo();
         }
 
-        float[] position = {(float) state.x(), (float) state.y(), (float) state.z()};
-        float[] rotation = {state.pitch(), state.yaw(), state.roll()};
-        float[] scale = {(float) state.scaleX(), (float) state.scaleY(), (float) state.scaleZ()};
         float[] size = {(float) state.sizeX(), (float) state.sizeY(), (float) state.sizeZ()};
         float[] width = {state.lineWidth()};
         float[] color = {
@@ -125,6 +128,13 @@ public final class ShapeKeyframe extends Keyframe {
         ImInt segments = new ImInt(state.segments());
         ImBoolean seeThrough = new ImBoolean(state.seeThrough());
         ImBoolean visible = new ImBoolean(state.visible());
+        ImBoolean outline = new ImBoolean(state.outline());
+        float[] outlineColor = {
+                ((state.outlineColor() >>> 16) & 255) / 255.0f,
+                ((state.outlineColor() >>> 8) & 255) / 255.0f,
+                (state.outlineColor() & 255) / 255.0f,
+                ((state.outlineColor() >>> 24) & 255) / 255.0f
+        };
         TextSettings currentText = state.text() == null ? TextSettings.defaults() : state.text();
         ImString textValue = new ImString(currentText.value(), 4096);
         ImBoolean holdText = new ImBoolean(currentText.holdText());
@@ -268,6 +278,8 @@ public final class ShapeKeyframe extends Keyframe {
                 } else {
                     ImGui.text("Baked blocks: (not baked yet)");
                 }
+                changed |= ImGui.checkbox("Outline", outline);
+                if (outline.get()) changed |= ImGui.colorEdit4("Outline Color", outlineColor);
             }
             case "block" -> {
                 ImGui.setNextItemWidth(360);
@@ -316,6 +328,8 @@ public final class ShapeKeyframe extends Keyframe {
         if (changed) {
             int argb = (Math.round(color[3] * 255) << 24) | (Math.round(color[0] * 255) << 16)
                     | (Math.round(color[1] * 255) << 8) | Math.round(color[2] * 255);
+            int outlineArgb = (Math.round(outlineColor[3] * 255) << 24) | (Math.round(outlineColor[0] * 255) << 16)
+                    | (Math.round(outlineColor[1] * 255) << 8) | Math.round(outlineColor[2] * 255);
             ShapeState replacement = state.with(position, rotation, scale, size,
                     Math.max(3, segments.get()), Math.max(0.001f, width[0]), argb,
                     points, selectedType[0].equals("text")
@@ -323,7 +337,7 @@ public final class ShapeKeyframe extends Keyframe {
                                     textOutline.get(), billboard[0], font.get())
                             : state.text(),
                     parentId[0],
-                    seeThrough.get(), visible.get(), playAudio.get(),
+                    seeThrough.get(), visible.get(), outline.get(), outlineArgb, playAudio.get(),
                     selectedType[0].equals("video") ? !videoAutoPlay.get() : state.manualPlayback(),
                     selectedType[0].equals("video") ? !videoLoop.get() : state.noLoop(),
                     selectedType[0].equals("video") ? playbackSeconds[0] : state.playbackSeconds())

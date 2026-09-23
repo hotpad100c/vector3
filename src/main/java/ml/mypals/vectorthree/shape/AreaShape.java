@@ -37,8 +37,12 @@ public final class AreaShape extends Shape implements EmptyMesh {
     private final AreaGpuMesh solidMesh = new AreaGpuMesh();
     private final AreaGpuMesh cutoutMesh = new AreaGpuMesh();
     private final AreaTranslucentGpuMesh translucentMesh = new AreaTranslucentGpuMesh();
+    // CPU-side, not a GPU mesh — see AreaBaker.Result's javadoc for why.
+    private List<AreaBaker.OutlineVertex> outlineVertices = List.of();
     private final String shapeId;
     private int blockCount;
+    private boolean outlineEnabled;
+    private Vector4f outlineColor = new Vector4f(1, 1, 1, 1);
     private Vec3 localMin = new Vec3(-0.5, -0.5, -0.5);
     private Vec3 localMax = new Vec3(0.5, 0.5, 0.5);
     private Vec3 sourceCenter = Vec3.ZERO;
@@ -64,6 +68,8 @@ public final class AreaShape extends Shape implements EmptyMesh {
         destRotation.identity().rotateXYZ((float) Math.toRadians(state.pitch()),
                 (float) Math.toRadians(state.yaw()), (float) Math.toRadians(state.roll()));
         destScale = new Vec3(state.scaleX(), state.scaleY(), state.scaleZ());
+        outlineEnabled = state.outline();
+        outlineColor = colorToVector4f(new Color(state.outlineColor(), true));
     }
 
     private BlockPos bakedMin = BlockPos.ZERO;
@@ -93,6 +99,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         solidMesh.upload(result.solidMesh());
         cutoutMesh.upload(result.cutoutMesh());
         translucentMesh.upload(result.translucentMesh());
+        outlineVertices = result.outlineVertices();
         blockCount = result.blockCount();
         blockEntities = result.blockEntities();
         AreaSuppression.set(shapeId, bakedMin, bakedMax);
@@ -205,6 +212,30 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 drawTranslucent(pass, modelView, colorModulator);
             }
         }
+    }
+
+    /** Whether this shape has outline content to contribute this frame; checked by AreaOutlineSubmitMixin. */
+    public boolean hasOutline() {
+        return outlineEnabled && !outlineVertices.isEmpty();
+    }
+
+    /**
+     * Resubmits the outline geometry through vanilla's own SubmitNodeStorage — the outline pipeline is
+     * vanilla's glow/entity-outline RenderType, which only composites for geometry collected this way
+     * (see AreaOutlineSubmitMixin); this shape's own manual RenderPass (used for solid/cutout/
+     * translucent above) can't reach it. Called once per frame, per AreaShape with outline enabled, by
+     * that mixin — not from drawInternal.
+     */
+    public void submitOutline(SubmitNodeStorage submits, Vec3 cameraPos) {
+        PoseStack poseStack = new PoseStack();
+        poseStack.mulPose(destinationModel(cameraPos));
+        int argb = (Math.round(outlineColor.w() * 255) << 24) | (Math.round(outlineColor.x() * 255) << 16)
+                | (Math.round(outlineColor.y() * 255) << 8) | Math.round(outlineColor.z() * 255);
+        submits.submitCustomGeometry(poseStack, AreaRenderType.getOutline(), (pose, consumer) -> {
+            for (AreaBaker.OutlineVertex v : outlineVertices) {
+                consumer.addVertex(pose, v.x(), v.y(), v.z()).setColor(argb).setUv(v.u(), v.v());
+            }
+        });
     }
 
     private void drawOpaque(RenderPass pass, Matrix4f modelView, Vector4f colorModulator, RenderType renderType, AreaGpuMesh mesh) {

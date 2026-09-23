@@ -37,6 +37,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.awt.Color;
@@ -224,6 +226,18 @@ public final class ShapeTrackRegistry {
         LAST_STATES.clear();
         previewHighlightId = null;
         ImageShape.clearTextures();
+    }
+
+    /** Discards any registered shape whose id isn't in {@code liveShapeIds} — e.g. its last keyframe was deleted. */
+    public static void retainOnly(java.util.Set<String> liveShapeIds) {
+        for (String shapeId : List.copyOf(SHAPES.keySet())) {
+            if (liveShapeIds.contains(shapeId)) continue;
+            ShapeManagers.removeShapes(Identifier.parse(shapeId));
+            SHAPES.get(shapeId).discard();
+            SHAPES.remove(shapeId);
+            SHAPE_TYPES.remove(shapeId);
+            LAST_STATES.remove(shapeId);
+        }
     }
 
     public static void apply(ShapeState state) {
@@ -424,6 +438,53 @@ public final class ShapeTrackRegistry {
         if (parent == shape || createsCycle(shape, parent)) parent = null;
         if (shape.parent == parent) return;
         if (parent == null) shape.setParent(null); else parent.addChild(shape);
+    }
+
+    /**
+     * Rewrites position/rotation/scale in place so reparenting (whose numeric x/y/z/rotation/scale are
+     * always relative to whatever parent is set, per Shape.forceSetWorldPosition combined with
+     * Shape.applyHierarchyTransforms walking the whole ancestor chain at draw time) doesn't visually
+     * move the shape — only its parentage changes, not where it appears.
+     */
+    public static void convertToNewParent(ShapeState state, String newParentId,
+            float[] position, float[] rotation, float[] scale) {
+        Matrix4f oldWorld = worldTransformOrIdentity(state.parentShapeId())
+                .mul(localTransform(position[0], position[1], position[2],
+                        rotation[0], rotation[1], rotation[2], scale[0], scale[1], scale[2]));
+        Matrix4f newLocal = worldTransformOrIdentity(newParentId).invert().mul(oldWorld);
+
+        Vector3f newPosition = newLocal.getTranslation(new Vector3f());
+        Vector3f newScale = newLocal.getScale(new Vector3f());
+        Vector3f euler = newLocal.getNormalizedRotation(new Quaternionf()).getEulerAnglesXYZ(new Vector3f());
+
+        position[0] = newPosition.x; position[1] = newPosition.y; position[2] = newPosition.z;
+        scale[0] = newScale.x; scale[1] = newScale.y; scale[2] = newScale.z;
+        rotation[0] = (float) Math.toDegrees(euler.x);
+        rotation[1] = (float) Math.toDegrees(euler.y);
+        rotation[2] = (float) Math.toDegrees(euler.z);
+    }
+
+    /** World transform of the shape {@code shapeId} refers to, or identity if null/empty/unregistered. */
+    public static Matrix4f worldTransformOrIdentity(String shapeId) {
+        return worldTransform(shapeId, new java.util.HashSet<>());
+    }
+
+    private static Matrix4f worldTransform(String shapeId, java.util.Set<String> visited) {
+        if (shapeId == null || shapeId.isEmpty() || !visited.add(shapeId)) return new Matrix4f();
+        ShapeState state = LAST_STATES.get(shapeId);
+        if (state == null) return new Matrix4f();
+        Matrix4f local = localTransform(state.x(), state.y(), state.z(),
+                state.pitch(), state.yaw(), state.roll(), state.scaleX(), state.scaleY(), state.scaleZ());
+        return worldTransform(state.parentShapeId(), visited).mul(local);
+    }
+
+    private static Matrix4f localTransform(double x, double y, double z, float pitch, float yaw, float roll,
+            double scaleX, double scaleY, double scaleZ) {
+        return new Matrix4f()
+                .translate((float) x, (float) y, (float) z)
+                .rotate(new Quaternionf().rotateXYZ((float) Math.toRadians(pitch),
+                        (float) Math.toRadians(yaw), (float) Math.toRadians(roll)))
+                .scale((float) scaleX, (float) scaleY, (float) scaleZ);
     }
 
     private static boolean createsCycle(Shape shape, Shape parent) {

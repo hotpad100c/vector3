@@ -23,18 +23,14 @@ public record ShapeState(
         Map<String, String> blockProperties,
         String parentShapeId,
         boolean seeThrough, boolean visible,
+        boolean outline, int outlineColor,
         int videoStartTick, boolean playAudio,
-        // Named so the Java/Gson-missing-field default (false) reproduces today's behavior
-        // (auto-play, looping) for saves written before these fields existed.
         boolean manualPlayback, boolean noLoop, double playbackSeconds
 ) {
     public static ShapeState create(String type, String id, double x, double y, double z) {
         List<ShapePoint> points = switch (type) {
             case "line", "line_strip" -> List.of(new ShapePoint(0, 0, 0), new ShapePoint(1, 1, 1));
             case "arrow" -> List.of(new ShapePoint(0, 0, 0), new ShapePoint(0, 1, 0));
-            // Absolute world coordinates (the source selection), not local offsets — see
-            // ShapeGizmoEditor.usesAbsolutePoints. Defaults to a 1x1x1 block centered on the creation
-            // position, i.e. source == destination initially (a no-op projection).
             case "area" -> List.of(new ShapePoint(x - 0.5, y - 0.5, z - 0.5), new ShapePoint(x + 0.5, y + 0.5, z + 0.5));
             default -> List.of();
         };
@@ -46,7 +42,7 @@ public record ShapeState(
                     case "block" -> "minecraft:stone";
                     case "item" -> "minecraft:diamond";
                     default -> "";
-                }, Map.of(), "", false, true, 0, false, false, false, 0);
+                }, Map.of(), "", false, true, false, 0xFFFFFFFF, 0, false, false, false, 0);
     }
 
     public ShapeState interpolate(ShapeState target, double amount) {
@@ -68,6 +64,8 @@ public record ShapeState(
                 amount >= 1.0 ? target.parentShapeId : parentShapeId,
                 amount < 0.5 ? seeThrough : target.seeThrough,
                 amount < 0.5 ? visible : target.visible,
+                amount < 0.5 ? outline : target.outline,
+                lerpColor(outlineColor, target.outlineColor, amount),
                 amount >= 1.0 ? target.videoStartTick : videoStartTick,
                 amount < 0.5 ? playAudio : target.playAudio,
                 amount < 0.5 ? manualPlayback : target.manualPlayback,
@@ -102,6 +100,8 @@ public record ShapeState(
                 amount >= 1.0f ? p2.parentShapeId : p1.parentShapeId,
                 amount < 0.5f ? p1.seeThrough : p2.seeThrough,
                 amount < 0.5f ? p1.visible : p2.visible,
+                amount < 0.5f ? p1.outline : p2.outline,
+                smoothColor(p0.outlineColor, p1.outlineColor, p2.outlineColor, p3.outlineColor, t1, t2, t3, amount),
                 amount >= 1.0f ? p2.videoStartTick : p1.videoStartTick,
                 amount < 0.5f ? p1.playAudio : p2.playAudio,
                 amount < 0.5f ? p1.manualPlayback : p2.manualPlayback,
@@ -128,12 +128,13 @@ public record ShapeState(
                 positive(hermite(states, amount, s -> s.sizeZ)),
                 Math.max(3, (int) Math.round(hermite(states, amount, s -> s.segments))),
                 (float) positive(hermite(states, amount, s -> s.lineWidth)),
-                hermiteColor(states, amount), hermitePoints(states, amount, base),
+                hermiteColor(states, amount, s -> s.color), hermitePoints(states, amount, base),
                 hermiteText(sorted, amount, base),
                 base.model,
                 base.blockProperties,
                 base.parentShapeId,
                 base.seeThrough, base.visible,
+                base.outline, hermiteColor(states, amount, s -> s.outlineColor),
                 base.videoStartTick, base.playAudio,
                 base.manualPlayback, base.noLoop,
                 hermite(states, amount, s -> s.playbackSeconds));
@@ -141,14 +142,15 @@ public record ShapeState(
 
     public ShapeState with(float[] position, float[] rotation, float[] scale, float[] size,
             int segments, float lineWidth, int color, List<ShapePoint> points,
-            TextSettings text, String parentShapeId, boolean seeThrough, boolean visible, boolean playAudio,
+            TextSettings text, String parentShapeId, boolean seeThrough, boolean visible,
+            boolean outline, int outlineColor, boolean playAudio,
             boolean manualPlayback, boolean noLoop, double playbackSeconds) {
         return new ShapeState(shapeType, shapeId,
                 position[0], position[1], position[2], rotation[0], rotation[1], rotation[2],
                 scale[0], scale[1], scale[2], size[0], size[1], size[2],
                 segments, lineWidth, color, List.copyOf(points), text, model,
                 blockProperties == null ? Map.of() : Map.copyOf(blockProperties),
-                parentShapeId, seeThrough, visible, videoStartTick, playAudio,
+                parentShapeId, seeThrough, visible, outline, outlineColor, videoStartTick, playAudio,
                 manualPlayback, noLoop, playbackSeconds);
     }
 
@@ -156,7 +158,7 @@ public record ShapeState(
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points == null ? List.of() : points, text, model, blockProperties,
-                parentShapeId, seeThrough, visible, videoStartTick, playAudio,
+                parentShapeId, seeThrough, visible, outline, outlineColor, videoStartTick, playAudio,
                 manualPlayback, noLoop, playbackSeconds);
     }
 
@@ -164,14 +166,14 @@ public record ShapeState(
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
-                videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds);
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds);
     }
 
     public ShapeState withBlockProperties(Map<String, String> properties) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, properties == null ? Map.of() : Map.copyOf(properties),
-                parentShapeId, seeThrough, visible, videoStartTick, playAudio,
+                parentShapeId, seeThrough, visible, outline, outlineColor, videoStartTick, playAudio,
                 manualPlayback, noLoop, playbackSeconds);
     }
 
@@ -179,7 +181,7 @@ public record ShapeState(
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
-                videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds);
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds);
     }
 
     private List<ShapePoint> interpolatePoints(ShapeState target, double amount) {
@@ -219,12 +221,13 @@ public record ShapeState(
         return result;
     }
 
-    private static int hermiteColor(Map<Float, ShapeState> states, float amount) {
+    private static int hermiteColor(Map<Float, ShapeState> states, float amount,
+            java.util.function.ToIntFunction<ShapeState> colorGetter) {
         int result = 0;
         for (int shift = 0; shift <= 24; shift += 8) {
             int channelShift = shift;
             int channel = (int) Math.round(hermite(states, amount,
-                    state -> (state.color >>> channelShift) & 255));
+                    state -> (colorGetter.applyAsInt(state) >>> channelShift) & 255));
             result |= Math.clamp(channel, 0, 255) << shift;
         }
         return result;

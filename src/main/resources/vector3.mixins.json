@@ -12,7 +12,8 @@
 		"area.AreaSuppressFluidMixin",
 		"area.AreaSuppressBlockEntityMixin",
 		"area.AreaSuppressRenderSectionRegionMixin",
-		"area.AreaSourceChangeMixin"
+		"area.AreaSourceChangeMixin",
+		"area.AreaOutlineSubmitMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
