@@ -5,8 +5,6 @@ import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
-import com.moulberry.flashback.keyframe.change.KeyframeChange;
-import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
@@ -15,7 +13,6 @@ import imgui.moulberry90.ImGui;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
-import ml.mypals.vectorthree.flashback.ShapeKeyframeChange;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
 import ml.mypals.vectorthree.shape.ShapeTimelineSelection;
@@ -51,12 +48,6 @@ public abstract class TimelineWindowMixin {
     @Shadow private static float mouseY;
     private static int vector3$lastEditorModCount = -1;
     private static boolean vector3$refreshKeyframes;
-    private static final KeyframeHandler vector3$shapeHandler = new KeyframeHandler() {
-        @Override
-        public boolean supportsKeyframeChange(Class<? extends KeyframeChange> type) {
-            return type == ShapeKeyframeChange.class;
-        }
-    };
     @Shadow private static void upgradeToSceneWrite() {
         throw new AssertionError();
     }
@@ -107,19 +98,21 @@ public abstract class TimelineWindowMixin {
     @Inject(method = "renderInner", at = @At("TAIL"))
     private static void vector3$syncSelectionAfterTimelineInput(CallbackInfo ci) {
         vector3$syncGizmoSelection();
-        if (vector3$lastEditorModCount != editorState.modCount) {
-            vector3$lastEditorModCount = editorState.modCount;
-            vector3$refreshKeyframes = true;
-        }
     }
 
     @Inject(method = "render", at = @At("RETURN"))
     private static void vector3$refreshShapesAfterTimelineUnlock(CallbackInfo ci) {
         ShapeManagerWindow.render();
         if (ShapeTimelineSelection.consumeRefresh()) vector3$refreshKeyframes = true;
-        if (!vector3$refreshKeyframes || editorState == null) return;
+        if (editorState == null) return;
+        // Every scene edit (undo/redo, delete, drag, popup edits) bumps modCount through markDirty().
+        if (vector3$lastEditorModCount != editorState.modCount) {
+            vector3$lastEditorModCount = editorState.modCount;
+            vector3$refreshKeyframes = true;
+        }
+        if (!vector3$refreshKeyframes) return;
         vector3$refreshKeyframes = false;
-        editorState.applyKeyframes(vector3$shapeHandler, TimelineWindow.getCursorTick());
+        editorState.applyKeyframes(ShapeKeyframeType.REFRESH_HANDLER, TimelineWindow.getCursorTick());
         vector3$pruneDeletedShapes();
     }
 

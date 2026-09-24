@@ -29,12 +29,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
-/**
- * Viewport editor for Flashback's Camera Orbit keyframe (with vector3's tilt). Shows the orbit center
- * with move axes, the orbit ring the camera travels on, the camera on it with yaw (around the ring) and
- * pitch (up/down off it) axes, and a handle beyond the camera whose axes change the distance (outward)
- * and tilt the ring (up/down). Right-drag like the shape gizmo; Ctrl snaps to 0.5 blocks / 15°.
- */
+
 public final class OrbitGizmoEditor {
     public record Orbit(Vector3d center, double distance, double yaw, double pitch, double tiltX, double tiltZ) {
         static Orbit of(CameraOrbitKeyframe keyframe) {
@@ -48,7 +43,6 @@ public final class OrbitGizmoEditor {
         Vector3d eye() { return new Vector3d(center).add(offset()); }
         Vector3d normal() { return frame().transform(new Vector3d(0, 1, 0)); }
 
-        /** Direction the camera moves as yaw increases, i.e. along the ring. */
         Vector3d yawTangent() {
             double y = Math.toRadians(yaw);
             return frame().transform(new Vector3d(Math.cos(y), 0, Math.sin(y))).normalize();
@@ -79,7 +73,7 @@ public final class OrbitGizmoEditor {
     private static final Color TILT_COLOR = new Color(220, 90, 255, 235);
     private static final Color RING_COLOR = new Color(255, 255, 255, 210);
     private static final Color SPOKE_COLOR = new Color(200, 200, 200, 160);
-    private static final float LINE_WIDTH = 1.5f;
+    private static final float LINE_WIDTH = 3f;
     private static final double MIN_DISTANCE = 0.1;
     private static final double MAX_PITCH = 89.9;
 

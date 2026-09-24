@@ -21,12 +21,22 @@ import java.util.UUID;
 public final class ShapeKeyframeType implements KeyframeType<ShapeKeyframe> {
     public static final String ID = "vector3_shapes";
     public static final ShapeKeyframeType INSTANCE = new ShapeKeyframeType();
+    /** Re-applies only the shape tracks at the cursor (after undo, delete, ...) without touching the camera. */
+    public static final KeyframeHandler REFRESH_HANDLER = new KeyframeHandler() {
+        @Override
+        public boolean supportsKeyframeChange(Class<? extends KeyframeChange> type) {
+            return type == ShapeKeyframeChange.class;
+        }
+    };
 
     private ShapeKeyframeType() {}
 
     public static void register() { KeyframeRegistry.register(INSTANCE); }
     @Override public Class<? extends KeyframeChange> keyframeChangeType() { return ShapeKeyframeChange.class; }
-    @Override public boolean supportsHandler(KeyframeHandler handler) { return handler instanceof MinecraftKeyframeHandler; }
+    // Other handlers (e.g. camera path previews) sample keyframes at other ticks and must not move shapes.
+    @Override public boolean supportsHandler(KeyframeHandler handler) {
+        return handler instanceof MinecraftKeyframeHandler || handler == REFRESH_HANDLER;
+    }
     @Override public boolean allowApplyingDuplicateKeyframeChanges() { return true; }
     @Override public String icon() { return "▣"; }
     @Override public String name() { return I18n.get("vector3.keyframe_type.name"); }

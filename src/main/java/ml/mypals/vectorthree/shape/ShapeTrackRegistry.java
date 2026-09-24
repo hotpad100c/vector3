@@ -340,13 +340,19 @@ public final class ShapeTrackRegistry {
         // BoxWireframeShape's width is fixed at construction (its setLineWidth casts to the wrong
         // transformer), so syncWireframe rebuilds it when the width changes instead.
         if (shape instanceof BoxShape box) box.forceSetDimensions(size(state));
+        // RRK's circle forceSetSegments(float) sets the radius instead (same bug as the cylinder below),
+        // so set the targets directly, sync once, and rebuild through the working radius force-setter.
         if (shape instanceof LineCircleShape circle) {
+            circle.setSegments(state.segments());
+            circle.setLineWidth(state.lineWidth());
+            circle.setRadius((float) state.sizeX() / 2);
+            circle.transformer.syncLastToTarget();
             circle.forceSetRadius((float) state.sizeX() / 2);
-            circle.forceSetSegments(state.segments());
-            circle.forceSetLineWidth(state.lineWidth());
         } else if (shape instanceof FaceCircleShape circle) {
+            circle.setSegments(state.segments());
+            circle.setRadius((float) state.sizeX() / 2);
+            circle.transformer.syncLastToTarget();
             circle.forceSetRadius((float) state.sizeX() / 2);
-            circle.forceSetSegments(state.segments());
         } else if (shape instanceof SphereShape sphere) {
             sphere.setRadius((float) state.sizeX() / 2);
             sphere.setSegments(state.segments());
