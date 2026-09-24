@@ -217,7 +217,7 @@ public final class ShapeTrackRegistry {
         double denominator = segmentLengthSquared - directionSegment * directionSegment;
         double segmentAmount = Math.abs(denominator) < 1.0e-10 ? 0
                 : (segmentOffset - directionSegment * directionOffset) / denominator;
-        segmentAmount = Math.max(0, Math.min(1, segmentAmount));
+        segmentAmount = Math.clamp(segmentAmount, 0, 1);
         double rayAmount = Math.max(0, directionSegment * segmentAmount - directionOffset);
         Vec3 rayPoint = ray.origin.add(rayDirection.scale(rayAmount));
         Vec3 segmentPoint = start.add(segment.scale(segmentAmount));
@@ -562,8 +562,11 @@ public final class ShapeTrackRegistry {
         EntityType<?> type = id == null ? fallback : BuiltInRegistries.ENTITY_TYPE.getValue(id);
         Entity entity = level == null ? null : type.create(level, EntitySpawnReason.COMMAND);
         if (entity == null && level != null) entity = fallback.create(level, EntitySpawnReason.COMMAND);
+        if (entity != null) entity.setId(nextEntityId--);
         return entity;
     }
+
+    private static int nextEntityId = -1_000_000;
 
     private static <T extends Comparable<T>> BlockState setProperty(
             BlockState state, Property<T> property, String value) {

@@ -5,9 +5,11 @@
 	"mixins": [
 		"TextShapeMixin",
 		"area.AreaBlockEntityAlphaMixin",
-		"area.AreaHideProjectedEntityMixin",
+		"area.AreaProjectEntityExtractMixin",
+		"area.AreaProjectEntitySubmitMixin",
 		"area.AreaProjectParticleMixin",
 		"area.AreaOutlineSubmitMixin",
+		"area.EntityRenderStateProjectionMixin",
 		"area.AreaSourceChangeMixin",
 		"area.AreaSuppressBlockEntityMixin",
 		"area.AreaSuppressBlockMixin",

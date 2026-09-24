@@ -7,11 +7,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
-/**
- * Turns the replay camera toward the active LookTo target. Tracks apply in timeline order, so a camera
- * track below the LookTo track would overwrite its rotation; the request is held until
- * EditorState#applyKeyframes returns and then only yaw and pitch are replaced.
- */
+
 public final class LookToCamera {
     private static LookTo from;
     private static LookTo to;

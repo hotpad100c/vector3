@@ -25,9 +25,6 @@ import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.core.BlockPos;
-import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
-import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -168,13 +165,8 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
     @Override
     protected void drawInternal(VertexBuilder builder) {
-        // Rebaking here, inside the level render, means the mesh is always built in the same vertex
-        // layout the draw below binds — including the frames right after a shader pack is toggled,
-        // which previously drew the old layout until a UI-side rebake caught up (stretched triangles).
         boolean dirty = AreaSuppression.consumeDirty(shapeId);
         if (dirty || (bakedExtended != null && bakedExtended != irisExtendsNow())) rebakeRegion();
-        // Fully transparent: draw nothing (the source region stays hidden). Fully opaque already keeps
-        // solid/cutout on vanilla's opaque pipelines; only alpha < 1 switches them to translucent.
         if (baseColor.getAlpha() == 0) return;
         if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
             try {
@@ -184,10 +176,9 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 Vector3.LOGGER.warn("AreaShape draw failed, pausing its draws until the next rebake", exception);
             }
         }
-        boolean projectsEntities = projection != null && projection.entities();
-        if ((!blockEntities.isEmpty() || projectsEntities) && !blockEntityDrawFailed) {
+        if (!blockEntities.isEmpty() && !blockEntityDrawFailed) {
             try {
-                drawBlockEntities(projectsEntities);
+                drawBlockEntities();
             } catch (Exception exception) {
                 blockEntityDrawFailed = true;
                 Vector3.LOGGER.warn("AreaShape block entity draw failed, pausing them until the next rebake", exception);
@@ -197,9 +188,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
     private boolean blockEntityDrawFailed;
 
-    /** Block entities of the baked region, plus (when projecting) the entities currently inside the
-     *  source region, all drawn at the destination through one feature render. */
-    private void drawBlockEntities(boolean projectEntities) {
+    private void drawBlockEntities() {
         Minecraft minecraft = Minecraft.getInstance();
         Camera camera = minecraft.gameRenderer.mainCamera();
         Vec3 cameraPos = camera.position();
@@ -229,20 +218,6 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 poseStack.rotate(destRotation);
                 poseStack.scale((float) destScale.x, (float) destScale.y, (float) destScale.z);
                 dispatcher.submit(state, poseStack, submits, cameraRenderState);
-            }
-            if (projectEntities && minecraft.level != null) {
-                EntityRenderDispatcher entityDispatcher = minecraft.getEntityRenderDispatcher();
-                for (Entity entity : minecraft.level.getEntities((Entity) null, sourceBounds,
-                        candidate -> !AreaProjection.isViewer(candidate))) {
-                    EntityRenderState state = entityDispatcher.extractEntity(entity, partialTick);
-                    Vec3 dest = projection.map(entity.getX(partialTick), entity.getY(partialTick), entity.getZ(partialTick))
-                            .subtract(cameraPos);
-                    PoseStack poseStack = new PoseStack();
-                    poseStack.translate(dest.x, dest.y, dest.z);
-                    poseStack.rotate(destRotation);
-                    poseStack.scale((float) destScale.x, (float) destScale.y, (float) destScale.z);
-                    entityDispatcher.submit(state, cameraRenderState, 0, 0, 0, poseStack, submits);
-                }
             }
             if (translucent) {
                 AreaBlockEntityTranslucency.withModulator(modulator, () -> Helpers.renderFeatures(minecraft, submits));
