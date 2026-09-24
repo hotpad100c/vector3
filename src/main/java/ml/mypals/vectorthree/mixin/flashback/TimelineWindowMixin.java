@@ -72,7 +72,7 @@ public abstract class TimelineWindowMixin {
                 if (track.keyframeType != ShapeKeyframeType.INSTANCE) continue;
                 for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
                     if (!(entry.getValue() instanceof ShapeKeyframe shape)
-                            || !shape.state.shapeId().equals(shapeId)) continue;
+                            || !shape.value.shapeId().equals(shapeId)) continue;
                     int distance = Math.abs(entry.getKey() - cursor);
                     if (distance < bestDistance) {
                         bestTrack = trackIndex;
@@ -122,7 +122,7 @@ public abstract class TimelineWindowMixin {
         for (KeyframeTrack track : editorScene.keyframeTracks) {
             if (track.keyframeType != ShapeKeyframeType.INSTANCE) continue;
             for (Keyframe keyframe : track.keyframesByTick.values()) {
-                if (keyframe instanceof ShapeKeyframe shape) liveShapeIds.add(shape.state.shapeId());
+                if (keyframe instanceof ShapeKeyframe shape) liveShapeIds.add(shape.value.shapeId());
             }
         }
         ShapeTrackRegistry.retainOnly(liveShapeIds);

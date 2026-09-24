@@ -86,5 +86,20 @@
   "vector3.gizmo.rotate": "Rotate (R)",
   "vector3.gizmo.scale": "Scale (B)",
   "vector3.gizmo.geometry": "Geometry (M)",
-  "vector3.orbit.tilt": "Orbit Tilt (X / Z)"
+  "vector3.orbit.tilt": "Orbit Tilt (X / Z)",
+  "vector3.keyframe_type.look_to": "Look To",
+  "vector3.look_to.ends_scope": "End Scope",
+  "vector3.look_to.ends_scope.tooltip": "From a keyframe until the next one, the camera looks at the target, moving toward the next keyframe's target. A keyframe marked End Scope stops it and only provides that final target.",
+  "vector3.look_to.kind": "Target",
+  "vector3.look_to.kind.entity": "Entity",
+  "vector3.look_to.kind.position": "Position",
+  "vector3.look_to.kind.shape": "Shape",
+  "vector3.look_to.entity": "Entity",
+  "vector3.look_to.position": "Position",
+  "vector3.look_to.pick_crosshair": "Use Crosshair Target",
+  "vector3.look_to.shape": "Shape",
+  "vector3.entity_picker.none": "None",
+  "vector3.entity_picker.search": "Search name, type or UUID",
+  "vector3.entity_picker.use_uuid": "Use UUID %s",
+  "vector3.entity_picker.empty": "No matching entities"
 }

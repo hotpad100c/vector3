@@ -1,9 +1,8 @@
 package ml.mypals.vectorthree.flashback;
 
 import com.moulberry.flashback.keyframe.Keyframe;
-import com.moulberry.flashback.keyframe.KeyframeType;
-import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
+import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
 import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.text.FontOptions;
 import ml.mypals.vectorthree.shape.point.ShapePoint;
@@ -29,52 +28,41 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.function.Consumer;
 
-public final class ShapeKeyframe extends Keyframe {
-    public ShapeState state;
+/** A Shape track keyframe; {@link #value} is the shape's state at this tick. */
+public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
     private static @Nullable ShapeTrackEditor editor;
 
     public ShapeKeyframe(ShapeState state) {
-        this.state = state;
+        super(ShapeKeyframeType.INSTANCE, state);
     }
 
     public ShapeKeyframe(ShapeState state, InterpolationType interpolation) {
-        this(state);
-        interpolationType(interpolation);
+        super(ShapeKeyframeType.INSTANCE, state, interpolation);
     }
 
     public static void setEditor(@Nullable ShapeTrackEditor editor) {
         ShapeKeyframe.editor = editor;
     }
 
-    @Override public KeyframeType<?> keyframeType() { return ShapeKeyframeType.INSTANCE; }
-    @Override public Keyframe copy() { return new ShapeKeyframe(state, interpolationType()); }
-    @Override public KeyframeChange createChange() { return new ShapeKeyframeChange(state); }
-
-    @Override
-    public KeyframeChange createSmoothInterpolatedChange(Keyframe p1, Keyframe p2, Keyframe p3,
-            float t0, float t1, float t2, float t3, float amount) {
-        return new ShapeKeyframeChange(ShapeState.smooth(state, ((ShapeKeyframe) p1).state,
-                ((ShapeKeyframe) p2).state, ((ShapeKeyframe) p3).state,
-                t1 - t0, t2 - t0, t3 - t0, amount));
-    }
-
-    @Override
-    public KeyframeChange createHermiteInterpolatedChange(Map<Float, Keyframe> keyframes, float amount) {
-        Map<Float, ShapeState> states = new java.util.TreeMap<>();
-        keyframes.forEach((tick, keyframe) -> states.put(tick, ((ShapeKeyframe) keyframe).state));
-        return new ShapeKeyframeChange(ShapeState.hermite(states, amount));
-    }
-
     @Override
     public void renderEditKeyframe(Consumer<Consumer<Keyframe>> update) {
+        super.renderEditKeyframe(update);
+        ShapeTrackEditor current = editor;
+        if (current != null) {
+            current.edit(this, typed -> update.accept(keyframe -> typed.accept((ShapeKeyframe) keyframe)));
+        }
+    }
+
+    /** Draws the shape editor and returns the edited state, already applied to the shape. */
+    static ShapeState edit(ShapeState state) {
         String[] selectedType = {state.shapeType()};
         String[] selectedId = {state.shapeId()};
         ShapeTrackRegistry.Definition selectedDefinition = ShapeTrackRegistry.definition(selectedType[0]);
         boolean changed = false;
         ImGui.setNextItemWidth(240);
-        if (selectedDefinition != null && ImGui.beginCombo(I18n.get("vector3.keyframe.shape"), I18n.get(selectedDefinition.name()))) {
+        if (selectedDefinition != null && ImGui.beginCombo(I18n.get("vector3.keyframe.shape"), VectorIcons.withShapeIcon(selectedDefinition.id(), I18n.get(selectedDefinition.name())))) {
             for (ShapeTrackRegistry.Definition definition : ShapeTrackRegistry.definitions()) {
-                if (ImGui.selectable(I18n.get(definition.name()), definition.id().equals(selectedType[0]))) {
+                if (ImGui.selectable(VectorIcons.withShapeIcon(definition.id(), I18n.get(definition.name())), definition.id().equals(selectedType[0]))) {
                     selectedType[0] = definition.id();
                     changed = true;
                 }
@@ -422,13 +410,9 @@ public final class ShapeKeyframe extends Keyframe {
                     .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick())
                     .withName(nameField.get().isBlank() ? null : nameField.get());
             ShapeTrackRegistry.apply(replacement);
-            update.accept(keyframe -> ((ShapeKeyframe) keyframe).state = replacement);
+            return replacement;
         }
-
-        ShapeTrackEditor current = editor;
-        if (current != null) {
-            current.edit(this, typed -> update.accept(keyframe -> typed.accept((ShapeKeyframe) keyframe)));
-        }
+        return state;
     }
 
     private static boolean editPoint(String label, List<ShapePoint> points, int index) {

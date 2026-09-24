@@ -86,5 +86,20 @@
   "vector3.gizmo.rotate": "旋转 (R)",
   "vector3.gizmo.scale": "缩放 (B)",
   "vector3.gizmo.geometry": "几何 (M)",
-  "vector3.orbit.tilt": "轨道倾斜 (X / Z)"
+  "vector3.orbit.tilt": "轨道倾斜 (X / Z)",
+  "vector3.keyframe_type.look_to": "看向",
+  "vector3.look_to.ends_scope": "结束作用域",
+  "vector3.look_to.ends_scope.tooltip": "从一个关键帧到下一个关键帧之间，相机会强制看向目标，并逐渐转向下一个关键帧的目标。勾选「结束作用域」的关键帧在此停止，只提供最终目标。",
+  "vector3.look_to.kind": "目标",
+  "vector3.look_to.kind.entity": "实体",
+  "vector3.look_to.kind.position": "坐标",
+  "vector3.look_to.kind.shape": "图形",
+  "vector3.look_to.entity": "实体",
+  "vector3.look_to.position": "坐标",
+  "vector3.look_to.pick_crosshair": "使用准星位置",
+  "vector3.look_to.shape": "图形",
+  "vector3.entity_picker.none": "未选择",
+  "vector3.entity_picker.search": "搜索名称、类型或 UUID",
+  "vector3.entity_picker.use_uuid": "使用 UUID %s",
+  "vector3.entity_picker.empty": "没有匹配的实体"
 }

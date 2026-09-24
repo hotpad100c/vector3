@@ -48,7 +48,6 @@ public final class OrbitGizmoEditor {
             return frame().transform(new Vector3d(Math.cos(y), 0, Math.sin(y))).normalize();
         }
 
-        /** Direction the camera moves as pitch increases, i.e. up off the ring. */
         Vector3d pitchTangent() {
             double y = Math.toRadians(yaw), p = Math.toRadians(pitch);
             return frame().transform(new Vector3d(-Math.sin(y) * Math.sin(p), Math.cos(p), Math.cos(y) * Math.sin(p)))
@@ -100,7 +99,6 @@ public final class OrbitGizmoEditor {
         return dragging != null;
     }
 
-    /** True while the mouse is over one of this gizmo's handles, so the shape gizmo leaves the click alone. */
     public boolean isHovering() {
         return hovered != null || dragging != null;
     }

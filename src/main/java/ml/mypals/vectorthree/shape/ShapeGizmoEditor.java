@@ -81,7 +81,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     @Override
     public void edit(ShapeKeyframe keyframe, Consumer<Consumer<ShapeKeyframe>> update) {
-        select(keyframe, replacement -> update.accept(changed -> changed.state = replacement));
+        select(keyframe, replacement -> update.accept(changed -> changed.value = replacement));
 
         ImGui.text(I18n.get("vector3.gizmo.viewport_gizmo"));
         setModeButton(I18n.get("vector3.gizmo.move"), Mode.MOVE); ImGui.sameLine();
@@ -116,7 +116,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
         ShapeState state = null;
         if (keyframe != null) {
-            state = previewState == null ? keyframe.state : previewState;
+            state = previewState == null ? keyframe.value : previewState;
             String wantedLayout = layoutKey(state);
             if (!wantedLayout.equals(layoutKey)) rebuild(state);
             updateHandles(state);
@@ -157,10 +157,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         this.keyframe = keyframe;
         previewState = null;
         dragging = null;
-        rebuild(keyframe.state);
-        updateHandles(keyframe.state);
-        updateAabbMarker(keyframe.state);
-        updateAreaSelectionMarker(keyframe.state);
+        rebuild(keyframe.value);
+        updateHandles(keyframe.value);
+        updateAabbMarker(keyframe.value);
+        updateAreaSelectionMarker(keyframe.value);
     }
 
     public void clearSelection() {
@@ -209,10 +209,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         mode = requested;
         dragging = null;
         if (keyframe != null) {
-            rebuild(keyframe.state);
-            updateHandles(keyframe.state);
-            updateAabbMarker(keyframe.state);
-            updateAreaSelectionMarker(keyframe.state);
+            rebuild(keyframe.value);
+            updateHandles(keyframe.value);
+            updateAabbMarker(keyframe.value);
+            updateAreaSelectionMarker(keyframe.value);
         }
     }
 

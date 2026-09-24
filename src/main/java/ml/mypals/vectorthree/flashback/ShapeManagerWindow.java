@@ -107,8 +107,8 @@ public final class ShapeManagerWindow {
         ShapeTrackRegistry.Definition definition = type != null ? ShapeTrackRegistry.definition(type) : null;
         String typeLabel = definition != null ? I18n.get(definition.name()) : type;
         String name = state != null ? state.name() : null;
-        return name != null && !name.isBlank()
+        return VectorIcons.withShapeIcon(type, name != null && !name.isBlank()
                 ? name + "  (" + typeLabel + ")"
-                : ShapeTrackRegistry.displayName(shapeId);
+                : ShapeTrackRegistry.displayName(shapeId));
     }
 }

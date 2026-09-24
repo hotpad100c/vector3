@@ -25,11 +25,11 @@ public class EditorSceneMixin {
 
         KeyframeTrack track = keyframeTracks.get(trackIndex);
         if (track.keyframesByTick.get(tick) instanceof ShapeKeyframe edited) {
-            if (!edited.state.shapeId().equals(added.state.shapeId())
-                    || !edited.state.shapeType().equals(added.state.shapeType())) {
+            if (!edited.value.shapeId().equals(added.value.shapeId())
+                    || !edited.value.shapeType().equals(added.value.shapeType())) {
                 for (Keyframe existing : track.keyframesByTick.values()) {
                     if (existing instanceof ShapeKeyframe shape) {
-                        shape.state = shape.state.withIdentity(added.state.shapeType(), added.state.shapeId());
+                        shape.value = shape.value.withIdentity(added.value.shapeType(), added.value.shapeId());
                     }
                 }
             }
@@ -38,7 +38,7 @@ public class EditorSceneMixin {
 
         for (Keyframe existing : track.keyframesByTick.values()) {
             if (existing instanceof ShapeKeyframe shape && existing != added) {
-                added.state = added.state.withIdentity(shape.state.shapeType(), shape.state.shapeId());
+                added.value = added.value.withIdentity(shape.value.shapeType(), shape.value.shapeId());
                 return;
             }
         }
