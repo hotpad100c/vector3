@@ -224,6 +224,23 @@ public record ShapeState(
                 wireframe, areaOptions, bypassShaders);
     }
 
+    public ShapeState withTransform(double x, double y, double z, float pitch, float yaw, float roll,
+            double scaleX, double scaleY, double scaleZ) {
+        return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
+                scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
+                color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
+                wireframe, areaOptions, bypassShaders);
+    }
+
+    public ShapeState withParent(String parentShapeId) {
+        return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
+                scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
+                color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
+                wireframe, areaOptions, bypassShaders);
+    }
+
     public ShapeState withBypassShaders(boolean bypassShaders) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,

@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder;
 import com.moulberry.flashback.FlashbackGson;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframes;
+import ml.mypals.vectorthree.prefab.PrefabGroupStore;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,5 +16,6 @@ public class FlashbackGsonMixin {
     @Inject(method = "build", at = @At("RETURN"), remap = false)
     private static void vector3$registerCustomKeyframeAdapter(CallbackInfoReturnable<GsonBuilder> cir) {
         cir.getReturnValue().registerTypeHierarchyAdapter(CustomKeyframe.class, CustomKeyframes.SERIALIZER);
+        cir.getReturnValue().registerTypeAdapter(PrefabGroupStore.class, PrefabGroupStore.ADAPTER);
     }
 }

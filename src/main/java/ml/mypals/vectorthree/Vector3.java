@@ -5,10 +5,12 @@ import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.visuals.ReplayVisuals;
 import ml.mypals.vectorthree.camera.EditorCameraController;
+import ml.mypals.vectorthree.camera.dolly.DollyZoomKeyframeType;
 import ml.mypals.vectorthree.camera.lookto.LookToKeyframeType;
 import ml.mypals.vectorthree.camera.orbit.OrbitGizmoEditor;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframes;
 import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
+import ml.mypals.vectorthree.prefab.PrefabPlacement;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
@@ -27,6 +29,7 @@ public class Vector3 implements ClientModInitializer {
 	public static final String MOD_ID = "vector3";
 	public static final ShapeGizmoEditor GIZMO_EDITOR = new ShapeGizmoEditor();
 	public static final OrbitGizmoEditor ORBIT_GIZMO = new OrbitGizmoEditor();
+	public static final PrefabPlacement PREFABS = new PrefabPlacement();
 	public static final EditorCameraController EDITOR_CAMERA = new EditorCameraController();
 
 	// This logger is used to write text to the console and the log file.
@@ -41,10 +44,12 @@ public class Vector3 implements ClientModInitializer {
 		ShapeKeyframeType.register();
 		CustomKeyframes.register(LookToKeyframeType.INSTANCE);
 		CustomKeyframes.register(SkipKeyframeType.INSTANCE);
+		CustomKeyframes.register(DollyZoomKeyframeType.INSTANCE);
 		ShapeKeyframe.setEditor(GIZMO_EDITOR);
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			GIZMO_EDITOR.clear();
 			ORBIT_GIZMO.clear();
+			PREFABS.clear();
 			EDITOR_CAMERA.reset();
 			ShapeTrackRegistry.clear();
 		});

@@ -34,8 +34,8 @@ import java.util.function.Consumer;
 
 public final class ShapeGizmoEditor implements ShapeTrackEditor {
     public static final Identifier MOVE_MODEL = Vector3.id("models/obj/move.obj");
-    private static final Identifier ROTATE_MODEL = Vector3.id("models/obj/rotation.obj");
-    private static final Identifier SCALE_MODEL = Vector3.id("models/obj/scale.obj");
+    public static final Identifier ROTATE_MODEL = Vector3.id("models/obj/rotation.obj");
+    public static final Identifier SCALE_MODEL = Vector3.id("models/obj/scale.obj");
     public static final Identifier CENTER_MODEL = Vector3.id("models/obj/m_center.obj");
     private static final Color X_COLOR = new Color(255, 55, 55, 230);
     private static final Color Y_COLOR = new Color(55, 255, 55, 230);
@@ -129,7 +129,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             if (ImGui.isMouseClicked(1) && hovered != null) {
                 ReplayUI.imguiWindower.ungrab();
                 beginDrag(hovered, state, ray, camera);
-            } else if (ImGui.isMouseClicked(1) && inViewport && !Vector3.ORBIT_GIZMO.isHovering()) {
+            } else if (ImGui.isMouseClicked(1) && inViewport && !Vector3.ORBIT_GIZMO.isHovering() && !Vector3.PREFABS.isHovering()) {
                 String shapeId = ShapeTrackRegistry.pickShape(ray);
                 if (shapeId != null) ShapeTimelineSelection.request(shapeId);
             }

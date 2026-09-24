@@ -31,7 +31,7 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 	//RRK
-	implementation "maven.modrinth:CdJaAf0y:6C2XnOsN"
+	implementation "maven.modrinth:CdJaAf0y:bM5yemMt"
 	//Flashback
 	implementation "maven.modrinth:4das1Fjq:${project.flashback_version}"
 	//Sodium

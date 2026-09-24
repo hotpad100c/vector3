@@ -37,8 +37,8 @@ public final class LookToCamera {
         if (player == null || minecraft.getCameraEntity() != player) return;
 
         float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true);
-        Vec3 start = from.resolve(partialTick);
-        Vec3 end = to.resolve(partialTick);
+        Vec3 start = from.target().resolve(partialTick);
+        Vec3 end = to.target().resolve(partialTick);
         if (start == null) start = end;
         if (end == null) end = start;
         if (start == null) return;
