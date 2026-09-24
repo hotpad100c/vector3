@@ -101,5 +101,8 @@
   "vector3.entity_picker.none": "未选择",
   "vector3.entity_picker.search": "搜索名称、类型或 UUID",
   "vector3.entity_picker.use_uuid": "使用 UUID %s",
-  "vector3.entity_picker.empty": "没有匹配的实体"
+  "vector3.entity_picker.empty": "没有匹配的实体",
+  "vector3.keyframe_type.skip": "跳过",
+  "vector3.skip.ends_scope": "结束跳过",
+  "vector3.skip.ends_scope.tooltip": "播放和导出时，从起始关键帧直接跳到下一个「结束跳过」关键帧。暂停时拖动游标仍可查看被跳过的部分。"
 }

@@ -59,6 +59,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
     private AABB sourceBounds;
     private AreaOptions options = AreaOptions.DEFAULT;
     private boolean projectionShown;
+    private float projectionAlpha = 1.0f;
     private AreaProjection.Projection projection;
 
     public AreaShape(ShapeState state, Color color, boolean seeThrough) {
@@ -82,6 +83,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         outlineColor = colorToVector4f(new Color(state.outlineColor(), true));
         options = AreaOptions.orDefault(state.areaOptions());
         projectionShown = state.visible() && ((state.color() >>> 24) & 0xFF) > 0;
+        projectionAlpha = ((state.color() >>> 24) & 0xFF) / 255.0f;
         publishProjection();
     }
 
@@ -90,7 +92,8 @@ public final class AreaShape extends Shape implements EmptyMesh {
         boolean wanted = sourceBounds != null && projectionShown
                 && (options.projectEntities() || options.projectParticles());
         projection = wanted ? new AreaProjection.Projection(sourceBounds, sourceCenter, destCenter,
-                new Quaternionf(destRotation), destScale, options.projectEntities(), options.projectParticles()) : null;
+                new Quaternionf(destRotation), destScale, options.projectEntities(), options.projectParticles(),
+                shapeId, projectionAlpha) : null;
         AreaProjection.set(shapeId, projection);
     }
 
@@ -176,7 +179,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 Vector3.LOGGER.warn("AreaShape draw failed, pausing its draws until the next rebake", exception);
             }
         }
-        if (!blockEntities.isEmpty() && !blockEntityDrawFailed) {
+        if ((!blockEntities.isEmpty() || AreaProjection.hasTranslucentEntities(shapeId)) && !blockEntityDrawFailed) {
             try {
                 drawBlockEntities();
             } catch (Exception exception) {
@@ -202,7 +205,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         Vector4f modulator = colorToVector4f(baseColor);
         boolean translucent = modulator.w() < 1.0f;
-        SubmitNodeStorage submits = translucent ? new AreaTranslucentSubmitNodeStorage() : new SubmitNodeStorage();
+        SubmitNodeStorage submits = translucent ? AreaProjection.takeTranslucentEntities(shapeId) : new SubmitNodeStorage();
 
         // The feature render below must stay inside the bypass too: Sodium tessellates block-model parts
         // at render time through NonTerrainBlockRenderContext#tesselateBlock with the block entity's

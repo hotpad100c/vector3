@@ -13,6 +13,9 @@ import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import net.minecraft.client.renderer.state.level.LevelRenderState;
 
 @Mixin(LevelRenderer.class)
 public class AreaProjectEntitySubmitMixin {
@@ -31,7 +34,14 @@ public class AreaProjectEntitySubmitMixin {
         poseStack.translate(dest.x - (state.x - x), dest.y - (state.y - y), dest.z - (state.z - z));
         poseStack.rotate(projection.rotation());
         poseStack.scale((float) projection.scale().x, (float) projection.scale().y, (float) projection.scale().z);
-        original.call(dispatcher, state, camera, 0.0, 0.0, 0.0, poseStack, collector);
+        original.call(dispatcher, state, camera, 0.0, 0.0, 0.0, poseStack,
+                projection.translucent() ? AreaProjection.translucentEntityCollector(projection) : collector);
         poseStack.popPose();
+    }
+
+    @Inject(method = "submitEntities", at = @At("HEAD"))
+    private void vector3$beginEntitySubmits(PoseStack poseStack, LevelRenderState state, SubmitNodeCollector collector,
+            CallbackInfo ci) {
+        AreaProjection.beginEntitySubmits();
     }
 }

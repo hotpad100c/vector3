@@ -8,6 +8,7 @@ import ml.mypals.vectorthree.camera.EditorCameraController;
 import ml.mypals.vectorthree.camera.lookto.LookToKeyframeType;
 import ml.mypals.vectorthree.camera.orbit.OrbitGizmoEditor;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframes;
+import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
@@ -39,6 +40,7 @@ public class Vector3 implements ClientModInitializer {
 		ShapeTrackRegistry.registerDefaults();
 		ShapeKeyframeType.register();
 		CustomKeyframes.register(LookToKeyframeType.INSTANCE);
+		CustomKeyframes.register(SkipKeyframeType.INSTANCE);
 		ShapeKeyframe.setEditor(GIZMO_EDITOR);
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			GIZMO_EDITOR.clear();

@@ -101,5 +101,8 @@
   "vector3.entity_picker.none": "None",
   "vector3.entity_picker.search": "Search name, type or UUID",
   "vector3.entity_picker.use_uuid": "Use UUID %s",
-  "vector3.entity_picker.empty": "No matching entities"
+  "vector3.entity_picker.empty": "No matching entities",
+  "vector3.keyframe_type.skip": "Skip",
+  "vector3.skip.ends_scope": "End Skip",
+  "vector3.skip.ends_scope.tooltip": "Playback and export jump from a start keyframe straight to the next End Skip keyframe. Scrubbing while paused still shows the skipped part."
 }

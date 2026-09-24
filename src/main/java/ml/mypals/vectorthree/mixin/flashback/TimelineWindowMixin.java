@@ -3,7 +3,11 @@ package ml.mypals.vectorthree.mixin.flashback;
 import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.moulberry.flashback.keyframe.Keyframe;
+import com.moulberry.flashback.keyframe.KeyframeType;
+import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
 import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.EditorState;
@@ -126,6 +130,18 @@ public abstract class TimelineWindowMixin {
             }
         }
         ShapeTrackRegistry.retainOnly(liveShapeIds);
+    }
+
+    // The add-track menu's check (the first one is the per-track add button): one Skip track at most.
+    @WrapOperation(method = "renderKeyframeElements", at = @At(value = "INVOKE", ordinal = 1,
+            target = "Lcom/moulberry/flashback/keyframe/KeyframeType;canBeCreatedNormally()Z"))
+    private static boolean vector3$singleSkipTrack(KeyframeType<?> type, Operation<Boolean> original) {
+        if (type == SkipKeyframeType.INSTANCE && editorScene != null) {
+            for (KeyframeTrack track : editorScene.keyframeTracks) {
+                if (track.keyframeType == SkipKeyframeType.INSTANCE) return false;
+            }
+        }
+        return original.call(type);
     }
 
     @Redirect(method = "renderInner", at = @At(value = "INVOKE",

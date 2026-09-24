@@ -37,7 +37,7 @@ public class AreaProjectParticleMixin {
         try {
             position.vector3$setX(now.x); position.vector3$setY(now.y); position.vector3$setZ(now.z);
             position.vector3$setXo(before.x); position.vector3$setYo(before.y); position.vector3$setZo(before.z);
-            original.call(particle, state, camera, partialTickTime);
+            AreaProjection.withParticleAlpha(projection.alpha(), () -> original.call(particle, state, camera, partialTickTime));
         } finally {
             position.vector3$setX(x); position.vector3$setY(y); position.vector3$setZ(z);
             position.vector3$setXo(xo); position.vector3$setYo(yo); position.vector3$setZo(zo);
