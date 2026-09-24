@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.area;
 
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;

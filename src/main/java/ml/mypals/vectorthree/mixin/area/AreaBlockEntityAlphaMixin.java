@@ -3,7 +3,7 @@ package ml.mypals.vectorthree.mixin.area;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import ml.mypals.vectorthree.shape.AreaBlockEntityTranslucency;
+import ml.mypals.vectorthree.shape.area.AreaBlockEntityTranslucency;
 import net.minecraft.client.renderer.DynamicGpuData;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import org.joml.Matrix4f;

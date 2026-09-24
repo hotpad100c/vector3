@@ -4,6 +4,7 @@ import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
 import com.moulberry.flashback.keyframe.Keyframe;
+import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
 import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.state.EditorScene;
@@ -20,6 +21,8 @@ import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
 import ml.mypals.vectorthree.shape.ShapeTimelineSelection;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.camera.orbit.OrbitTilt;
+import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
@@ -62,6 +65,9 @@ public abstract class TimelineWindowMixin {
             target = "Lcom/moulberry/flashback/editor/ui/ImGuiHelper;beginPopup(Ljava/lang/String;)Z",
             shift = At.Shift.BEFORE))
     private static void vector3$selectClickedShape(CallbackInfo ci) {
+        // Gizmos draw with the see-through managers even when no shape was ever applied.
+        ShapeTrackRegistry.fixSeeThroughPipelines();
+        Vector3.ORBIT_GIZMO.frame();
         Vector3.GIZMO_EDITOR.frame();
         if (ShapeManagerWindow.isEditorMode()) Vector3.EDITOR_CAMERA.frame();
         String shapeId = ShapeTimelineSelection.consume();
@@ -138,31 +144,46 @@ public abstract class TimelineWindowMixin {
     @Redirect(method = "renderInner", at = @At(value = "INVOKE",
             target = "Limgui/moulberry90/ImGui;isMouseDragging(I)Z"))
     private static boolean vector3$keepViewportDragOutOfTimeline(int button) {
-        if (Vector3.GIZMO_EDITOR.isDragging()) {
+        if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging()) {
             return false;
         }
         return ImGui.isMouseDragging(button);
     }
 
     private static void vector3$syncGizmoSelection() {
-        if (Vector3.GIZMO_EDITOR.isDragging()) {
+        if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging()) {
             return;
         }
         if (selectedKeyframesList.size() != 1
-                || selectedKeyframesList.getFirst().type() != ShapeKeyframeType.INSTANCE
                 || selectedKeyframesList.getFirst().keyframeTicks().size() != 1) {
             Vector3.GIZMO_EDITOR.clearSelection();
+            Vector3.ORBIT_GIZMO.clearSelection();
             return;
         }
         SelectedKeyframes selected = selectedKeyframesList.getFirst();
         int trackIndex = selected.trackIndex();
         if (trackIndex < 0 || trackIndex >= editorScene.keyframeTracks.size()) {
             Vector3.GIZMO_EDITOR.clearSelection();
+            Vector3.ORBIT_GIZMO.clearSelection();
             return;
         }
         int tick = selected.keyframeTicks().iterator().nextInt();
         Keyframe keyframe = editorScene.keyframeTracks.get(trackIndex).keyframesByTick.get(tick);
-        if (!(keyframe instanceof ShapeKeyframe shape)) {
+        if (keyframe instanceof CameraOrbitKeyframe orbitKeyframe) {
+            Vector3.GIZMO_EDITOR.clearSelection();
+            Vector3.ORBIT_GIZMO.select(orbitKeyframe, orbit -> {
+                CameraOrbitKeyframe replacement = new CameraOrbitKeyframe(new Vector3d(orbit.center()),
+                        (float) orbit.distance(), (float) orbit.yaw(), (float) orbit.pitch(),
+                        orbitKeyframe.interpolationType());
+                ((OrbitTilt) replacement).vector3$setTilt((float) orbit.tiltX(), (float) orbit.tiltZ());
+                upgradeToSceneWrite();
+                editorScene.setKeyframe(trackIndex, tick, replacement);
+                EditorStateManager.getCurrent().markDirty();
+            });
+            return;
+        }
+        Vector3.ORBIT_GIZMO.clearSelection();
+        if (selected.type() != ShapeKeyframeType.INSTANCE || !(keyframe instanceof ShapeKeyframe shape)) {
             Vector3.GIZMO_EDITOR.clearSelection();
             return;
         }

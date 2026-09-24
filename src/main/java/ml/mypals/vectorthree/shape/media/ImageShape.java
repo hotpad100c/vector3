@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.media;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -9,6 +9,7 @@ import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.render.IrisBypassTarget;
+import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.texture.DynamicTexture;

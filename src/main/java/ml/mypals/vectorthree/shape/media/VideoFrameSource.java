@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.media;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import ml.mypals.vectorthree.Vector3;

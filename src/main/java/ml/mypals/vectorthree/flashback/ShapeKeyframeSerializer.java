@@ -3,7 +3,7 @@ package ml.mypals.vectorthree.flashback;
 import com.google.gson.*;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import ml.mypals.vectorthree.shape.ShapeState;
-import ml.mypals.vectorthree.shape.TextSettings;
+import ml.mypals.vectorthree.shape.text.TextSettings;
 
 import java.lang.reflect.Type;
 
@@ -42,6 +42,7 @@ public final class ShapeKeyframeSerializer implements JsonSerializer<ShapeKeyfra
                         case "obj" -> "ryansrenderingkit:models/monkey.obj";
                         case "block" -> "minecraft:stone";
                         case "item" -> "minecraft:diamond";
+                        case "entity" -> "minecraft:pig";
                         default -> "";
                     },
                     state.blockProperties() == null ? java.util.Map.of() : state.blockProperties(),
@@ -49,7 +50,7 @@ public final class ShapeKeyframeSerializer implements JsonSerializer<ShapeKeyfra
                     state.seeThrough(), state.visible(), state.outline(),
                     state.outlineColor() == 0 ? 0xFFFFFFFF : state.outlineColor(),
                     state.videoStartTick(), state.playAudio(),
-                    state.manualPlayback(), state.noLoop(), state.playbackSeconds(), state.name());
+                    state.manualPlayback(), state.noLoop(), state.playbackSeconds(), state.name(), state.wireframe(), state.areaOptions(), state.bypassShaders());
         }
         InterpolationType interpolation = json.has("interpolation_type")
                 ? context.deserialize(json.get("interpolation_type"), InterpolationType.class)

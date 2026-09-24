@@ -2,7 +2,7 @@ package ml.mypals.vectorthree.mixin.area.sodium;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import ml.mypals.vectorthree.shape.AreaSuppression;
+import ml.mypals.vectorthree.shape.area.AreaSuppression;
 import net.caffeinemc.mods.sodium.client.model.light.data.LightDataAccess;
 import net.minecraft.client.renderer.block.BlockAndTintGetter;
 import net.minecraft.core.BlockPos;

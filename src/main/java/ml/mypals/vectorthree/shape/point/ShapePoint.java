@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.point;
 
 import net.minecraft.world.phys.Vec3;
 

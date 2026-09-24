@@ -1,6 +1,6 @@
 package ml.mypals.vectorthree.mixin.area;
 
-import ml.mypals.vectorthree.shape.AreaSuppression;
+import ml.mypals.vectorthree.shape.area.AreaSuppression;
 import net.minecraft.client.renderer.chunk.RenderSectionRegion;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;

@@ -1,6 +1,6 @@
 package ml.mypals.vectorthree.mixin.area;
 
-import ml.mypals.vectorthree.shape.AreaShape;
+import ml.mypals.vectorthree.shape.area.AreaShape;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;

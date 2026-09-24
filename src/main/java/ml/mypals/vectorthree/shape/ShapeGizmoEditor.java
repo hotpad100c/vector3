@@ -1,6 +1,8 @@
 package ml.mypals.vectorthree.shape;
 
+import ml.mypals.vectorthree.mixin.flashback.ReplayUIAccessor;
 import com.moulberry.flashback.editor.ui.ReplayUI;
+import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
@@ -10,6 +12,7 @@ import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
+import ml.mypals.vectorthree.shape.point.ShapePoint;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
@@ -30,22 +33,24 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 public final class ShapeGizmoEditor implements ShapeTrackEditor {
-    private static final Identifier MOVE_MODEL = Vector3.id("models/obj/move.obj");
+    public static final Identifier MOVE_MODEL = Vector3.id("models/obj/move.obj");
     private static final Identifier ROTATE_MODEL = Vector3.id("models/obj/rotation.obj");
     private static final Identifier SCALE_MODEL = Vector3.id("models/obj/scale.obj");
-    private static final Identifier CENTER_MODEL = Vector3.id("models/obj/m_center.obj");
+    public static final Identifier CENTER_MODEL = Vector3.id("models/obj/m_center.obj");
     private static final Color X_COLOR = new Color(255, 55, 55, 230);
     private static final Color Y_COLOR = new Color(55, 255, 55, 230);
     private static final Color Z_COLOR = new Color(70, 100, 255, 230);
     private static final Color PROPERTY_COLOR = new Color(255, 155, 35, 240);
-    private static final Color HOVER_COLOR = new Color(255, 235, 40, 255);
-    private static final Color ACTIVE_COLOR = Color.WHITE;
+    public static final Color HOVER_COLOR = new Color(255, 235, 40, 255);
+    public static final Color ACTIVE_COLOR = Color.WHITE;
     private static final double ARROW_POINT_GIZMO_SCALE = 0.1;
     private static final Color AABB_COLOR = new Color(255, 220, 0, 255);
     private static final Color CENTER_POINT_COLOR = new Color(255, 40, 40, 255);
     private static final Color AREA_SELECTION_COLOR = new Color(60, 140, 255, 255);
     private static final float AABB_EDGE_WIDTH = 1F;
     private static final double CENTER_POINT_GIZMO_SCALE = 0.25;
+    public static final double GRID_STEP = 0.5;
+    public static final double ANGLE_STEP = 15;
 
     private enum Mode { MOVE, ROTATE, SCALE, GEOMETRY }
     private enum Axis { X, Y, Z, NONE }
@@ -124,7 +129,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             if (ImGui.isMouseClicked(1) && hovered != null) {
                 ReplayUI.imguiWindower.ungrab();
                 beginDrag(hovered, state, ray, camera);
-            } else if (ImGui.isMouseClicked(1) && inViewport) {
+            } else if (ImGui.isMouseClicked(1) && inViewport && !Vector3.ORBIT_GIZMO.isHovering()) {
                 String shapeId = ShapeTrackRegistry.pickShape(ray);
                 if (shapeId != null) ShapeTimelineSelection.request(shapeId);
             }
@@ -245,16 +250,16 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private void addGeometryHandles(ShapeState state) {
         switch (state.shapeType()) {
-            case "box", "box_wireframe", "wireframed_box" -> {
+            case "box" -> {
                 add(Operation.DIMENSION, Axis.X, -1, SCALE_MODEL, X_COLOR);
                 add(Operation.DIMENSION, Axis.Y, -1, SCALE_MODEL, Y_COLOR);
                 add(Operation.DIMENSION, Axis.Z, -1, SCALE_MODEL, Z_COLOR);
             }
-            case "cylinder", "cylinder_wireframe", "cone", "cone_wireframe" -> {
+            case "cylinder", "cone" -> {
                 add(Operation.HEIGHT, Axis.Y, -1, MOVE_MODEL, Y_COLOR);
                 add(Operation.RADIUS, Axis.X, -1, MOVE_MODEL, PROPERTY_COLOR);
             }
-            case "face_circle", "line_circle" -> add(Operation.RADIUS, Axis.Y, -1, SCALE_MODEL, PROPERTY_COLOR);
+            case "face_circle" -> add(Operation.RADIUS, Axis.Y, -1, SCALE_MODEL, PROPERTY_COLOR);
             case "sphere" -> add(Operation.RADIUS, Axis.X, -1, SCALE_MODEL, PROPERTY_COLOR);
             case "line", "line_strip", "arrow", "area" -> {
                 int count = state.points() == null ? 0 : state.points().size();
@@ -420,7 +425,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         return new Vector3f(x, y, z);
     }
 
-    private double gizmoScale(Vec3 position) {
+    public static double gizmoScale(Vec3 position) {
         Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
         double distance = Math.max(0.25, camera.position().distanceTo(position));
         double height = Math.max(1, ReplayUI.viewportSizeY);
@@ -476,7 +481,46 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         updateColors();
     }
 
+    /** Ctrl snaps whatever the drag changed: positions/points and sizes/scale to 0.5, rotation to 15°. */
     private ShapeState drag(RayModelIntersection.Ray ray, Camera camera) {
+        ShapeState result = dragUnsnapped(ray, camera);
+        return result != null && InputHelper.isCtrlDownRaw() ? snapChanged(result) : result;
+    }
+
+    private ShapeState snapChanged(ShapeState state) {
+        float[] position = {(float) snap(state.x(), dragStart.x(), GRID_STEP, false),
+                (float) snap(state.y(), dragStart.y(), GRID_STEP, false),
+                (float) snap(state.z(), dragStart.z(), GRID_STEP, false)};
+        float[] rotation = {(float) snap(state.pitch(), dragStart.pitch(), ANGLE_STEP, false),
+                (float) snap(state.yaw(), dragStart.yaw(), ANGLE_STEP, false),
+                (float) snap(state.roll(), dragStart.roll(), ANGLE_STEP, false)};
+        float[] scale = {(float) snap(state.scaleX(), dragStart.scaleX(), GRID_STEP, true),
+                (float) snap(state.scaleY(), dragStart.scaleY(), GRID_STEP, true),
+                (float) snap(state.scaleZ(), dragStart.scaleZ(), GRID_STEP, true)};
+        float[] size = {(float) snap(state.sizeX(), dragStart.sizeX(), GRID_STEP, true),
+                (float) snap(state.sizeY(), dragStart.sizeY(), GRID_STEP, true),
+                (float) snap(state.sizeZ(), dragStart.sizeZ(), GRID_STEP, true)};
+        List<ShapePoint> points = state.points();
+        if (points != null && dragStart.points() != null && points.size() == dragStart.points().size()) {
+            List<ShapePoint> snapped = new ArrayList<>(points.size());
+            for (int i = 0; i < points.size(); i++) {
+                ShapePoint now = points.get(i), before = dragStart.points().get(i);
+                snapped.add(new ShapePoint(snap(now.x(), before.x(), GRID_STEP, false),
+                        snap(now.y(), before.y(), GRID_STEP, false), snap(now.z(), before.z(), GRID_STEP, false)));
+            }
+            points = snapped;
+        }
+        return with(state, position, rotation, scale, size, points);
+    }
+
+    /** Snaps {@code value} to the step grid only if the drag moved it away from {@code before}. */
+    public static double snap(double value, double before, double step, boolean positive) {
+        if (Math.abs(value - before) < 1.0e-6) return value;
+        double snapped = Math.round(value / step) * step;
+        return positive ? Math.max(step, snapped) : snapped;
+    }
+
+    private ShapeState dragUnsnapped(RayModelIntersection.Ray ray, Camera camera) {
         if (dragging.operation() == Operation.MOVE_FREE
                 || dragging.operation() == Operation.POINT && dragging.axis() == Axis.NONE) {
             Vec3 current = intersectPlane(ray, dragOrigin, dragPlaneNormal);
@@ -625,7 +669,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         return new Vec3(value.x / state.scaleX(), value.y / state.scaleY(), value.z / state.scaleZ());
     }
 
-    private static double axisParameter(RayModelIntersection.Ray ray, Vec3 origin, Vec3 axis) {
+    public static double axisParameter(RayModelIntersection.Ray ray, Vec3 origin, Vec3 axis) {
         Vec3 direction = ray.direction.normalize();
         double dot = axis.dot(direction);
         double denominator = 1 - dot * dot;
@@ -634,35 +678,35 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         return (dot * direction.dot(offset) - axis.dot(offset)) / denominator;
     }
 
-    private static Vec3 intersectPlane(RayModelIntersection.Ray ray, Vec3 point, Vec3 normal) {
+    public static Vec3 intersectPlane(RayModelIntersection.Ray ray, Vec3 point, Vec3 normal) {
         double denominator = ray.direction.dot(normal);
         if (Math.abs(denominator) < 1.0e-6) return null;
         double distance = point.subtract(ray.origin).dot(normal) / denominator;
         return ray.origin.add(ray.direction.scale(distance));
     }
 
-    private static double angleOnPlane(Vec3 value, Vec3 normal) {
+    public static double angleOnPlane(Vec3 value, Vec3 normal) {
         Vec3 reference = Math.abs(normal.y) < 0.9 ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
         Vec3 first = normal.cross(reference).normalize();
         Vec3 second = normal.cross(first).normalize();
         return Math.atan2(value.dot(second), value.dot(first));
     }
 
-    private static double wrapAngle(double angle) {
+    public static double wrapAngle(double angle) {
         while (angle > Math.PI) angle -= Math.PI * 2;
         while (angle < -Math.PI) angle += Math.PI * 2;
         return angle;
     }
 
     /** Inside the viewport rect and not over an ImGui window drawn on top of it (see EditorCameraController). */
-    private static boolean mouseInViewport() {
+    public static boolean mouseInViewport() {
         var mouse = ReplayUI.getMouseViewportFraction();
         return ReplayUI.isActive() && mouse != null
                 && mouse.x >= 0 && mouse.x <= 1 && mouse.y >= 0 && mouse.y <= 1
-                && ReplayUI.imguiWindower.getMouseHandledBy().allowGame();
+                && ReplayUIAccessor.vector3$isFrameHovered();
     }
 
-    private static Vec3 unboundedMouseLookVector() {
+    public static Vec3 unboundedMouseLookVector() {
         if (ReplayUI.lastProjectionMatrix == null || ReplayUI.lastViewQuaternion == null) return null;
         var mouse = ReplayUI.getMouseViewportFraction();
         if (mouse == null) return null;

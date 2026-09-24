@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.mixin.area;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import ml.mypals.vectorthree.shape.AreaSuppression;
+import ml.mypals.vectorthree.shape.area.AreaSuppression;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
 import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;

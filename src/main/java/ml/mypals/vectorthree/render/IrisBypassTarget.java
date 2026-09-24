@@ -24,6 +24,8 @@ import java.util.Objects;
 
 public final class IrisBypassTarget {
     public static boolean debugShowOnly = false;
+    /** Shape#customData key: true for a vanilla-content shape (item/block/entity) drawn in the bypass pass. */
+    public static final String SHAPE_FLAG = "vector3:bypass_shaders";
 
     private static RenderTarget target;
     private static boolean preparedThisFrame;
@@ -42,8 +44,6 @@ public final class IrisBypassTarget {
 
     private IrisBypassTarget() {}
 
-    /** Iris's own pack-in-use flag — the one its shader override and vertex widening check — rather than
-     *  the public API's, which can disagree with it for a few frames while a pack is being toggled. */
     public static boolean isActive() {
         return Iris.isPackInUseQuick();
     }
@@ -95,12 +95,14 @@ public final class IrisBypassTarget {
     public static RenderTarget prepareForDraw(String label) {
         ensureTarget();
         if (debugShowOnly) {
-            if (redirectLabelsThisFrame.length() > 0) redirectLabelsThisFrame.append(',');
+            if (!redirectLabelsThisFrame.isEmpty()) redirectLabelsThisFrame.append(',');
             redirectLabelsThisFrame.append(label);
         }
         if (!preparedThisFrame) {
 
             Vector4f clearColor = debugShowOnly ? new Vector4f(1, 0, 1, 1) : new Vector4f(0, 0, 0, 0);
+            assert target.getColorTexture() != null;
+            assert target.getDepthTexture() != null;
             RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(
                     target.getColorTexture(), clearColor, target.getDepthTexture(), 0.0);
             target.copyDepthFrom(Minecraft.getInstance().gameRenderer.mainRenderTarget());
@@ -115,16 +117,10 @@ public final class IrisBypassTarget {
         return target;
     }
 
-    /** Call after drawing into the real main target mid-frame (e.g. AreaShape, which Iris still shades),
-     *  so later bypass draws are occluded by it: its depth didn't exist yet when this frame's copy ran. */
     public static void markMainDepthChanged() {
         if (preparedThisFrame) mainDepthChanged = true;
     }
 
-    /** Folds the main target's current depth into this target's, keeping whichever is nearer, so depth
-     *  already written here by bypass draws survives. Vanilla's depth-blit shaders with a normal depth
-     *  test instead of BLIT_DEPTH's always-pass; the compare op follows Iris's reversed-Z undo like any
-     *  other pipeline during level rendering. */
     private static void mergeMainDepth() {
         if (depthMergePipeline == null) {
             depthMergePipeline = RenderPipelines.register(RenderPipeline.builder()
@@ -138,6 +134,7 @@ public final class IrisBypassTarget {
         }
         RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
         if (!main.hasDepth()) return;
+        assert target.getDepthTextureView() != null;
         RenderPassDescriptor descriptor = RenderPassDescriptor.builder(() -> "vector3_bypass_depth_merge")
                 .withDepthAttachment(target.getDepthTextureView(), OptionalDouble.empty())
                 .withRenderArea(new RenderPass.RenderArea(0, 0, target.width, target.height))
@@ -176,8 +173,6 @@ public final class IrisBypassTarget {
         redirectCallsThisFrame = 0;
     }
 
-    /** Sized to the main target, not the window: depth is copied from it and the result is composited
-     *  back onto it, and Flashback's editor viewport can make it smaller than the window. */
     private static void ensureTarget() {
         RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
         int width = Math.max(1, main.width);

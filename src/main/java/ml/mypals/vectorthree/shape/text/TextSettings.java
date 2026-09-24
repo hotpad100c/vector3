@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.text;
 
 public record TextSettings(String value, boolean holdText, boolean shadow,
         boolean outline, String billboard, String font) {

@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.area;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -10,6 +10,8 @@ import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.render.IrisBypassTarget;
+import ml.mypals.vectorthree.shape.point.ShapePoint;
+import ml.mypals.vectorthree.shape.ShapeState;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.vertices.ImmediateState;
 import net.minecraft.client.Camera;
@@ -23,7 +25,11 @@ import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -53,6 +59,10 @@ public final class AreaShape extends Shape implements EmptyMesh {
     private final Quaternionf destRotation = new Quaternionf();
     private Vec3 destScale = new Vec3(1, 1, 1);
     private List<BlockEntity> blockEntities = List.of();
+    private AABB sourceBounds;
+    private AreaOptions options = AreaOptions.DEFAULT;
+    private boolean projectionShown;
+    private AreaProjection.Projection projection;
 
     public AreaShape(ShapeState state, Color color, boolean seeThrough) {
         super(RenderingType.BATCH, transformer -> {}, color, Vec3.ZERO, seeThrough);
@@ -73,6 +83,18 @@ public final class AreaShape extends Shape implements EmptyMesh {
         destScale = new Vec3(state.scaleX(), state.scaleY(), state.scaleZ());
         outlineEnabled = state.outline();
         outlineColor = colorToVector4f(new Color(state.outlineColor(), true));
+        options = AreaOptions.orDefault(state.areaOptions());
+        projectionShown = state.visible() && ((state.color() >>> 24) & 0xFF) > 0;
+        publishProjection();
+    }
+
+    /** Tells the entity/particle mixins where this area carries its source region's contents. */
+    private void publishProjection() {
+        boolean wanted = sourceBounds != null && projectionShown
+                && (options.projectEntities() || options.projectParticles());
+        projection = wanted ? new AreaProjection.Projection(sourceBounds, sourceCenter, destCenter,
+                new Quaternionf(destRotation), destScale, options.projectEntities(), options.projectParticles()) : null;
+        AreaProjection.set(shapeId, projection);
     }
 
     private BlockPos bakedMin = BlockPos.ZERO;
@@ -86,6 +108,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         Vec3 worldMin = new Vec3(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z));
         Vec3 worldMax = new Vec3(Math.max(a.x, b.x), Math.max(a.y, b.y), Math.max(a.z, b.z));
         sourceCenter = worldMin.add(worldMax).scale(0.5);
+        sourceBounds = new AABB(worldMin, worldMax);
         Vec3 halfSize = worldMax.subtract(worldMin).scale(0.5);
         localMin = halfSize.scale(-1);
         localMax = halfSize;
@@ -93,6 +116,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         bakedMin = BlockPos.containing(worldMin.x, worldMin.y, worldMin.z);
         bakedMax = BlockPos.containing(worldMax.x - 1.0e-6, worldMax.y - 1.0e-6, worldMax.z - 1.0e-6);
         rebakeRegion();
+        publishProjection();
     }
 
     private Boolean bakedExtended;
@@ -149,6 +173,9 @@ public final class AreaShape extends Shape implements EmptyMesh {
         // which previously drew the old layout until a UI-side rebake caught up (stretched triangles).
         boolean dirty = AreaSuppression.consumeDirty(shapeId);
         if (dirty || (bakedExtended != null && bakedExtended != irisExtendsNow())) rebakeRegion();
+        // Fully transparent: draw nothing (the source region stays hidden). Fully opaque already keeps
+        // solid/cutout on vanilla's opaque pipelines; only alpha < 1 switches them to translucent.
+        if (baseColor.getAlpha() == 0) return;
         if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
             try {
                 drawMesh();
@@ -157,9 +184,10 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 Vector3.LOGGER.warn("AreaShape draw failed, pausing its draws until the next rebake", exception);
             }
         }
-        if (!blockEntities.isEmpty() && !blockEntityDrawFailed) {
+        boolean projectsEntities = projection != null && projection.entities();
+        if ((!blockEntities.isEmpty() || projectsEntities) && !blockEntityDrawFailed) {
             try {
-                drawBlockEntities();
+                drawBlockEntities(projectsEntities);
             } catch (Exception exception) {
                 blockEntityDrawFailed = true;
                 Vector3.LOGGER.warn("AreaShape block entity draw failed, pausing them until the next rebake", exception);
@@ -169,7 +197,9 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
     private boolean blockEntityDrawFailed;
 
-    private void drawBlockEntities() {
+    /** Block entities of the baked region, plus (when projecting) the entities currently inside the
+     *  source region, all drawn at the destination through one feature render. */
+    private void drawBlockEntities(boolean projectEntities) {
         Minecraft minecraft = Minecraft.getInstance();
         Camera camera = minecraft.gameRenderer.mainCamera();
         Vec3 cameraPos = camera.position();
@@ -199,6 +229,20 @@ public final class AreaShape extends Shape implements EmptyMesh {
                 poseStack.rotate(destRotation);
                 poseStack.scale((float) destScale.x, (float) destScale.y, (float) destScale.z);
                 dispatcher.submit(state, poseStack, submits, cameraRenderState);
+            }
+            if (projectEntities && minecraft.level != null) {
+                EntityRenderDispatcher entityDispatcher = minecraft.getEntityRenderDispatcher();
+                for (Entity entity : minecraft.level.getEntities((Entity) null, sourceBounds,
+                        candidate -> !AreaProjection.isViewer(candidate))) {
+                    EntityRenderState state = entityDispatcher.extractEntity(entity, partialTick);
+                    Vec3 dest = projection.map(entity.getX(partialTick), entity.getY(partialTick), entity.getZ(partialTick))
+                            .subtract(cameraPos);
+                    PoseStack poseStack = new PoseStack();
+                    poseStack.translate(dest.x, dest.y, dest.z);
+                    poseStack.rotate(destRotation);
+                    poseStack.scale((float) destScale.x, (float) destScale.y, (float) destScale.z);
+                    entityDispatcher.submit(state, cameraRenderState, 0, 0, 0, poseStack, submits);
+                }
             }
             if (translucent) {
                 AreaBlockEntityTranslucency.withModulator(modulator, () -> Helpers.renderFeatures(minecraft, submits));
@@ -302,6 +346,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
     @Override
     public void discard() {
         AreaSuppression.clear(shapeId);
+        AreaProjection.clear(shapeId);
         solidMesh.close();
         cutoutMesh.close();
         translucentMesh.close();

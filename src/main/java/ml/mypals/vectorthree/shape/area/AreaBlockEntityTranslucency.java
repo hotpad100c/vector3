@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.area;
 
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import ml.mypals.vectorthree.mixin.area.RenderSetupAccessor;
@@ -12,14 +12,6 @@ import org.joml.Vector4f;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * Lets an AreaShape's destination block entities fade with the shape's color alpha, like its baked
- * blocks. Opaque/cutout block entity render types don't blend, so each is swapped for a translucent
- * variant with the same texture (AreaTranslucentSubmitNodeStorage), and the variant's per-draw color
- * modulator is set from the shape's color while it renders (see AreaBlockEntityAlphaMixin) — no vertex
- * data is touched. Adapted from Lucidity's selective-rendering block entity transparency.
- */
 public final class AreaBlockEntityTranslucency {
     private static final Map<RenderType, RenderType> VARIANTS = new ConcurrentHashMap<>();
     private static final Set<RenderType> VARIANT_SET = ConcurrentHashMap.newKeySet();
@@ -27,7 +19,6 @@ public final class AreaBlockEntityTranslucency {
 
     private AreaBlockEntityTranslucency() {}
 
-    /** Translucent twin of an ENTITY-format type, or the type itself when it can't be swapped safely. */
     static RenderType entityVariantOf(RenderType original) {
         if (VARIANT_SET.contains(original) || !DefaultVertexFormat.ENTITY.equals(original.format())) return original;
         Identifier texture = textureOf(original);
@@ -35,7 +26,6 @@ public final class AreaBlockEntityTranslucency {
         return VARIANTS.computeIfAbsent(original, key -> register(RenderTypes.entityTranslucent(texture), texture.toString()));
     }
 
-    /** Translucent twin of a block-model type; keeps the block vertex format translucentMovingBlock uses. */
     static RenderType blockVariantOf(RenderType original) {
         RenderType translucent = RenderTypes.translucentMovingBlock();
         if (VARIANT_SET.contains(original) || !translucent.format().equals(original.format())) return original;
@@ -56,7 +46,6 @@ public final class AreaBlockEntityTranslucency {
         return binding == null ? null : ((TextureBindingAccessor) binding).vector3$location();
     }
 
-    /** Runs a block entity draw with {@code modulator} applied to every translucent variant it prepares. */
     static void withModulator(Vector4f modulator, Runnable draw) {
         Vector4f previous = currentModulator;
         currentModulator = modulator;
@@ -67,7 +56,6 @@ public final class AreaBlockEntityTranslucency {
         }
     }
 
-    /** The color modulator for {@code renderType}'s draw, or null to keep vanilla's white default. */
     public static Vector4f modulatorFor(RenderType renderType) {
         return currentModulator != null && VARIANT_SET.contains(renderType) ? currentModulator : null;
     }

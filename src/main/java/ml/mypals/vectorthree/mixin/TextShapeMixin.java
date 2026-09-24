@@ -2,8 +2,8 @@ package ml.mypals.vectorthree.mixin;
 
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
-import ml.mypals.vectorthree.shape.FontTextShape;
-import ml.mypals.vectorthree.shape.TextFormatting;
+import ml.mypals.vectorthree.shape.text.FontTextShape;
+import ml.mypals.vectorthree.shape.text.TextFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.util.FormattedCharSequence;
 import org.spongepowered.asm.mixin.Mixin;

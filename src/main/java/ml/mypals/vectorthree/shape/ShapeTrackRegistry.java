@@ -10,7 +10,6 @@ import ml.mypals.ryansrenderingkit.shape.cylinder.CylinderShape;
 import ml.mypals.ryansrenderingkit.shape.cylinder.CylinderWireframeShape;
 import ml.mypals.ryansrenderingkit.shape.box.BoxWireframeShape;
 import ml.mypals.ryansrenderingkit.shape.box.BoxShape;
-import ml.mypals.ryansrenderingkit.shape.box.WireframedBoxShape;
 import ml.mypals.ryansrenderingkit.shape.line.LineShape;
 import ml.mypals.ryansrenderingkit.shape.line.StripLineShape;
 import ml.mypals.ryansrenderingkit.shape.round.SphereShape;
@@ -21,15 +20,26 @@ import ml.mypals.ryansrenderingkit.shape.round.LineCircleShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.ryansrenderingkit.shapeManagers.VertexBuilderGetter;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
+import ml.mypals.vectorthree.shape.area.AreaShape;
+import ml.mypals.vectorthree.shape.arrow.ArrowShape;
+import ml.mypals.vectorthree.shape.media.ImageShape;
+import ml.mypals.vectorthree.shape.media.VideoShape;
+import ml.mypals.vectorthree.shape.point.ShapePoint;
+import ml.mypals.vectorthree.shape.text.FontTextShape;
+import ml.mypals.vectorthree.shape.text.TextSettings;
+import ml.mypals.vectorthree.render.IrisBypassTarget;
 import net.irisshaders.iris.api.v0.IrisApi;
 import net.irisshaders.iris.api.v0.IrisProgram;
-import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -54,8 +64,11 @@ public final class ShapeTrackRegistry {
     private static final Map<String, Shape> SHAPES = new LinkedHashMap<>();
     private static final Map<String, String> SHAPE_TYPES = new LinkedHashMap<>();
     private static final Map<String, ShapeState> LAST_STATES = new LinkedHashMap<>();
+    private static final Map<String, List<WireframePart>> WIREFRAMES = new LinkedHashMap<>();
+    private static final Map<String, String> WIREFRAME_TYPES = new LinkedHashMap<>();
     private static List<String> blockIds;
     private static List<String> itemIds;
+    private static List<String> entityIds;
     private static String previewHighlightId;
     private static boolean fixedSeeThroughPipelines;
 
@@ -80,35 +93,18 @@ public final class ShapeTrackRegistry {
                 .color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough())
                 .build(Shape.RenderingType.BATCH));
-        register("box_wireframe", "vector3.shape.box_wireframe", state -> ShapeGenerator.generateBoxWireframe()
-                .size(size(state)).edgeWidth(state.lineWidth()).color(new Color(state.color(), true))
-                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("wireframed_box", "vector3.shape.wireframed_box", state -> ShapeGenerator.generateWireframedBox()
-                .size(size(state)).edgeWidth(state.lineWidth()).color(new Color(state.color(), true))
-                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("sphere", "vector3.shape.sphere", state -> ShapeGenerator.generateSphere()
                 .radius((float) state.sizeX() / 2).segments(state.segments()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("face_circle", "vector3.shape.face_circle", state -> ShapeGenerator.generateFaceCircle()
                 .radius((float) state.sizeX() / 2).segments(state.segments()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("line_circle", "vector3.shape.line_circle", state -> ShapeGenerator.generateLineCircle()
-                .radius((float) state.sizeX() / 2).segments(state.segments()).lineWidth(state.lineWidth())
-                .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
         register("cylinder", "vector3.shape.cylinder", state -> ShapeGenerator.generateCylinder()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
                 .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("cylinder_wireframe", "vector3.shape.cylinder_wireframe", state -> ShapeGenerator.generateCylinderWireframe()
-                .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
-                .width(state.lineWidth()).color(new Color(state.color(), true)).seeThrough(state.seeThrough())
-                .build(Shape.RenderingType.BATCH));
         register("cone", "vector3.shape.cone", state -> ShapeGenerator.generateCone()
                 .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
                 .color(new Color(state.color(), true)).seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
-        register("cone_wireframe", "vector3.shape.cone_wireframe", state -> ShapeGenerator.generateConeWireframe()
-                .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
-                .width(state.lineWidth()).color(new Color(state.color(), true)).seeThrough(state.seeThrough())
-                .build(Shape.RenderingType.BATCH));
         register("line", "vector3.shape.line", state -> ShapeGenerator.generateLine()
                 .start(point(state, 0)).end(point(state, 1)).lineWidth(state.lineWidth()).color(new Color(state.color(), true))
                 .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
@@ -123,6 +119,8 @@ public final class ShapeTrackRegistry {
                 .block(blockState(state.model(), state.blockProperties())).build());
         register("item", "vector3.shape.item", state -> ShapeGenerator.generateItem()
                 .itemStack(new ItemStack(item(state))).build());
+        register("entity", "vector3.shape.entity", state -> ShapeGenerator.generateEntity()
+                .entity(entity(state)).light(0xF000F0).build(Shape.RenderingType.BATCH));
         register("obj", "vector3.shape.obj", state -> new ObjModelShape(Shape.RenderingType.BATCH,
                 transformer -> {}, objModelId(state.model()), Vec3.ZERO,
                 new Color(state.color(), true), state.seeThrough()));
@@ -186,7 +184,7 @@ public final class ShapeTrackRegistry {
             return rayToPoint(ray, new Vec3(state.x(), state.y(), state.z()));
         }
         boolean lines = switch (state.shapeType()) {
-            case "box_wireframe", "line_circle", "cylinder_wireframe", "cone_wireframe", "line", "line_strip" -> true;
+            case "line", "line_strip" -> true;
             default -> false;
         };
         if (lines || indices.length % 3 != 0) return rayToSegments(ray, model, indices);
@@ -237,6 +235,7 @@ public final class ShapeTrackRegistry {
 
     public static void clear() {
         for (String shapeId : List.copyOf(SHAPES.keySet())) {
+            removeWireframe(shapeId);
             ShapeManagers.removeShapes(Identifier.parse(shapeId));
             SHAPES.get(shapeId).discard();
         }
@@ -250,6 +249,7 @@ public final class ShapeTrackRegistry {
     public static void retainOnly(java.util.Set<String> liveShapeIds) {
         for (String shapeId : List.copyOf(SHAPES.keySet())) {
             if (liveShapeIds.contains(shapeId)) continue;
+            removeWireframe(shapeId);
             ShapeManagers.removeShapes(Identifier.parse(shapeId));
             SHAPES.get(shapeId).discard();
             SHAPES.remove(shapeId);
@@ -262,19 +262,18 @@ public final class ShapeTrackRegistry {
         fixSeeThroughPipelines();
         Shape shape = SHAPES.get(state.shapeId());
         ShapeState previous = LAST_STATES.get(state.shapeId());
-        boolean immutableWidthChanged = previous != null
-                && (state.shapeType().equals("box_wireframe") || state.shapeType().equals("wireframed_box"))
-                && previous.lineWidth() != state.lineWidth();
         boolean modelChanged = previous != null
                 && (state.shapeType().equals("obj") || state.shapeType().equals("block")
-                        || state.shapeType().equals("item") || state.shapeType().equals("image")
+                        || state.shapeType().equals("item") || state.shapeType().equals("entity")
+                        || state.shapeType().equals("image")
                         || state.shapeType().equals("video"))
                 && (!java.util.Objects.equals(previous.model(), state.model())
                         || !java.util.Objects.equals(previous.blockProperties(), state.blockProperties()));
         boolean areaBoundsChanged = previous != null && state.shapeType().equals("area")
                 && !java.util.Objects.equals(previous.points(), state.points());
         if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId()))
-                || immutableWidthChanged || modelChanged || areaBoundsChanged)) {
+                || modelChanged || areaBoundsChanged)) {
+            removeWireframe(state.shapeId());
             ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
             shape.discard();
             SHAPES.remove(state.shapeId());
@@ -294,11 +293,53 @@ public final class ShapeTrackRegistry {
         shape.forceSetWorldRotation(new Vector3f(state.pitch(), state.yaw(), state.roll()));
         shape.forceSetWorldScale(new Vec3(state.scaleX(), state.scaleY(), state.scaleZ()));
         if (shape instanceof AreaShape area) area.updateTransform(state);
-        if (shape instanceof BoxShape box) box.forceSetDimensions(size(state));
-        if (shape instanceof WireframedBoxShape wireframed) {
-            wireframed.edgeWidth = state.lineWidth();
-            wireframed.lineSeeThrough = state.seeThrough();
+        updateGeometry(shape, state);
+        if (shape instanceof VideoShape video) video.setPlayback(state.videoStartTick(),
+                !state.manualPlayback(), !state.noLoop(), (float) state.playbackSeconds());
+        if (shape instanceof TextShape textShape) {
+            TextSettings settings = state.text() == null ? TextSettings.defaults() : state.text();
+            textShape.contents.clear();
+            textShape.contents.addAll(Arrays.asList(settings.value().split("\\R", -1)));
+            textShape.colors.clear();
+            textShape.colors.add(new Color(state.color(), true));
+            textShape.shadow = settings.shadow();
+            textShape.outline = settings.outline();
+            textShape.setBillboardMode(TextShape.BillBoardMode.valueOf(settings.billboard()));
+            if (textShape instanceof FontTextShape fontShape) {
+                fontShape.font = settings.fontOrDefault();
+                fontShape.outlineColor = state.outlineColor();
+            }
         }
+        if (previous != null && previous.seeThrough() != state.seeThrough()) {
+            ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
+            shape.seeThrough = state.seeThrough();
+            ShapeManagers.addShape(Identifier.parse(state.shapeId()), shape);
+        } else {
+            shape.seeThrough = state.seeThrough();
+        }
+        applyParent(shape, state.parentShapeId());
+        shape.syncLastToTarget();
+        Color color = new Color(state.color(), true);
+        shape.setBaseColor(color);
+        if (shape instanceof CylinderShape cylinder) {
+            cylinder.color = color;
+        }
+        if (shape instanceof TextShape textShape) {
+            textShape.colors.clear();
+            textShape.colors.add(color);
+        }
+        if (usesBypassOption(state.shapeType())) shape.customData.put(IrisBypassTarget.SHAPE_FLAG, state.bypassShaders());
+        if (state.visible() && !WireframeSettings.orDefault(state.wireframe()).hideFaces()) shape.enable();
+        else shape.disable();
+        syncWireframe(shape, state, previous);
+        LAST_STATES.put(state.shapeId(), state);
+
+    }
+
+    private static void updateGeometry(Shape shape, ShapeState state) {
+        // BoxWireframeShape's width is fixed at construction (its setLineWidth casts to the wrong
+        // transformer), so syncWireframe rebuilds it when the width changes instead.
+        if (shape instanceof BoxShape box) box.forceSetDimensions(size(state));
         if (shape instanceof LineCircleShape circle) {
             circle.forceSetRadius((float) state.sizeX() / 2);
             circle.forceSetSegments(state.segments());
@@ -337,49 +378,114 @@ public final class ShapeTrackRegistry {
         }
         if (shape instanceof ArrowShape arrow)
             arrow.forceSet(point(state, 0), point(state, 1), state.lineWidth(), (float) state.sizeX());
-        if (shape instanceof VideoShape video) video.setPlayback(state.videoStartTick(),
-                !state.manualPlayback(), !state.noLoop(), (float) state.playbackSeconds());
-        if (shape instanceof TextShape textShape) {
-            TextSettings settings = state.text() == null ? TextSettings.defaults() : state.text();
-            textShape.contents.clear();
-            textShape.contents.addAll(Arrays.asList(settings.value().split("\\R", -1)));
-            textShape.colors.clear();
-            textShape.colors.add(new Color(state.color(), true));
-            textShape.shadow = settings.shadow();
-            textShape.outline = settings.outline();
-            textShape.setBillboardMode(TextShape.BillBoardMode.valueOf(settings.billboard()));
-            if (textShape instanceof FontTextShape fontShape) {
-                fontShape.font = settings.fontOrDefault();
-                fontShape.outlineColor = state.outlineColor();
+    }
+
+    /** Vanilla-content shapes, which can either be shaded by the shader pack or drawn in the bypass pass. */
+    public static boolean usesBypassOption(String type) {
+        return switch (type) {
+            case "block", "item", "entity" -> true;
+            default -> false;
+        };
+    }
+
+    public static boolean supportsWireframe(String type) {
+        return switch (type) {
+            case "box", "sphere", "face_circle", "cylinder", "cone" -> true;
+            default -> false;
+        };
+    }
+
+    private record WireframePart(Shape shape, Vector3f rotation) {}
+
+    private static List<WireframePart> createWireframe(ShapeState state) {
+        Color color = new Color(state.color(), true);
+        return switch (state.shapeType()) {
+            case "box" -> List.of(new WireframePart(ShapeGenerator.generateBoxWireframe().size(size(state))
+                    .edgeWidth(state.lineWidth()).color(color).seeThrough(state.seeThrough())
+                    .build(Shape.RenderingType.BATCH), new Vector3f()));
+            case "face_circle" -> List.of(new WireframePart(ring(state, color), new Vector3f()));
+            case "sphere" -> List.of(new WireframePart(ring(state, color), new Vector3f()),
+                    new WireframePart(ring(state, color), new Vector3f(90, 0, 0)),
+                    new WireframePart(ring(state, color), new Vector3f(0, 0, 90)));
+            case "cylinder" -> List.of(new WireframePart(ShapeGenerator.generateCylinderWireframe()
+                    .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
+                    .width(state.lineWidth()).color(color).seeThrough(state.seeThrough())
+                    .build(Shape.RenderingType.BATCH), new Vector3f()));
+            case "cone" -> List.of(new WireframePart(ShapeGenerator.generateConeWireframe()
+                    .radius((float) state.sizeX() / 2).height((float) state.sizeY()).segments(state.segments())
+                    .width(state.lineWidth()).color(color).seeThrough(state.seeThrough())
+                    .build(Shape.RenderingType.BATCH), new Vector3f()));
+            default -> throw new IllegalArgumentException("No wireframe for " + state.shapeType());
+        };
+    }
+
+    private static Shape ring(ShapeState state, Color color) {
+        return ShapeGenerator.generateLineCircle().radius((float) state.sizeX() / 2).segments(state.segments())
+                .lineWidth(state.lineWidth()).color(color).seeThrough(state.seeThrough())
+                .build(Shape.RenderingType.BATCH);
+    }
+
+    private static Identifier wireframeId(String shapeId) {
+        Identifier id = Identifier.parse(shapeId);
+        return Identifier.fromNamespaceAndPath(id.getNamespace(), "wireframe/" + id.getPath());
+    }
+
+    private static Identifier wireframePartId(String shapeId, int index) {
+        Identifier root = wireframeId(shapeId);
+        return Identifier.fromNamespaceAndPath(root.getNamespace(), root.getPath() + "/" + index);
+    }
+
+    private static void syncWireframe(Shape shape, ShapeState state, ShapeState previous) {
+        WireframeSettings settings = WireframeSettings.orDefault(state.wireframe());
+        List<WireframePart> parts = WIREFRAMES.get(state.shapeId());
+        boolean wanted = settings.enabled() && supportsWireframe(state.shapeType());
+        if (parts != null && (!wanted || parts.getFirst().shape().parent != shape
+                || !state.shapeType().equals(WIREFRAME_TYPES.get(state.shapeId()))
+                || parts.getFirst().shape() instanceof BoxWireframeShape box
+                        && box.edgeWidth != Math.max(0.1f, state.lineWidth()))) {
+            removeWireframe(state.shapeId());
+            parts = null;
+        }
+        if (!wanted) return;
+        if (parts == null) {
+            parts = createWireframe(state);
+            for (int i = 0; i < parts.size(); i++) {
+                shape.addChild(parts.get(i).shape());
+                ShapeManagers.addShape(wireframePartId(state.shapeId(), i), parts.get(i).shape());
+            }
+            WIREFRAMES.put(state.shapeId(), parts);
+            WIREFRAME_TYPES.put(state.shapeId(), state.shapeType());
+        } else if (previous != null && previous.seeThrough() != state.seeThrough()) {
+            ShapeManagers.removeShapes(wireframeId(state.shapeId()));
+            for (int i = 0; i < parts.size(); i++) {
+                parts.get(i).shape().seeThrough = state.seeThrough();
+                ShapeManagers.addShape(wireframePartId(state.shapeId(), i), parts.get(i).shape());
             }
         }
-        if (previous != null && previous.seeThrough() != state.seeThrough()) {
-            ShapeManagers.removeShapes(Identifier.parse(state.shapeId()));
-            shape.seeThrough = state.seeThrough();
-            ShapeManagers.addShape(Identifier.parse(state.shapeId()), shape);
-        } else {
-            shape.seeThrough = state.seeThrough();
+        Color color = new Color(settings.separateColor() ? settings.color() : state.color(), true);
+        for (WireframePart part : parts) {
+            Shape wireframe = part.shape();
+            wireframe.seeThrough = state.seeThrough();
+            wireframe.forceSetWorldPosition(Vec3.ZERO);
+            wireframe.forceSetWorldRotation(new Vector3f(part.rotation()));
+            wireframe.forceSetWorldScale(new Vec3(1, 1, 1));
+            updateGeometry(wireframe, state);
+            wireframe.syncLastToTarget();
+            wireframe.setBaseColor(color);
+            if (wireframe instanceof CylinderShape cylinder) cylinder.color = color;
+            if (state.visible()) wireframe.enable(); else wireframe.disable();
         }
-        applyParent(shape, state.parentShapeId());
-        shape.syncLastToTarget();
-        Color color = new Color(state.color(), true);
-        /*if (state.shapeId().equals(previewHighlightId))
-            color = new Color(255, 255, 0, color.getAlpha());
-       */ shape.setBaseColor(color);
-        if (shape instanceof CylinderShape cylinder) {
-            cylinder.color = color;
-        }
-        if (shape instanceof TextShape textShape) {
-            textShape.colors.clear();
-            textShape.colors.add(color);
-        }
-        if (shape instanceof WireframedBoxShape wireframed) {
-            wireframed.faceputColor = color;
-            wireframed.edgeputColor = color;
-        }
-        if (state.visible()) shape.enable(); else shape.disable();
-        LAST_STATES.put(state.shapeId(), state);
+    }
 
+    private static void removeWireframe(String shapeId) {
+        List<WireframePart> parts = WIREFRAMES.remove(shapeId);
+        WIREFRAME_TYPES.remove(shapeId);
+        if (parts == null) return;
+        ShapeManagers.removeShapes(wireframeId(shapeId));
+        for (WireframePart part : parts) {
+            part.shape().setParent(null);
+            part.shape().discard();
+        }
     }
 
     private static void ensureCustomManager(Shape shape) {
@@ -436,6 +542,23 @@ public final class ShapeTrackRegistry {
         return itemIds;
     }
 
+    public static List<String> entityIds() {
+        if (entityIds == null) entityIds = BuiltInRegistries.ENTITY_TYPE.entrySet().stream()
+                .filter(entry -> entry.getValue().canSummon())
+                .map(entry -> entry.getKey().identifier().toString()).sorted().toList();
+        return entityIds;
+    }
+
+    private static Entity entity(ShapeState state) {
+        var level = Minecraft.getInstance().level;
+        EntityType<?> fallback = BuiltInRegistries.ENTITY_TYPE.getValue(Identifier.withDefaultNamespace("pig"));
+        Identifier id = Identifier.tryParse(state.model());
+        EntityType<?> type = id == null ? fallback : BuiltInRegistries.ENTITY_TYPE.getValue(id);
+        Entity entity = level == null ? null : type.create(level, EntitySpawnReason.COMMAND);
+        if (entity == null && level != null) entity = fallback.create(level, EntitySpawnReason.COMMAND);
+        return entity;
+    }
+
     private static <T extends Comparable<T>> BlockState setProperty(
             BlockState state, Property<T> property, String value) {
         return property.getValue(value).map(parsed -> state.setValue(property, parsed)).orElse(state);
@@ -471,8 +594,7 @@ public final class ShapeTrackRegistry {
         rotation[2] = (float) Math.toDegrees(euler.z);
     }
 
-    /** World transform of the shape {@code shapeId} refers to, or identity if null/empty/unregistered. */
-    public static Matrix4f worldTransformOrIdentity(String shapeId) {
+     public static Matrix4f worldTransformOrIdentity(String shapeId) {
         return worldTransform(shapeId, new java.util.HashSet<>());
     }
 
@@ -501,7 +623,7 @@ public final class ShapeTrackRegistry {
         return false;
     }
 
-    private static void fixSeeThroughPipelines() {
+    public static void fixSeeThroughPipelines() {
         if (fixedSeeThroughPipelines || BuilderManagers.LINES_BUILDER_MANAGER == null
                 || BuilderManagers.LINE_STRIP_BUILDER_MANAGER == null
                 || BuilderManagers.TRIANGLES_BUILDER_MANAGER == null) return;
@@ -551,7 +673,7 @@ public final class ShapeTrackRegistry {
     private static RenderPipeline imageSeeThroughPipeline;
 
 
-    static RenderType imageType(Identifier textureId, boolean seeThrough) {
+    public static RenderType imageType(Identifier textureId, boolean seeThrough) {
         if (imagePipeline == null) {
             imagePipeline = registerImagePipeline("image_translucent", DepthStencilState.DEFAULT);
             imageSeeThroughPipeline = registerImagePipeline("image_translucent_see_through",

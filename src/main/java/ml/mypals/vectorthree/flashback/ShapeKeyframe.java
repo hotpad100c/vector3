@@ -6,12 +6,14 @@ import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.text.FontOptions;
-import ml.mypals.vectorthree.shape.ShapePoint;
+import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
-import ml.mypals.vectorthree.shape.TextSettings;
-import ml.mypals.vectorthree.shape.VideoShape;
-import ml.mypals.vectorthree.shape.AreaShape;
+import ml.mypals.vectorthree.shape.text.TextSettings;
+import ml.mypals.vectorthree.shape.media.VideoShape;
+import ml.mypals.vectorthree.shape.WireframeSettings;
+import ml.mypals.vectorthree.shape.area.AreaOptions;
+import ml.mypals.vectorthree.shape.area.AreaShape;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImBoolean;
 import imgui.moulberry90.type.ImInt;
@@ -141,6 +143,20 @@ public final class ShapeKeyframe extends Keyframe {
                 (state.outlineColor() & 255) / 255.0f,
                 ((state.outlineColor() >>> 24) & 255) / 255.0f
         };
+        ImBoolean bypassShaders = new ImBoolean(state.bypassShaders());
+        AreaOptions currentArea = AreaOptions.orDefault(state.areaOptions());
+        ImBoolean projectEntities = new ImBoolean(currentArea.projectEntities());
+        ImBoolean projectParticles = new ImBoolean(currentArea.projectParticles());
+        WireframeSettings currentWireframe = WireframeSettings.orDefault(state.wireframe());
+        ImBoolean showFaces = new ImBoolean(!currentWireframe.hideFaces());
+        ImBoolean wireframeEnabled = new ImBoolean(currentWireframe.enabled());
+        ImBoolean separateWireframeColor = new ImBoolean(currentWireframe.separateColor());
+        float[] wireframeColor = {
+                ((currentWireframe.color() >>> 16) & 255) / 255.0f,
+                ((currentWireframe.color() >>> 8) & 255) / 255.0f,
+                (currentWireframe.color() & 255) / 255.0f,
+                ((currentWireframe.color() >>> 24) & 255) / 255.0f
+        };
         TextSettings currentText = state.text() == null ? TextSettings.defaults() : state.text();
         ImString textValue = new ImString(currentText.value(), 4096);
         ImBoolean holdText = new ImBoolean(currentText.holdText());
@@ -168,6 +184,8 @@ public final class ShapeKeyframe extends Keyframe {
                     ? state.model() : "minecraft:stone";
             case "item" -> state.shapeType().equals("item") && state.model() != null && !state.model().isBlank()
                     ? state.model() : "minecraft:diamond";
+            case "entity" -> state.shapeType().equals("entity") && state.model() != null && !state.model().isBlank()
+                    ? state.model() : "minecraft:pig";
             default -> state.model() == null ? "" : state.model();
         }};
         Map<String, String> blockProperties = new LinkedHashMap<>(state.shapeType().equals("block")
@@ -183,21 +201,15 @@ public final class ShapeKeyframe extends Keyframe {
         switch (selectedType[0]) {
             case "box" ->
                     changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.dimensions"), size, 0.05f, 0.001f, 1000.0f);
-            case "box_wireframe", "wireframed_box" -> {
-                changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.dimensions"), size, 0.05f, 0.001f, 1000.0f);
-                changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
-            }
-            case "sphere", "face_circle", "line_circle" -> {
+            case "sphere", "face_circle" -> {
                 float[] radius = {(float) state.sizeX() / 2};
                 if (ImGui.dragFloat(I18n.get("vector3.keyframe.radius"), radius, 0.05f, 0.001f, 1000.0f)) {
                     size[0] = radius[0] * 2;
                     changed = true;
                 }
                 changed |= ImGui.inputInt(I18n.get("vector3.keyframe.segments"), segments);
-                if (selectedType[0].equals("line_circle"))
-                    changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
             }
-            case "cylinder", "cylinder_wireframe", "cone", "cone_wireframe" -> {
+            case "cylinder", "cone" -> {
                 float[] radius = {(float) state.sizeX() / 2};
                 float[] height = {(float) state.sizeY()};
                 if (ImGui.dragFloat(I18n.get("vector3.keyframe.radius"), radius, 0.05f, 0.001f, 1000.0f)) {
@@ -209,8 +221,6 @@ public final class ShapeKeyframe extends Keyframe {
                     changed = true;
                 }
                 changed |= ImGui.inputInt(I18n.get("vector3.keyframe.segments"), segments);
-                if (selectedType[0].endsWith("wireframe"))
-                    changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
             }
             case "line", "arrow" -> {
                 while (points.size() < 2) points.add(new ShapePoint(0, 0, 0));
@@ -297,6 +307,8 @@ public final class ShapeKeyframe extends Keyframe {
                 }
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), outline);
                 if (outline.get()) changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.outline_color"), outlineColor);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.project_entities"), projectEntities);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.project_particles"), projectParticles);
             }
             case "block" -> {
                 ImGui.setNextItemWidth(360);
@@ -338,6 +350,34 @@ public final class ShapeKeyframe extends Keyframe {
                     ImGui.endCombo();
                 }
             }
+            case "entity" -> {
+                ImGui.setNextItemWidth(360);
+                if (ImGui.beginCombo(I18n.get("vector3.keyframe.entity"), content[0])) {
+                    for (String id : ShapeTrackRegistry.entityIds()) {
+                        if (ImGui.selectable(id, id.equals(content[0]))) {
+                            content[0] = id;
+                            changed = true;
+                        }
+                    }
+                    ImGui.endCombo();
+                }
+            }
+        }
+        boolean wireframeCapable = ShapeTrackRegistry.supportsWireframe(selectedType[0]);
+        if (wireframeCapable) {
+            changed |= ImGui.checkbox(I18n.get("vector3.keyframe.show_faces"), showFaces);
+            changed |= ImGui.checkbox(I18n.get("vector3.keyframe.wireframe"), wireframeEnabled);
+            if (wireframeEnabled.get()) {
+                changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.separate_wireframe_color"), separateWireframeColor);
+                if (separateWireframeColor.get())
+                    changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.wireframe_color"), wireframeColor);
+            }
+        }
+        boolean bypassCapable = ShapeTrackRegistry.usesBypassOption(selectedType[0]);
+        if (bypassCapable) {
+            changed |= ImGui.checkbox(I18n.get("vector3.keyframe.bypass_shaders"), bypassShaders);
+            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.keyframe.bypass_shaders.tooltip"));
         }
         changed |= ImGui.checkbox(I18n.get("vector3.keyframe.see_through"), seeThrough);
         changed |= ImGui.checkbox(I18n.get("vector3.keyframe.visible"), visible);
@@ -359,10 +399,20 @@ public final class ShapeKeyframe extends Keyframe {
                     selectedType[0].equals("video") ? !videoLoop.get() : state.noLoop(),
                     selectedType[0].equals("video") ? playbackSeconds[0] : state.playbackSeconds())
                     .withIdentity(selectedType[0], selectedId[0])
+                    .withWireframe(wireframeCapable
+                            ? new WireframeSettings(!showFaces.get(), wireframeEnabled.get(), separateWireframeColor.get(),
+                                    (Math.round(wireframeColor[3] * 255) << 24) | (Math.round(wireframeColor[0] * 255) << 16)
+                                            | (Math.round(wireframeColor[1] * 255) << 8) | Math.round(wireframeColor[2] * 255))
+                            : state.wireframe())
+                    .withAreaOptions(selectedType[0].equals("area")
+                            ? new AreaOptions(projectEntities.get(), projectParticles.get())
+                            : state.areaOptions())
+                    .withBypassShaders(ShapeTrackRegistry.usesBypassOption(selectedType[0])
+                            ? bypassShaders.get() : state.bypassShaders())
                     .withModel(switch (selectedType[0]) {
                         case "obj" -> model.get().isBlank()
                                 ? "ryansrenderingkit:models/monkey.obj" : model.get();
-                        case "block", "item" -> content[0];
+                        case "block", "item", "entity" -> content[0];
                         case "image" -> imageFile.get();
                         case "video" -> videoFile.get();
                         default -> state.model();

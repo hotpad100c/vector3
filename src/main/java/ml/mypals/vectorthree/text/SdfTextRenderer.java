@@ -6,7 +6,7 @@ import ml.mypals.ryansrenderingkit.builders.vertexBuilders.VertexBuilder;
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.render.IrisBypassTarget;
-import ml.mypals.vectorthree.shape.FontTextShape;
+import ml.mypals.vectorthree.shape.text.FontTextShape;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.network.chat.Style;

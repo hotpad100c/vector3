@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.arrow;
 
 import ml.mypals.ryansrenderingkit.shape.Shape;
 import net.minecraft.world.phys.Vec3;

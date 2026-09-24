@@ -1,6 +1,6 @@
 package ml.mypals.vectorthree.mixin.area.sodium;
 
-import ml.mypals.vectorthree.shape.AreaSuppression;
+import ml.mypals.vectorthree.shape.area.AreaSuppression;
 import net.caffeinemc.mods.sodium.client.render.model.AbstractBlockRenderContext;
 import net.minecraft.client.renderer.block.BlockAndTintGetter;
 import net.minecraft.core.BlockPos;

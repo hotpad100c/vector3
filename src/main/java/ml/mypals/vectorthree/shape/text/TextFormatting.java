@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.shape;
+package ml.mypals.vectorthree.shape.text;
 
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;

@@ -21,6 +21,7 @@ public class EditorStateManagerMixin {
     @Inject(method = "reset", at = @At("TAIL"))
     private static void vector3$clearOnReplayClosed(CallbackInfo ci) {
         Vector3.GIZMO_EDITOR.clear();
+        Vector3.ORBIT_GIZMO.clear();
         Vector3.EDITOR_CAMERA.reset();
         ShapeTrackRegistry.clear();
     }
