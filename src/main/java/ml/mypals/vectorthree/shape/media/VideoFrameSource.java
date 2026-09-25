@@ -9,17 +9,16 @@ import org.bytedeco.javacv.Java2DFrameConverter;
 
 import java.awt.image.BufferedImage;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Opens and decodes a video file on a dedicated background thread. Opening (format probing,
- * codec setup) and per-frame decode/convert are both too slow to run on the render thread without
- * stalling the game, so the render thread only ever does a cheap {@link #requestSeconds} write and
- * {@link #pollFrame} check; it never blocks on ffmpeg.
- */
 final class VideoFrameSource {
     private static final double SEEK_THRESHOLD_SECONDS = 1.0;
+    private static final double REVERSE_WINDOW_SECONDS = 1.0;
+    private static final long CACHE_BYTES = 192L << 20;
+    private static final long LOADING_DELAY_NANOS = 250_000_000L;
 
     private final Thread thread;
     private final Object requestLock = new Object();
@@ -28,7 +27,7 @@ final class VideoFrameSource {
 
     private volatile boolean ready;
     private volatile boolean failed;
-    private volatile boolean seeking = true;
+    private volatile long seekStartedNanos;
     private volatile int width = 1;
     private volatile int height = 1;
     private volatile double durationSeconds;
@@ -50,8 +49,13 @@ final class VideoFrameSource {
 
     boolean isReady() { return ready; }
     boolean failed() { return failed; }
-    /** True while opening, or while a far seek has not produced its frame yet. */
-    boolean isLoading() { return !failed && (!ready || seeking || frameVersion.get() == 0); }
+    /** True while opening, or while a seek has been waiting for its frame for a noticeable time. */
+    boolean isLoading() {
+        if (failed) return false;
+        if (!ready || frameVersion.get() == 0) return true;
+        long started = seekStartedNanos;
+        return started != 0 && System.nanoTime() - started > LOADING_DELAY_NANOS;
+    }
     int width() { return width; }
     int height() { return height; }
     double duration() { return durationSeconds; }
@@ -110,8 +114,15 @@ final class VideoFrameSource {
         }
     }
 
+    // Decoders only run forwards, so going backwards decodes a window before the target once and then
+    // serves the following backward steps from this cache. Decode thread only.
+    private final TreeMap<Double, int[]> cache = new TreeMap<>();
+
     private void decodeUntilClosed(FFmpegFrameGrabber grabber, String file) throws InterruptedException {
         Java2DFrameConverter converter = new Java2DFrameConverter();
+        double interval = grabber.getFrameRate() > 0 ? 1 / grabber.getFrameRate() : 1 / 30.0;
+        int maxFrames = (int) Math.clamp(CACHE_BYTES / (4L * width * height), 4, 120);
+        double reverseWindow = Math.min(REVERSE_WINDOW_SECONDS, (maxFrames - 2) * interval);
         double lastDecodedSeconds = -1;
         double lastRequested = Double.NaN;
         while (!closed) {
@@ -123,45 +134,60 @@ final class VideoFrameSource {
                 continue;
             }
             lastRequested = seconds;
+            if (serveCached(seconds, interval)) continue;
 
-            // A single bad seek/grab/convert (edge-of-file timestamps, a transient decoder hiccup,
-            // scrubbing rapidly back and forth) must not kill this thread — that would freeze the
-            // shape on whatever frame was last decoded, forever, with no way to recover. Isolate each
-            // request so a failure just skips that one frame and the loop keeps serving new requests.
+            // A single bad seek/grab/convert must not kill this thread, or the shape would freeze on its
+            // last frame forever. Each request is isolated so a failure only skips that frame.
             try {
-                boolean farJump = lastDecodedSeconds < 0
-                        || seconds < lastDecodedSeconds
+                boolean backward = lastDecodedSeconds >= 0 && seconds < lastDecodedSeconds;
+                boolean farJump = lastDecodedSeconds < 0 || backward
                         || seconds - lastDecodedSeconds > SEEK_THRESHOLD_SECONDS;
+                double windowStart = seconds;
                 if (farJump) {
-                    seeking = true;
-                    grabber.setTimestamp((long) (seconds * 1_000_000));
+                    seekStartedNanos = System.nanoTime();
+                    windowStart = backward ? Math.max(0, seconds - reverseWindow) : seconds;
+                    grabber.setTimestamp((long) (windowStart * 1_000_000));
                     lastDecodedSeconds = -1;
                 } else if (lastDecodedSeconds >= seconds) {
                     continue;
                 }
 
-                Frame chosen = null;
                 Frame frame;
                 while ((frame = grabber.grab()) != null) {
                     if (frame.image == null) continue;
-                    chosen = frame;
                     lastDecodedSeconds = frame.timestamp / 1_000_000.0;
+                    boolean keep = backward ? lastDecodedSeconds >= windowStart - interval : lastDecodedSeconds >= seconds - interval;
+                    if (keep) cache.put(lastDecodedSeconds, toAbgrPixels(converter.getBufferedImage(frame)));
                     if (lastDecodedSeconds >= seconds) break;
                 }
-                if (chosen == null) {
-                    seeking = false;
-                    continue;
-                }
-
-                BufferedImage image = converter.getBufferedImage(chosen);
-                latestFrame.set(toAbgrPixels(image));
-                frameVersion.incrementAndGet();
-                seeking = false;
+                Map.Entry<Double, int[]> shown = cache.floorEntry(seconds + 1.0e-4);
+                if (shown == null) shown = cache.ceilingEntry(seconds);
+                if (shown != null) publish(shown.getValue());
+                trimCache(seconds, maxFrames);
             } catch (Exception exception) {
                 Vector3.LOGGER.warn("Video seek/decode failed for {} at {}s, skipping", file, seconds, exception);
                 lastDecodedSeconds = -1;
-                seeking = false;
+            } finally {
+                seekStartedNanos = 0;
             }
+        }
+    }
+
+    private boolean serveCached(double seconds, double interval) {
+        Map.Entry<Double, int[]> entry = cache.floorEntry(seconds + 1.0e-4);
+        if (entry == null || seconds - entry.getKey() >= interval) return false;
+        publish(entry.getValue());
+        return true;
+    }
+
+    private void publish(int[] pixels) {
+        if (latestFrame.getAndSet(pixels) != pixels) frameVersion.incrementAndGet();
+    }
+
+    private void trimCache(double seconds, int maxFrames) {
+        while (cache.size() > maxFrames) {
+            if (seconds - cache.firstKey() > cache.lastKey() - seconds) cache.pollFirstEntry();
+            else cache.pollLastEntry();
         }
     }
 

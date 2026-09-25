@@ -213,6 +213,6 @@
   "vector3.shake.preset.vehicle": "Vehicle",
   "vector3.shake.preset.impact": "Impact",
   "vector3.file.browse": "Browse...",
-  "vector3.file.image_filter": "PNG images",
+  "vector3.file.image_filter": "Images",
   "vector3.file.video_filter": "Videos"
 }

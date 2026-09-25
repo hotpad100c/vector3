@@ -336,7 +336,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
             case "obj" -> changed |= ImGui.inputText(I18n.get("vector3.keyframe.obj_resource"), model);
             case "image" -> {
                 changed |= ImGui.inputText(I18n.get("vector3.keyframe.image_file"), imageFile);
-                changed |= FileBrowse.button("image", imageFile, I18n.get("vector3.file.image_filter"), "png");
+                changed |= FileBrowse.button("image", imageFile, I18n.get("vector3.file.image_filter"),
+                        "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff", "tga");
             }
             case "video" -> {
                 changed |= ImGui.inputText(I18n.get("vector3.keyframe.video_file"), videoFile);

@@ -18,8 +18,6 @@ import net.minecraft.world.phys.Vec3;
 
 import java.awt.Color;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -46,8 +44,8 @@ public final class ImageShape extends Shape implements EmptyMesh {
             final Path imagePath = path;
             Texture cached = TEXTURES.get(path);
             if (cached != null) return cached;
-            try (InputStream stream = Files.newInputStream(path)) {
-                NativeImage image = NativeImage.read(stream);
+            try {
+                NativeImage image = ImageDecoder.decode(path);
                 Identifier id = Vector3.id("local_image/" + Integer.toUnsignedString(path.toString().hashCode(), 36));
                 Minecraft.getInstance().getTextureManager().register(id,
                         new DynamicTexture(() -> "Vector3 image " + imagePath, image));

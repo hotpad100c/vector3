@@ -213,6 +213,6 @@
   "vector3.shake.preset.vehicle": "车载",
   "vector3.shake.preset.impact": "冲击",
   "vector3.file.browse": "浏览…",
-  "vector3.file.image_filter": "PNG 图片",
+  "vector3.file.image_filter": "图片",
   "vector3.file.video_filter": "视频"
 }
