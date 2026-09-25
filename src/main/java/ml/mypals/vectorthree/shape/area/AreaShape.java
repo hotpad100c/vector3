@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.shape.area;
 
+import ml.mypals.vectorthree.compat.IrisCompat;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -11,8 +12,6 @@ import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeState;
-import net.irisshaders.iris.Iris;
-import net.irisshaders.iris.vertices.ImmediateState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.StagedVertexBuffer;
@@ -136,7 +135,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
     private Boolean bakedExtended;
 
     private static boolean irisExtendsNow() {
-        return Iris.isPackInUseQuick() && ImmediateState.isRenderingLevel && !ImmediateState.skipExtension.get();
+        return IrisCompat.isPackInUse() && IrisCompat.isRenderingLevel() && !IrisCompat.skipExtension();
     }
 
     private void rebakeRegion() {

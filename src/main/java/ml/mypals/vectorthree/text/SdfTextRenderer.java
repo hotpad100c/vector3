@@ -6,6 +6,7 @@ import ml.mypals.ryansrenderingkit.builders.vertexBuilders.VertexBuilder;
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.render.IrisBypassTarget;
+import ml.mypals.vectorthree.render.TextGlow;
 import ml.mypals.vectorthree.shape.text.FontTextShape;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeStorage;
@@ -40,6 +41,9 @@ public final class SdfTextRenderer {
 
     private record Char(int codepoint, Style style) {}
 
+    /** How the glow pass recolors a line: glowing fill (optionally recolored), glowing outline, strength in eighths. */
+    private record Glow(boolean fill, Integer fillColor, boolean outline, int strength) {}
+
     private SdfTextRenderer() {}
 
     /** Draws the shape's text; returns its layout bounds {minX, minY, maxX, maxY} in text units. */
@@ -50,6 +54,8 @@ public final class SdfTextRenderer {
         boolean shadow = shape.shadow && !shape.outline;
         Integer outlineRgb = shape instanceof FontTextShape fontShape ? fontShape.outlineColor : null;
         List<Quad> quads = new ArrayList<>();
+        List<Quad> glowQuads = new ArrayList<>();
+        Glow glow = glowOf(shape);
         float halfWidth = 0;
 
         for (int i = 0; i < lines.length; i++) {
@@ -63,9 +69,11 @@ public final class SdfTextRenderer {
             float startX = -lineWidth(font, chars) * unit / 2f;
             halfWidth = Math.max(halfWidth, -startX);
             if (shadow) layoutLine(font, chars, unit, startX + SHADOW_OFFSET, baseline + SHADOW_OFFSET, 0,
-                    lineColor, true, false, null, quads);
+                    lineColor, true, false, null, null, quads);
             layoutLine(font, chars, unit, startX, baseline, shadow ? MAIN_Z : 0, lineColor, false, shape.outline,
-                    outlineRgb, quads);
+                    outlineRgb, null, quads);
+            if (glow != null) layoutLine(font, chars, unit, startX, baseline, shadow ? MAIN_Z : 0, lineColor, false,
+                    glow.outline(), outlineRgb, glow, glowQuads);
         }
         float[] bounds = {-halfWidth, top, halfWidth, -top};
         if (quads.isEmpty()) return bounds;
@@ -81,7 +89,24 @@ public final class SdfTextRenderer {
                             for (Quad quad : quads) if (quad.page() == page) emit(pose, consumer, quad);
                         }));
         IrisBypassTarget.renderFeatures(() -> Helpers.renderFeatures(minecraft, submits));
+        if (!glowQuads.isEmpty()) {
+            SubmitNodeStorage glowSubmits = new SubmitNodeStorage();
+            glowQuads.stream().mapToInt(Quad::page).distinct().forEach(page ->
+                    glowSubmits.submitCustomGeometry(poseStack, SdfTextRenderTypes.getGlow(font.pageTexture(page), shape.seeThrough),
+                            (pose, consumer) -> {
+                                for (Quad quad : glowQuads) if (quad.page() == page) emit(pose, consumer, quad);
+                            }));
+            TextGlow.render(() -> Helpers.renderFeatures(minecraft, glowSubmits));
+        }
         return bounds;
+    }
+
+    private static Glow glowOf(TextShape shape) {
+        if (!(shape instanceof FontTextShape fontShape)) return null;
+        boolean outline = shape.outline && fontShape.outlineGlow;
+        int strength = Math.round(fontShape.glowStrength * 8);
+        if (!fontShape.glow && !outline || strength <= 0) return null;
+        return new Glow(fontShape.glow, fontShape.glowColor, outline, Math.min(strength, 63));
     }
 
     private static float lineWidth(SdfFont font, List<Char> chars) {
@@ -97,7 +122,7 @@ public final class SdfTextRenderer {
     }
 
     private static void layoutLine(SdfFont font, List<Char> chars, float unit, float x, float baseline, float z,
-            Color lineColor, boolean isShadow, boolean outline, Integer outlineOverride, List<Quad> out) {
+            Color lineColor, boolean isShadow, boolean outline, Integer outlineOverride, Glow glow, List<Quad> out) {
         float pen = 0;
         int previous = -1;
         for (Char c : chars) {
@@ -111,6 +136,15 @@ public final class SdfTextRenderer {
             if (isShadow) argb = scaleRgb(argb, 0.25f);
             int outlineRgb = outlineOverride != null ? outlineOverride : scaleRgb(argb, 0.25f);
             int flags = (style.isBold() ? FLAG_BOLD : 0) | (outline ? FLAG_OUTLINE : 0);
+            if (glow != null) {
+                // A non-glowing fill stays in as black, cutting the glyph out of its outline's glow.
+                int alpha = argb >>> 24;
+                if (!glow.fill()) argb = alpha << 24;
+                else if (glow.fillColor() != null) {
+                    argb = (alpha * (glow.fillColor() >>> 24) / 255) << 24 | (glow.fillColor() & 0xFFFFFF);
+                }
+                flags |= glow.strength() << 2;
+            }
             int style0 = ((outlineRgb >> 16) & 0xFF) | (((outlineRgb >> 8) & 0xFF) << 8);
             int style1 = (outlineRgb & 0xFF) | (flags << 8);
             float shear = style.isItalic() ? ITALIC_SHEAR : 0;

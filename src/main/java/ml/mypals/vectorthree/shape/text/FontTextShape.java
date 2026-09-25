@@ -23,6 +23,10 @@ public final class FontTextShape extends TextShape {
 
     public String font;
     public int outlineColor = 0xFF000000;
+    public boolean glow;
+    public boolean outlineGlow;
+    public float glowStrength = TextSettings.DEFAULT_GLOW_STRENGTH;
+    public Integer glowColor;
 
     private Matrix4f lastPose;
     private Vec3 lastCamera;

@@ -167,5 +167,11 @@
   "vector3.gizmo.global": "全局",
   "vector3.gizmo.local": "局部",
   "vector3.shape_manager.instant_preview": "即时预览",
-  "vector3.shape_manager.instant_preview.tooltip": "在时间轴上拖动关键帧时实时应用改动，而不是松手后才生效"
+  "vector3.shape_manager.instant_preview.tooltip": "在时间轴上拖动关键帧时实时应用改动，而不是松手后才生效",
+  "vector3.keyframe.glow": "辉光",
+  "vector3.keyframe.outline_glow": "轮廓发光",
+  "vector3.keyframe.glow_strength": "辉光强度",
+  "vector3.keyframe.glow_follow_text": "辉光颜色跟随文字",
+  "vector3.keyframe.glow_color": "辉光颜色",
+  "vector3.keyframe.glow_sdf_only": "辉光只对自定义字体（.ttf/.otf）生效"
 }

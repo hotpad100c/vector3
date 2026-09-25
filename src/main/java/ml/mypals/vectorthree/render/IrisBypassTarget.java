@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.render;
 
+import ml.mypals.vectorthree.compat.IrisCompat;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -14,8 +15,6 @@ import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import java.util.OptionalDouble;
 import ml.mypals.vectorthree.Vector3;
-import net.irisshaders.iris.Iris;
-import net.irisshaders.iris.vertices.ImmediateState;
 import net.minecraft.client.Minecraft;
 import org.joml.Vector4f;
 
@@ -45,22 +44,22 @@ public final class IrisBypassTarget {
     private IrisBypassTarget() {}
 
     public static boolean isActive() {
-        return Iris.isPackInUseQuick();
+        return IrisCompat.isPackInUse();
     }
 
     public static void beginIrisBypass() {
         if (bypassDepth++ == 0) {
             bypassApplied = isActive();
             if (bypassApplied) {
-                bypassSaved = ImmediateState.bypass;
-                ImmediateState.bypass = true;
+                bypassSaved = IrisCompat.bypass();
+                IrisCompat.setBypass(true);
             }
         }
     }
 
     public static void endIrisBypass() {
         if (bypassDepth > 0 && --bypassDepth == 0 && bypassApplied) {
-            ImmediateState.bypass = bypassSaved;
+            IrisCompat.setBypass(bypassSaved);
             bypassApplied = false;
         }
     }

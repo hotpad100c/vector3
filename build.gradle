@@ -35,9 +35,9 @@ dependencies {
 	//Flashback
 	implementation "maven.modrinth:4das1Fjq:${project.flashback_version}"
 	//Sodium
-	implementation "maven.modrinth:AANobbMI:v4PSXean"
+	compileOnly "maven.modrinth:AANobbMI:v4PSXean"
 	//Iris
-	implementation "maven.modrinth:YL57xq9U:bAdKrpw8"
+	compileOnly "maven.modrinth:YL57xq9U:bAdKrpw8"
 }
 
 processResources {

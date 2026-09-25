@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.shape;
 
+import ml.mypals.vectorthree.compat.IrisCompat;
 import com.mojang.renderpearl.api.pipeline.*;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManager;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManagers;
@@ -28,8 +29,6 @@ import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.text.FontTextShape;
 import ml.mypals.vectorthree.shape.text.TextSettings;
 import ml.mypals.vectorthree.render.IrisBypassTarget;
-import net.irisshaders.iris.api.v0.IrisApi;
-import net.irisshaders.iris.api.v0.IrisProgram;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
@@ -309,6 +308,10 @@ public final class ShapeTrackRegistry {
             if (textShape instanceof FontTextShape fontShape) {
                 fontShape.font = settings.fontOrDefault();
                 fontShape.outlineColor = state.outlineColor();
+                fontShape.glow = settings.glow();
+                fontShape.outlineGlow = settings.outlineGlow();
+                fontShape.glowStrength = settings.glowStrengthOrDefault();
+                fontShape.glowColor = settings.glowColor();
             }
         }
         if (previous != null && previous.seeThrough() != state.seeThrough()) {
@@ -671,10 +674,10 @@ public final class ShapeTrackRegistry {
                 .withVertexBinding(0, old.format())
                 .withPrimitiveTopology(old.mode())
                 .build());
-        IrisProgram irisProgram = old.mode() == PrimitiveTopology.TRIANGLES
-                ? IrisProgram.PARTICLES_TRANSLUCENT : IrisProgram.LINES;
-        IrisApi.getInstance().assignPipeline(normalPipeline, irisProgram);
-        IrisApi.getInstance().assignPipeline(seeThroughPipeline, irisProgram);
+        IrisCompat.Program irisProgram = old.mode() == PrimitiveTopology.TRIANGLES
+                ? IrisCompat.Program.PARTICLES_TRANSLUCENT : IrisCompat.Program.LINES;
+        IrisCompat.assignPipeline(normalPipeline, irisProgram);
+        IrisCompat.assignPipeline(seeThroughPipeline, irisProgram);
 
         RenderSetup.RenderSetupBuilder normalSetup = RenderSetup.builder(normalPipeline);
         RenderSetup.RenderSetupBuilder seeThroughSetup = RenderSetup.builder(seeThroughPipeline);
@@ -712,7 +715,7 @@ public final class ShapeTrackRegistry {
                 .withDepthStencilState(depth)
                 .withCull(true)
                 .build());
-        IrisApi.getInstance().assignPipeline(pipeline, IrisProgram.ENTITIES_TRANSLUCENT);
+        IrisCompat.assignPipeline(pipeline, IrisCompat.Program.ENTITIES_TRANSLUCENT);
         return pipeline;
     }
 }

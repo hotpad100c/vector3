@@ -167,5 +167,11 @@
   "vector3.gizmo.global": "Global",
   "vector3.gizmo.local": "Local",
   "vector3.shape_manager.instant_preview": "Instant preview",
-  "vector3.shape_manager.instant_preview.tooltip": "Apply keyframes live while dragging them on the timeline, instead of only on release"
+  "vector3.shape_manager.instant_preview.tooltip": "Apply keyframes live while dragging them on the timeline, instead of only on release",
+  "vector3.keyframe.glow": "Glow",
+  "vector3.keyframe.outline_glow": "Outline glow",
+  "vector3.keyframe.glow_strength": "Glow strength",
+  "vector3.keyframe.glow_follow_text": "Glow follows text color",
+  "vector3.keyframe.glow_color": "Glow color",
+  "vector3.keyframe.glow_sdf_only": "Glow only works with custom (.ttf/.otf) fonts"
 }

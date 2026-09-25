@@ -1,6 +1,7 @@
 {
 	"required": true,
 	"package": "ml.mypals.vectorthree.mixin",
+	"plugin": "ml.mypals.vectorthree.compat.Vector3MixinPlugin",
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
 		"TextShapeMixin",

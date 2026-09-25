@@ -8,6 +8,7 @@ import ml.mypals.vectorthree.text.FontOptions;
 import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
+import ml.mypals.vectorthree.text.SdfFont;
 import ml.mypals.vectorthree.shape.text.TextSettings;
 import ml.mypals.vectorthree.shape.media.VideoShape;
 import ml.mypals.vectorthree.shape.WireframeSettings;
@@ -150,6 +151,13 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         ImBoolean holdText = new ImBoolean(currentText.holdText());
         ImBoolean textShadow = new ImBoolean(currentText.shadow());
         ImBoolean textOutline = new ImBoolean(currentText.outline());
+        ImBoolean textGlow = new ImBoolean(currentText.glow());
+        ImBoolean textOutlineGlow = new ImBoolean(currentText.outlineGlow());
+        float[] glowStrength = {currentText.glowStrengthOrDefault()};
+        ImBoolean glowFollowsText = new ImBoolean(currentText.glowColor() == null);
+        int glowArgb = currentText.glowColor() == null ? state.color() : currentText.glowColor();
+        float[] glowColor = {((glowArgb >>> 16) & 255) / 255.0f, ((glowArgb >>> 8) & 255) / 255.0f,
+                (glowArgb & 255) / 255.0f, ((glowArgb >>> 24) & 255) / 255.0f};
         ImString model = new ImString(state.shapeType().equals("obj")
                 && state.model() != null && !state.model().isBlank()
                 ? state.model() : "ryansrenderingkit:models/monkey.obj", 512);
@@ -239,7 +247,22 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.hold_text"), holdText);
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.shadow"), textShadow);
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), textOutline);
-                if (textOutline.get()) changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.outline_color") + "##text", outlineColor);
+                if (textOutline.get()) {
+                    changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.outline_color") + "##text", outlineColor);
+                    changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline_glow"), textOutlineGlow);
+                }
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.glow"), textGlow);
+                if (textGlow.get() || textOutline.get() && textOutlineGlow.get()) {
+                    changed |= ImGui.sliderFloat(I18n.get("vector3.keyframe.glow_strength"), glowStrength, 0,
+                            TextSettings.MAX_GLOW_STRENGTH);
+                }
+                if (textGlow.get()) {
+                    changed |= ImGui.checkbox(I18n.get("vector3.keyframe.glow_follow_text"), glowFollowsText);
+                    if (!glowFollowsText.get()) changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.glow_color"), glowColor);
+                }
+                if ((textGlow.get() || textOutlineGlow.get()) && SdfFont.get(font.get()) == null) {
+                    ImGui.textDisabled(I18n.get("vector3.keyframe.glow_sdf_only"));
+                }
                 if (ImGui.beginCombo(I18n.get("vector3.keyframe.font_resource"), font.get())) {
                     for (FontOptions.Option option : FontOptions.list()) {
                         String label = option.sdf() ? option.spec() + "  (SDF)" : option.spec();
@@ -379,7 +402,10 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                     Math.max(3, segments.get()), Math.max(0.001f, width[0]), argb,
                     points, selectedType[0].equals("text")
                             ? new TextSettings(textValue.get(), holdText.get(), textShadow.get(),
-                                    textOutline.get(), billboard[0], font.get())
+                                    textOutline.get(), billboard[0], font.get(), textGlow.get(), textOutlineGlow.get(),
+                                    glowStrength[0], glowFollowsText.get() ? null
+                                            : (Math.round(glowColor[3] * 255) << 24) | (Math.round(glowColor[0] * 255) << 16)
+                                            | (Math.round(glowColor[1] * 255) << 8) | Math.round(glowColor[2] * 255))
                             : state.text(),
                     parentId[0],
                     seeThrough.get(), visible.get(), outline.get(), outlineArgb, playAudio.get(),

@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.mixin.iris;
 
 import ml.mypals.vectorthree.render.IrisBypassTarget;
+import ml.mypals.vectorthree.render.TextGlow;
 import net.minecraft.client.renderer.LevelRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -12,5 +13,6 @@ public class LevelRendererIrisBypassMixin {
     @Inject(method = "render", at = @At("RETURN"))
     private void vector3$blitBypassTarget(CallbackInfo ci) {
         IrisBypassTarget.blitToMain();
+        TextGlow.composite();
     }
 }
