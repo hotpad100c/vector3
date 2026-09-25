@@ -256,6 +256,7 @@ public final class ShapeTrackRegistry {
             SHAPE_TYPES.remove(shapeId);
             LAST_STATES.remove(shapeId);
         }
+        refreshAreaParents();
     }
 
     public static void apply(ShapeState state) {
@@ -333,7 +334,16 @@ public final class ShapeTrackRegistry {
         else shape.disable();
         syncWireframe(shape, state, previous);
         LAST_STATES.put(state.shapeId(), state);
+        refreshAreaParents();
+    }
 
+    // Areas draw themselves instead of through RRK's transformer, so parent motion is pushed to them here.
+    private static void refreshAreaParents() {
+        for (Map.Entry<String, Shape> entry : SHAPES.entrySet()) {
+            if (!(entry.getValue() instanceof AreaShape area)) continue;
+            ShapeState state = LAST_STATES.get(entry.getKey());
+            area.setParentTransform(worldTransformOrIdentity(state == null ? null : state.parentShapeId()));
+        }
     }
 
     private static void updateGeometry(Shape shape, ShapeState state) {

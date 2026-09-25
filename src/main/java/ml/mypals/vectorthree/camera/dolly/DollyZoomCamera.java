@@ -7,7 +7,6 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 
-/** Places the camera for the active Dolly Zoom once every track has applied, like LookToCamera. */
 public final class DollyZoomCamera {
     private static DollyZoom from;
     private static DollyZoom to;

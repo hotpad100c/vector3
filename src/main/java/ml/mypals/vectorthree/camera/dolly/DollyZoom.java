@@ -4,11 +4,7 @@ import ml.mypals.vectorthree.camera.target.Target;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
-/**
- * One Dolly Zoom keyframe. The camera sits {@code distance} from the target along the view direction
- * {@code yaw}/{@code pitch}, and its FOV keeps {@code frameHeight} blocks visible at the target's
- * distance, so the target keeps its size on screen while the distance changes.
- */
+
 public record DollyZoom(boolean endsScope, Target target, float distance, float frameHeight, float yaw, float pitch) {
     public record Pose(Vec3 eye, float yaw, float pitch, float fov) {}
 
@@ -16,7 +12,6 @@ public record DollyZoom(boolean endsScope, Target target, float distance, float 
         return (float) (2 * distance * Math.tan(Math.toRadians(fov) / 2));
     }
 
-    /** The camera between {@code from} and {@code to}, around an already resolved target point. */
     public static Pose pose(DollyZoom from, DollyZoom to, float amount, Vec3 target) {
         float distance = Mth.lerp(amount, from.distance, to.distance);
         float frame = Mth.lerp(amount, from.frameHeight, to.frameHeight);

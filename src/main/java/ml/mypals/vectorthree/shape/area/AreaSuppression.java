@@ -21,12 +21,13 @@ public final class AreaSuppression {
 
     private static final Map<String, Bounds> ACTIVE = new ConcurrentHashMap<>();
     private static final Set<String> DIRTY = ConcurrentHashMap.newKeySet();
-    private static boolean bypassing;
+    // Only the thread that bypasses sees through: chunk meshing on worker threads must stay suppressed.
+    private static volatile Thread bypassThread;
 
     private AreaSuppression() {}
 
     public static boolean isSuppressed(BlockPos pos) {
-        if (bypassing) return false;
+        if (bypassThread == Thread.currentThread()) return false;
         for (Bounds bounds : ACTIVE.values()) {
             if (bounds.contains(pos)) return true;
         }
@@ -41,12 +42,12 @@ public final class AreaSuppression {
      * (already-active) suppressed AABB.
      */
     public static void bypassing(Runnable action) {
-        boolean previous = bypassing;
-        bypassing = true;
+        Thread previous = bypassThread;
+        bypassThread = Thread.currentThread();
         try {
             action.run();
         } finally {
-            bypassing = previous;
+            bypassThread = previous;
         }
     }
 
@@ -66,6 +67,7 @@ public final class AreaSuppression {
     public static void set(String shapeId, BlockPos min, BlockPos max) {
         Bounds newBounds = new Bounds(min, max);
         Bounds oldBounds = ACTIVE.put(shapeId, newBounds);
+        if (newBounds.equals(oldBounds)) return;
         if (oldBounds != null) touch(oldBounds);
         touch(newBounds);
     }

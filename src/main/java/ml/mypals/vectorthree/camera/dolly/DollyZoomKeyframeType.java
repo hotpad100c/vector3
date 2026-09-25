@@ -19,7 +19,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.TreeMap;
 
-/** Moves the camera toward or away from a target while its FOV keeps the target's size on screen. */
 public final class DollyZoomKeyframeType extends CustomKeyframeType<DollyZoom> {
     public static final DollyZoomKeyframeType INSTANCE = new DollyZoomKeyframeType();
 
@@ -58,7 +57,6 @@ public final class DollyZoomKeyframeType extends CustomKeyframeType<DollyZoom> {
         return edited;
     }
 
-    /** Distance, view direction and framing taken from the current camera, keeping the target. */
     private static DollyZoom fromCamera(DollyZoom value) {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
