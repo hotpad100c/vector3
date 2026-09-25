@@ -28,7 +28,7 @@ public final class LookToKeyframeType extends CustomKeyframeType<LookTo> {
 
     @Override
     protected LookTo createValue() {
-        return LookTo.of(false, Target.at(TargetEditor.crosshairTarget()));
+        return LookTo.of(false, TargetEditor.defaultTarget());
     }
 
     @Override

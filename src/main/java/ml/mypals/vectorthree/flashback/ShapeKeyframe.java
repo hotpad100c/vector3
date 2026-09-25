@@ -1,5 +1,10 @@
 package ml.mypals.vectorthree.flashback;
 
+import java.util.UUID;
+import com.moulberry.flashback.editor.ui.ImGuiHelper;
+import com.moulberry.flashback.combo_options.TrackingBodyPart;
+import ml.mypals.vectorthree.shape.ShapeMount;
+import ml.mypals.vectorthree.shape.ShapeReparent;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
@@ -94,12 +99,14 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         float[] scale = {(float) state.scaleX(), (float) state.scaleY(), (float) state.scaleZ()};
 
         String[] parentId = {state.parentShapeId() == null ? "" : state.parentShapeId()};
+        ShapeMount[] mount = {state.mount()};
         ImGui.setNextItemWidth(360);
         if (ImGui.beginCombo(I18n.get("vector3.keyframe.parent_shape_uuid"),
                 parentId[0].isEmpty() ? I18n.get("vector3.keyframe.none") : ShapeTrackRegistry.displayName(parentId[0]))) {
             if (ImGui.selectable(I18n.get("vector3.keyframe.none"), parentId[0].isEmpty())) {
                 ShapeTrackRegistry.convertToNewParent(state, "", position, rotation, scale);
                 parentId[0] = "";
+                mount[0] = null;
                 changed = true;
             }
             for (String shapeId : ShapeTrackRegistry.shapeIds()) {
@@ -107,12 +114,50 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 if (ImGui.selectable(ShapeTrackRegistry.displayName(shapeId), shapeId.equals(parentId[0]))) {
                     ShapeTrackRegistry.convertToNewParent(state, shapeId, position, rotation, scale);
                     parentId[0] = shapeId;
+                    mount[0] = null;
                     changed = true;
                 }
                 if (ImGui.isItemHovered()) ShapeTrackRegistry.previewHighlight(shapeId);
             }
             ImGui.endCombo();
         }
+        String droppedParent = Eyedropper.shape("parent");
+        if (droppedParent != null && !droppedParent.equals(parentId[0])
+                && ShapeReparent.canParent(selectedId[0], droppedParent)) {
+            ShapeTrackRegistry.convertToNewParent(state, droppedParent, position, rotation, scale);
+            parentId[0] = droppedParent;
+            mount[0] = null;
+            changed = true;
+        }
+
+        // A shape either has a parent shape or rides an entity; picking one clears the other.
+        ImGui.setNextItemWidth(360);
+        UUID mountEntity = mount[0] == null ? null : mount[0].entity();
+        UUID pickedMount = EntityPicker.combo(I18n.get("vector3.keyframe.mount_entity"), mountEntity);
+        ShapeMount nextMount = mount[0];
+        if (pickedMount != null && !pickedMount.equals(mountEntity)) {
+            nextMount = mount[0] == null ? new ShapeMount(pickedMount, TrackingBodyPart.ROOT, true)
+                    : new ShapeMount(pickedMount, mount[0].part(), mount[0].followRotation());
+        }
+        if (mount[0] != null) {
+            TrackingBodyPart part = ImGuiHelper.enumCombo(I18n.get("flashback.body_part"), mount[0].part());
+            if (part != mount[0].part()) nextMount = nextMount.withPart(part);
+            ImBoolean followRotation = new ImBoolean(mount[0].followRotation());
+            if (ImGui.checkbox(I18n.get("vector3.keyframe.mount_follow_rotation"), followRotation)) {
+                nextMount = nextMount.withFollowRotation(followRotation.get());
+            }
+            if (ImGui.button(I18n.get("vector3.keyframe.unmount"))) {
+                ShapeTrackRegistry.convertToNewParent(state, "", position, rotation, scale);
+                nextMount = null;
+                changed = true;
+            }
+        }
+        if (nextMount != null && !nextMount.equals(mount[0])) {
+            ShapeTrackRegistry.convertToMount(state, nextMount, position, rotation, scale);
+            parentId[0] = "";
+            changed = true;
+        }
+        mount[0] = nextMount;
 
         float[] size = {(float) state.sizeX(), (float) state.sizeY(), (float) state.sizeZ()};
         float[] width = {state.lineWidth()};
@@ -417,6 +462,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                     selectedType[0].equals("video") ? !videoLoop.get() : state.noLoop(),
                     selectedType[0].equals("video") ? playbackSeconds[0] : state.playbackSeconds())
                     .withIdentity(selectedType[0], selectedId[0])
+                    .withMount(mount[0])
                     .withWireframe(wireframeCapable
                             ? new WireframeSettings(!showFaces.get(), wireframeEnabled.get(), separateWireframeColor.get(),
                                     (Math.round(wireframeColor[3] * 255) << 24) | (Math.round(wireframeColor[0] * 255) << 16)

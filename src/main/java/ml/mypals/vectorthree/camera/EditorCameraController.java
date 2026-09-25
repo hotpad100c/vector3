@@ -133,7 +133,7 @@ public final class EditorCameraController {
     }
 
     private static Vec3 shapeWorldPosition(ShapeState state) {
-        Matrix4f world = ShapeTrackRegistry.worldTransformOrIdentity(state.parentShapeId());
+        Matrix4f world = ShapeTrackRegistry.parentTransform(state);
         Vector3f worldPos = world.transformPosition(new Vector3f((float) state.x(), (float) state.y(), (float) state.z()));
         return new Vec3(worldPos.x, worldPos.y, worldPos.z);
     }

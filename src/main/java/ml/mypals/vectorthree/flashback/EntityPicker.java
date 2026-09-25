@@ -35,7 +35,10 @@ public final class EntityPicker {
                 : current != null ? current.toString() : I18n.get("vector3.entity_picker.none");
 
         UUID result = current;
-        if (!ImGui.beginCombo(label, preview)) return result;
+        if (!ImGui.beginCombo(label, preview)) {
+            UUID dropped = Eyedropper.entity(label);
+            return dropped != null ? dropped : result;
+        }
         if (ImGui.isWindowAppearing()) FILTER.set("");
         ImGui.setNextItemWidth(-1);
         ImGui.inputTextWithHint("##entity_filter", I18n.get("vector3.entity_picker.search"), FILTER);
@@ -65,7 +68,8 @@ public final class EntityPicker {
             if (listed == 0 && typed == null) ImGui.textDisabled(I18n.get("vector3.entity_picker.empty"));
         }
         ImGui.endCombo();
-        return result;
+        UUID dropped = Eyedropper.entity(label);
+        return dropped != null ? dropped : result;
     }
 
     /** Draws the picker in place of a UUID text field; writes the pick into {@code uuidText}. */

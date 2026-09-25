@@ -4,6 +4,7 @@ import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.editor.ui.windows.MainMenuBar;
 import com.moulberry.flashback.editor.ui.windows.WindowType;
 import imgui.moulberry90.ImGui;
+import ml.mypals.vectorthree.flashback.PropertiesWindow;
 import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
 import ml.mypals.vectorthree.prefab.PrefabBasketWindow;
 import net.minecraft.client.resources.language.I18n;
@@ -28,6 +29,7 @@ public class MainMenuBarMixin {
             if (ImGui.menuItem(I18n.get("flashback." + id), "", open)) type.toggle();
         }
         ImGui.separator();
+        PropertiesWindow.renderMenuItem();
         ShapeManagerWindow.renderMenuItem();
         PrefabBasketWindow.renderMenuItem();
         ImGui.endMenu();

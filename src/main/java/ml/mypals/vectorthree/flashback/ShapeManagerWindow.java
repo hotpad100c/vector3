@@ -1,5 +1,8 @@
 package ml.mypals.vectorthree.flashback;
 
+import com.moulberry.flashback.state.EditorStateManager;
+import com.moulberry.flashback.state.EditorState;
+import ml.mypals.vectorthree.shape.ShapeReparent;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiCond;
 import imgui.moulberry90.flag.ImGuiTreeNodeFlags;
@@ -23,6 +26,11 @@ public final class ShapeManagerWindow {
     private static final ImBoolean editorMode = new ImBoolean(false);
     private static final ImBoolean debugBypassOnly = new ImBoolean(false);
     private static final ImBoolean instantPreview = new ImBoolean(false);
+    private static final ImBoolean autoKey = new ImBoolean(false);
+    private static final String DRAG_PAYLOAD = "vector3_shape";
+    private static String pendingChild;
+    private static String pendingParent;
+    private static boolean hasPendingReparent;
     private static final PersistentWindow WINDOW = new PersistentWindow("vector3_shape_manager");
 
     private ShapeManagerWindow() {}
@@ -30,6 +38,8 @@ public final class ShapeManagerWindow {
     public static boolean isEditorMode() { return editorMode.get(); }
 
     public static boolean isInstantPreview() { return instantPreview.get(); }
+
+    public static boolean isAutoKey() { return autoKey.get(); }
 
     public static void renderMenuItem() {
         if (ImGui.menuItem(I18n.get("vector3.shape_manager.title"), "", WINDOW.isOpen())) WINDOW.toggle();
@@ -42,6 +52,8 @@ public final class ShapeManagerWindow {
             ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode);
             ImGui.checkbox(I18n.get("vector3.shape_manager.instant_preview"), instantPreview);
             if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.instant_preview.tooltip"));
+            ImGui.checkbox(I18n.get("vector3.shape_manager.auto_key"), autoKey);
+            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.auto_key.tooltip"));
             ImGui.checkbox(I18n.get("vector3.shape_manager.debug_bypass_only"), debugBypassOnly);
             IrisBypassTarget.debugShowOnly = debugBypassOnly.get();
             ImGui.separator();
@@ -51,8 +63,10 @@ public final class ShapeManagerWindow {
 
             if (ImGui.beginChild("##shapeManagerTree", 0, 0, true)) {
                 renderTree();
+                renderUnparentZone();
             }
             ImGui.endChild();
+            applyPendingReparent();
         }
         ImGui.end();
         WINDOW.sync();
@@ -88,14 +102,51 @@ public final class ShapeManagerWindow {
 
         ImGui.pushID(shapeId);
         boolean open = ImGui.treeNodeEx("##node", flags, label);
-        if (ImGui.isItemClicked(0) && !ImGui.isItemToggledOpen()) ShapeTimelineSelection.request(shapeId);
-        if (ImGui.isItemClicked(1)) ImGui.setClipboardText(shapeId);
+        if (ImGui.isItemClicked(1)) ShapeTimelineSelection.request(shapeId);
+        if (ImGui.isItemClicked(2)) ImGui.setClipboardText(shapeId);
         if (ImGui.isItemHovered()) ImGui.setTooltip(shapeId + "\n" + I18n.get("vector3.shape_manager.copy_hint"));
+        if (ImGui.beginDragDropSource()) {
+            ImGui.setDragDropPayload(DRAG_PAYLOAD, shapeId);
+            ImGui.text(label);
+            ImGui.endDragDropSource();
+        }
+        if (ImGui.beginDragDropTarget()) {
+            if (ImGui.acceptDragDropPayload(DRAG_PAYLOAD) instanceof String dragged && !dragged.equals(shapeId)
+                    && ShapeReparent.canParent(dragged, shapeId)) {
+                requestReparent(dragged, shapeId);
+            }
+            ImGui.endDragDropTarget();
+        }
         if (!children.isEmpty() && open) {
             for (String child : children) renderNode(child, childrenByParent, filter, visited);
             ImGui.treePop();
         }
         ImGui.popID();
+    }
+
+    // The empty space under the tree: dropping a shape here makes it a root again.
+    private static void renderUnparentZone() {
+        boolean dragging = ImGui.getDragDropPayload(DRAG_PAYLOAD) != null;
+        if (dragging) ImGui.textDisabled(I18n.get("vector3.shape_manager.drop_to_unparent"));
+        ImGui.dummy(Math.max(1, ImGui.getContentRegionAvailX()), Math.max(24, ImGui.getContentRegionAvailY()));
+        if (ImGui.beginDragDropTarget()) {
+            if (ImGui.acceptDragDropPayload(DRAG_PAYLOAD) instanceof String dragged) requestReparent(dragged, null);
+            ImGui.endDragDropTarget();
+        }
+    }
+
+    // Applied after the tree is drawn, so the tree isn't rebuilt mid-iteration.
+    private static void requestReparent(String child, String parent) {
+        pendingChild = child;
+        pendingParent = parent;
+        hasPendingReparent = true;
+    }
+
+    private static void applyPendingReparent() {
+        if (!hasPendingReparent) return;
+        hasPendingReparent = false;
+        EditorState editorState = EditorStateManager.getCurrent();
+        if (editorState != null) ShapeReparent.reparent(editorState, pendingChild, pendingParent);
     }
 
     private static boolean subtreeMatches(String shapeId, Map<String, List<String>> childrenByParent,

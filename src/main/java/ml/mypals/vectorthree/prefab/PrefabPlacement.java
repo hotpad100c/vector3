@@ -318,7 +318,7 @@ public final class PrefabPlacement {
                 else if (keyframe instanceof CameraOrbitKeyframe orbit) points.add(new Vector3d(orbit.center));
                 else if (keyframe instanceof ShapeKeyframe shape) {
                     ShapeState state = shape.value;
-                    if (state.parentShapeId() == null || state.parentShapeId().isEmpty()) points.add(new Vector3d(state.x(), state.y(), state.z()));
+                    if (state.mount() == null && (state.parentShapeId() == null || state.parentShapeId().isEmpty())) points.add(new Vector3d(state.x(), state.y(), state.z()));
                 } else if (keyframe instanceof CustomKeyframe<?> custom && custom.value instanceof LookTo look
                         && look.kind() == Target.Kind.POSITION) {
                     points.add(new Vector3d(look.x(), look.y(), look.z()));

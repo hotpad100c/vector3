@@ -30,7 +30,7 @@ public final class DollyZoomKeyframeType extends CustomKeyframeType<DollyZoom> {
 
     @Override
     protected DollyZoom createValue() {
-        DollyZoom value = new DollyZoom(false, Target.at(TargetEditor.crosshairTarget()), 8, 4, 0, 0);
+        DollyZoom value = new DollyZoom(false, TargetEditor.defaultTarget(), 8, 4, 0, 0);
         return fromCamera(value);
     }
 

@@ -1,5 +1,7 @@
 package ml.mypals.vectorthree.camera.target;
 
+import ml.mypals.vectorthree.camera.ViewportPick;
+import ml.mypals.vectorthree.flashback.Eyedropper;
 import com.moulberry.flashback.combo_options.TrackingBodyPart;
 import com.moulberry.flashback.editor.ui.ImGuiHelper;
 import imgui.moulberry90.ImGui;
@@ -75,10 +77,19 @@ public final class TargetEditor {
             }
             ImGui.endCombo();
         }
-        return result;
+        String dropped = Eyedropper.shape("target_shape");
+        return dropped != null ? dropped : result;
     }
 
-    /** The block under the camera's crosshair, or a point in front of the camera when there is none. */
+    public static Target defaultTarget() {
+        Minecraft minecraft = Minecraft.getInstance();
+        Camera camera = minecraft.gameRenderer.mainCamera();
+        Vector3fc forward = camera.forwardVector();
+        ViewportPick.Hit hit = ViewportPick.pick(camera.position(), new Vec3(forward.x(), forward.y(), forward.z()));
+        Target target = Target.at(crosshairTarget()).withKind(Target.Kind.ENTITY);
+        return hit != null && hit.entity() != null ? target.withEntity(hit.entity().getUUID()) : target;
+    }
+
     public static Vec3 crosshairTarget() {
         Minecraft minecraft = Minecraft.getInstance();
         Camera camera = minecraft.gameRenderer.mainCamera();

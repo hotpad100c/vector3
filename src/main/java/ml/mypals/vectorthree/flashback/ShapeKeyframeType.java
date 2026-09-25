@@ -107,7 +107,7 @@ public final class ShapeKeyframeType extends CustomKeyframeType<ShapeState> {
                 state.outlineColor() == 0 ? 0xFFFFFFFF : state.outlineColor(),
                 state.videoStartTick(), state.playAudio(),
                 state.manualPlayback(), state.noLoop(), state.playbackSeconds(), state.name(), state.wireframe(),
-                state.areaOptions(), state.bypassShaders());
+                state.areaOptions(), state.bypassShaders(), state.mount() == null ? null : state.mount().sanitized());
     }
 
     /** Picks the shape type first; the full editor is only shown once the shape exists. */

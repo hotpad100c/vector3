@@ -18,6 +18,7 @@ public class AreaMainPassMixin {
     @Inject(method = "submitFeatures", at = @At("HEAD"))
     private void vector3$submitAreas(LevelRenderState levelRenderState, SubmitNodeCollector collector, boolean bl,
             CallbackInfo ci) {
+        ShapeTrackRegistry.updateMounts();
         AreaShape.beginFrame();
         for (String shapeId : ShapeTrackRegistry.shapeIds()) {
             if (ShapeTrackRegistry.shape(shapeId) instanceof AreaShape area) {

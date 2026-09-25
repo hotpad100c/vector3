@@ -18,6 +18,10 @@ public final class CustomKeyframeChange implements KeyframeChange {
         this.action = action;
     }
 
+    public @Nullable Object value() {
+        return value;
+    }
+
     static <T> CustomKeyframeChange of(CustomKeyframeType<T> type, T value) {
         return new CustomKeyframeChange(type, value, handler -> type.apply(value, handler));
     }

@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.shape;
 
+import ml.mypals.vectorthree.camera.ViewportPick;
 import ml.mypals.vectorthree.mixin.flashback.ReplayUIAccessor;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.utils.InputHelper;
@@ -91,6 +92,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         setModeButton(I18n.get("vector3.gizmo.geometry"), Mode.GEOMETRY);
         setSpaceButton(I18n.get("vector3.gizmo.global"), false); ImGui.sameLine();
         setSpaceButton(I18n.get("vector3.gizmo.local"), true);
+        ImGui.textDisabled(I18n.get("vector3.gizmo.place_hint"));
 
     }
 
@@ -138,6 +140,18 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             }
         }
 
+        if (dragging == null && keyframe != null && inViewport && ImGui.isMouseClicked(2)) {
+            Vec3 target = placementTarget(ray);
+            if (target != null) {
+                ShapeState moved = withPosition(state, target);
+                ShapeTrackRegistry.apply(moved);
+                commit.accept(moved);
+                updateHandles(moved);
+                updateAabbMarker(moved);
+                updateAreaSelectionMarker(moved);
+            }
+        }
+
         if (dragging != null && ImGui.isMouseDown(1)) {
             ShapeState replacement = drag(ray, camera);
             if (replacement != null) {
@@ -148,6 +162,15 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 updateAreaSelectionMarker(replacement);
             }
         }
+    }
+
+    // Middle click: the clicked surface point, an entity's center, or with Ctrl the cell in front of the clicked face.
+    private static Vec3 placementTarget(RayModelIntersection.Ray ray) {
+        ViewportPick.Hit hit = ViewportPick.pick(ray.origin, ray.direction);
+        if (hit == null) return null;
+        if (hit.entity() != null) return hit.entity().getBoundingBox().getCenter();
+        if (InputHelper.isCtrlDownRaw()) return Vec3.atCenterOf(hit.block().getBlockPos().relative(hit.block().getDirection()));
+        return hit.location();
     }
 
     public boolean isDragging() {
@@ -677,7 +700,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     /** state.x/y/z is parent-local (Shape.forceSetWorldPosition combined with the ancestor-chain walk
      *  at draw time), so the gizmo has to walk the same parent chain to know where to actually draw. */
     private static Matrix4f parentWorldTransform(ShapeState state) {
-        return ShapeTrackRegistry.worldTransformOrIdentity(state.parentShapeId());
+        return ShapeTrackRegistry.parentTransform(state);
     }
 
     private static Vec3 center(ShapeState state) {

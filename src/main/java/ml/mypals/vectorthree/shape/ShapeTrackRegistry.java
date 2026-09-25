@@ -322,7 +322,7 @@ public final class ShapeTrackRegistry {
         } else {
             shape.seeThrough = state.seeThrough();
         }
-        applyParent(shape, state.parentShapeId());
+        applyParent(shape, state.mount() != null ? null : state.parentShapeId());
         shape.syncLastToTarget();
         Color color = new Color(state.color(), true);
         shape.setBaseColor(color);
@@ -338,7 +338,71 @@ public final class ShapeTrackRegistry {
         else shape.disable();
         syncWireframe(shape, state, previous);
         LAST_STATES.put(state.shapeId(), state);
+        if (state.mount() != null) MOUNTED.add(state.shapeId()); else MOUNTED.remove(state.shapeId());
+        if (state.mount() != null) placeMounted(state, shape);
+        if (state.visible() && !WireframeSettings.orDefault(state.wireframe()).hideFaces() && hiddenByMount(state.shapeId())) {
+            shape.disable();
+        }
         refreshAreaParents();
+    }
+
+    private static final java.util.Set<String> MOUNTED = new java.util.LinkedHashSet<>();
+
+    /**
+     * Mounted shapes follow their entity every frame, not only when keyframes apply: the RRK shape gets the
+     * mount transform baked into its world pose, and the shape with everything under it hides while the
+     * entity isn't loaded.
+     */
+    public static void updateMounts() {
+        if (MOUNTED.isEmpty()) return;
+        for (String shapeId : List.copyOf(MOUNTED)) {
+            ShapeState state = LAST_STATES.get(shapeId);
+            Shape shape = SHAPES.get(shapeId);
+            if (state == null || state.mount() == null || shape == null) MOUNTED.remove(shapeId);
+            else placeMounted(state, shape);
+        }
+        for (Map.Entry<String, Shape> entry : SHAPES.entrySet()) {
+            ShapeState state = LAST_STATES.get(entry.getKey());
+            if (state == null || !state.visible() || WireframeSettings.orDefault(state.wireframe()).hideFaces()) continue;
+            if (hiddenByMount(entry.getKey())) entry.getValue().disable(); else entry.getValue().enable();
+        }
+        refreshAreaParents();
+    }
+
+    // Bakes the mount transform into the RRK shape's world pose; leaves it alone while the entity is missing.
+    private static void placeMounted(ShapeState state, Shape shape) {
+        Matrix4f mount = state.mount().transform();
+        if (mount == null) return;
+        Matrix4f world = mount.mul(localTransform(state.x(), state.y(), state.z(), state.pitch(), state.yaw(),
+                state.roll(), state.scaleX(), state.scaleY(), state.scaleZ()));
+        Vector3f position = world.getTranslation(new Vector3f());
+        Vector3f scale = world.getScale(new Vector3f());
+        Vector3f euler = world.getNormalizedRotation(new Quaternionf()).getEulerAnglesXYZ(new Vector3f());
+        shape.forceSetWorldPosition(new Vec3(position.x, position.y, position.z));
+        shape.forceSetWorldRotation(new Vector3f((float) Math.toDegrees(euler.x), (float) Math.toDegrees(euler.y),
+                (float) Math.toDegrees(euler.z)));
+        shape.forceSetWorldScale(new Vec3(scale.x, scale.y, scale.z));
+    }
+
+    // Whether the shape, or the ancestor that carries the mount, rides an entity that isn't loaded.
+    private static boolean hiddenByMount(String shapeId) {
+        java.util.Set<String> visited = new java.util.HashSet<>();
+        for (String current = shapeId; current != null && !current.isEmpty() && visited.add(current); ) {
+            ShapeState state = LAST_STATES.get(current);
+            if (state == null) return false;
+            if (state.mount() != null) return state.mount().resolve() == null;
+            current = state.parentShapeId();
+        }
+        return false;
+    }
+
+    /** The transform a shape's own x/y/z, rotation and scale are relative to: its mount point or parent shape. */
+    public static Matrix4f parentTransform(ShapeState state) {
+        if (state.mount() != null) {
+            Matrix4f mount = state.mount().transform();
+            return mount == null ? new Matrix4f() : mount;
+        }
+        return worldTransformOrIdentity(state.parentShapeId());
     }
 
     // Areas draw themselves instead of through RRK's transformer, so parent motion is pushed to them here.
@@ -346,7 +410,7 @@ public final class ShapeTrackRegistry {
         for (Map.Entry<String, Shape> entry : SHAPES.entrySet()) {
             if (!(entry.getValue() instanceof AreaShape area)) continue;
             ShapeState state = LAST_STATES.get(entry.getKey());
-            area.setParentTransform(worldTransformOrIdentity(state == null ? null : state.parentShapeId()));
+            area.setParentTransform(state == null ? new Matrix4f() : parentTransform(state));
         }
     }
 
@@ -601,10 +665,21 @@ public final class ShapeTrackRegistry {
 
     public static void convertToNewParent(ShapeState state, String newParentId,
             float[] position, float[] rotation, float[] scale) {
-        Matrix4f oldWorld = worldTransformOrIdentity(state.parentShapeId())
+        convertTo(state, worldTransformOrIdentity(newParentId), position, rotation, scale);
+    }
+
+    public static void convertToMount(ShapeState state, ShapeMount mount, float[] position, float[] rotation, float[] scale) {
+        Matrix4f transform = mount.transform();
+        convertTo(state, transform == null ? new Matrix4f() : transform, position, rotation, scale);
+    }
+
+    // Keeps where the shape appears while its x/y/z, rotation and scale move under a new reference frame.
+    private static void convertTo(ShapeState state, Matrix4f newParent,
+            float[] position, float[] rotation, float[] scale) {
+        Matrix4f oldWorld = parentTransform(state)
                 .mul(localTransform(position[0], position[1], position[2],
                         rotation[0], rotation[1], rotation[2], scale[0], scale[1], scale[2]));
-        Matrix4f newLocal = worldTransformOrIdentity(newParentId).invert().mul(oldWorld);
+        Matrix4f newLocal = newParent.invert().mul(oldWorld);
 
         Vector3f newPosition = newLocal.getTranslation(new Vector3f());
         Vector3f newScale = newLocal.getScale(new Vector3f());
@@ -627,6 +702,7 @@ public final class ShapeTrackRegistry {
         if (state == null) return new Matrix4f();
         Matrix4f local = localTransform(state.x(), state.y(), state.z(),
                 state.pitch(), state.yaw(), state.roll(), state.scaleX(), state.scaleY(), state.scaleZ());
+        if (state.mount() != null) return parentTransform(state).mul(local);
         return worldTransform(state.parentShapeId(), visited).mul(local);
     }
 

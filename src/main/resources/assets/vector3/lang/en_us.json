@@ -79,7 +79,7 @@
   "vector3.shape_manager.title": "Shape Manager",
   "vector3.shape_manager.editor_mode": "Editor Mode",
   "vector3.shape_manager.debug_bypass_only": "Debug: Iris Bypass Target Only",
-  "vector3.shape_manager.copy_hint": "Right-click to copy ID",
+  "vector3.shape_manager.copy_hint": "Drag onto a shape to parent it · right-click to edit · middle-click to copy ID",
 
   "vector3.gizmo.viewport_gizmo": "Viewport Gizmo",
   "vector3.gizmo.move": "Move (G)",
@@ -174,5 +174,20 @@
   "vector3.keyframe.glow_follow_text": "Glow follows text color",
   "vector3.keyframe.glow_color": "Glow color",
   "vector3.keyframe.glow_sdf_only": "Glow only works with custom (.ttf/.otf) fonts",
-  "vector3.keyframe.glow_spread": "Glow spread"
+  "vector3.keyframe.glow_spread": "Glow spread",
+  "vector3.gizmo.place_hint": "Middle click: move to the block/entity under the cursor (Ctrl: snap to the block cell)",
+  "vector3.shape_manager.drop_to_unparent": "Drop here to remove its parent",
+  "vector3.history.reparent": "Change parent of %s",
+  "vector3.eyedropper": "Pick",
+  "vector3.eyedropper.entity_tooltip": "Pick an entity in the viewport",
+  "vector3.eyedropper.shape_tooltip": "Pick a shape in the viewport",
+  "vector3.eyedropper.hint": "Click a target in the viewport (right click / Esc to cancel)",
+  "vector3.shape_manager.auto_key": "Auto keyframe",
+  "vector3.shape_manager.auto_key.tooltip": "Picking a shape with nothing selected edits it at the playhead; moving it creates a keyframe there",
+  "vector3.history.auto_key": "Auto keyframe",
+  "vector3.keyframe.mount_entity": "Mount on entity",
+  "vector3.keyframe.mount_follow_rotation": "Follow rotation",
+  "vector3.keyframe.unmount": "Unmount",
+  "vector3.properties.title": "Properties",
+  "vector3.properties.empty": "Select a keyframe on the timeline to edit it here."
 }

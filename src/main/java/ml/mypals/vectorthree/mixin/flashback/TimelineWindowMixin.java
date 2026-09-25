@@ -1,5 +1,12 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import org.spongepowered.asm.mixin.injection.Slice;
+import ml.mypals.vectorthree.flashback.PropertiesWindow;
+import ml.mypals.vectorthree.flashback.Eyedropper;
+import com.moulberry.flashback.state.EditorSceneHistoryEntry;
+import com.moulberry.flashback.state.EditorSceneHistoryAction;
+import ml.mypals.vectorthree.shape.ShapeState;
+import ml.mypals.vectorthree.shape.ShapeReparent;
 import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
@@ -73,6 +80,7 @@ public abstract class TimelineWindowMixin {
     @Shadow private static int keyframeSize;
     @Shadow private static int openCreateKeyframeAtTickTrack;
     @Shadow private static boolean grabbedKeyframe;
+    @Shadow private static boolean grabbedPlayback;
     @Shadow private static int grabbedKeyframeTrack;
     @Unique
     private static GrabMovementInfoAccessor vector3$liveGrab;
@@ -126,8 +134,11 @@ public abstract class TimelineWindowMixin {
         Vector3.GIZMO_EDITOR.frame();
         vector3$handlePrefabs();
         if (ShapeManagerWindow.isEditorMode()) Vector3.EDITOR_CAMERA.frame();
+        vector3$followPlayhead();
         String shapeId = ShapeTimelineSelection.consume();
-        if (shapeId != null) {
+        if (shapeId != null && ShapeManagerWindow.isAutoKey()) {
+            vector3$beginAutoKey(shapeId);
+        } else if (shapeId != null) {
             int cursor = TimelineWindow.getCursorTick();
             int bestTrack = -1;
             int bestTick = -1;
@@ -153,7 +164,7 @@ public abstract class TimelineWindowMixin {
                 selectedKeyframesList.add(new SelectedKeyframes(ShapeKeyframeType.INSTANCE, bestTrack, ticks));
                 editingKeyframeTrack = bestTrack;
                 editingKeyframeTick = bestTick;
-                ImGui.openPopup("##KeyframePopup");
+                PropertiesWindow.requestFocus();
             }
         }
 
@@ -172,6 +183,33 @@ public abstract class TimelineWindowMixin {
         Vector3.PREFABS.frame(editorScene, editorState, TimelineWindowMixin::upgradeToSceneWrite);
         vector3$groupMenu();
         vector3$selectionMenu();
+    }
+
+    // Flashback's keyframe popup becomes the Properties window: begin/end are swapped for the window's, and
+    // the popup follows the selection instead of needing a right click.
+    @WrapOperation(method = "renderInner", at = @At(value = "INVOKE",
+            target = "Lcom/moulberry/flashback/editor/ui/ImGuiHelper;beginPopup(Ljava/lang/String;)Z"))
+    private static boolean vector3$beginProperties(String id, Operation<Boolean> original) {
+        if (!PropertiesWindow.KEYFRAME_POPUP.equals(id)) return original.call(id);
+        if (selectedKeyframesList.size() == 1 && selectedKeyframesList.getFirst().keyframeTicks().size() == 1) {
+            editingKeyframeTrack = selectedKeyframesList.getFirst().trackIndex();
+            editingKeyframeTick = selectedKeyframesList.getFirst().keyframeTicks().iterator().nextInt();
+        }
+        return PropertiesWindow.begin(editingKeyframeTrack >= 0 && editingKeyframeTick >= 0,
+                ((long) editingKeyframeTrack << 32) | (editingKeyframeTick & 0xFFFFFFFFL));
+    }
+
+    @Redirect(method = "renderInner", at = @At(value = "INVOKE", ordinal = 0, target = "Limgui/moulberry90/ImGui;endPopup()V"),
+            slice = @Slice(from = @At(value = "INVOKE",
+                    target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;renderKeyframeOptionsPopup(I)V")))
+    private static void vector3$endProperties() {
+        PropertiesWindow.end();
+    }
+
+    @WrapOperation(method = "handleClick", at = @At(value = "INVOKE", target = "Limgui/moulberry90/ImGui;openPopup(Ljava/lang/String;)V"))
+    private static void vector3$openProperties(String id, Operation<Void> original) {
+        if (PropertiesWindow.KEYFRAME_POPUP.equals(id)) PropertiesWindow.requestFocus();
+        else original.call(id);
     }
 
     // Flashback's box select feeds window-absolute X where every other caller passes it relative to the window.
@@ -463,6 +501,12 @@ public abstract class TimelineWindowMixin {
     private static void vector3$previewDrag() {
         GrabMovementInfoAccessor movement = vector3$liveGrab;
         vector3$liveGrab = null;
+        if (ShapeManagerWindow.isInstantPreview() && grabbedPlayback && ImGui.isMouseDown(0)) {
+            // Flashback only seeks on release; until then keyframes follow the dragged playhead.
+            editorState.applyKeyframes(new MinecraftKeyframeHandler(Minecraft.getInstance()), timelineXToReplayTick(mouseX - x));
+            vector3$previewedDrag = true;
+            return;
+        }
         if (!ShapeManagerWindow.isInstantPreview() || !grabbedKeyframe || movement == null || !ImGui.isMouseDown(0)) {
             if (vector3$previewedDrag) {
                 vector3$previewedDrag = false;
@@ -508,6 +552,7 @@ public abstract class TimelineWindowMixin {
 
     @Inject(method = "render", at = @At("RETURN"))
     private static void vector3$refreshShapesAfterTimelineUnlock(CallbackInfo ci) {
+        Eyedropper.endFrame();
         ShapeManagerWindow.render();
         PrefabBasketWindow.render(!selectedKeyframesList.isEmpty());
         Vector3.PREFABS.renderPanel();
@@ -626,9 +671,79 @@ public abstract class TimelineWindowMixin {
     }
 
     @Unique
+    // Auto key: a shape picked with nothing selected is edited at the playhead, through a stand-in keyframe
+    // holding its interpolated state; the first commit turns it into a real keyframe at the playhead.
+    private static ShapeKeyframe vector3$autoKeyframe;
+    private static int vector3$autoKeyTrack;
+    private static String vector3$autoKeyShape;
+
+    private static void vector3$beginAutoKey(String shapeId) {
+        int cursor = TimelineWindow.getCursorTick();
+        int trackIndex = -1;
+        for (int i = 0; i < editorScene.keyframeTracks.size(); i++) {
+            KeyframeTrack track = editorScene.keyframeTracks.get(i);
+            if (track.keyframeType == ShapeKeyframeType.INSTANCE && !track.keyframesByTick.isEmpty()
+                    && track.keyframesByTick.firstEntry().getValue() instanceof ShapeKeyframe first
+                    && first.value.shapeId().equals(shapeId)) {
+                trackIndex = i;
+                break;
+            }
+        }
+        if (trackIndex < 0) return;
+        if (editorScene.keyframeTracks.get(trackIndex).keyframesByTick.containsKey(cursor)) {
+            vector3$autoKeyframe = null;
+            vector3$selectKeyframe(trackIndex, cursor);
+            return;
+        }
+        ShapeState state = ShapeReparent.stateAt(editorScene, shapeId, cursor);
+        if (state == null) return;
+        selectedKeyframesList.clear();
+        vector3$autoKeyframe = new ShapeKeyframe(state);
+        vector3$autoKeyTrack = trackIndex;
+        vector3$autoKeyShape = shapeId;
+        Vector3.GIZMO_EDITOR.select(vector3$autoKeyframe, TimelineWindowMixin::vector3$commitAutoKey);
+    }
+
+    private static void vector3$followPlayhead() {
+        if (vector3$autoKeyframe == null || Vector3.GIZMO_EDITOR.isDragging() || editorScene == null) return;
+        ShapeState now = ShapeReparent.stateAt(editorScene, vector3$autoKeyShape, TimelineWindow.getCursorTick());
+        if (now != null) vector3$autoKeyframe.value = now;
+    }
+
+    private static void vector3$commitAutoKey(ShapeState state) {
+        int trackIndex = vector3$autoKeyTrack, tick = TimelineWindow.getCursorTick();
+        vector3$autoKeyframe = null;
+        if (editorScene == null || trackIndex >= editorScene.keyframeTracks.size()) return;
+        upgradeToSceneWrite();
+        Keyframe existing = editorScene.keyframeTracks.get(trackIndex).keyframesByTick.get(tick);
+        EditorSceneHistoryAction undo = existing != null
+                ? new EditorSceneHistoryAction.SetKeyframe(ShapeKeyframeType.INSTANCE, trackIndex, tick, existing.copy())
+                : new EditorSceneHistoryAction.RemoveKeyframe(ShapeKeyframeType.INSTANCE, trackIndex, tick);
+        editorScene.push(new EditorSceneHistoryEntry(List.of(undo), List.of(new EditorSceneHistoryAction.SetKeyframe(
+                ShapeKeyframeType.INSTANCE, trackIndex, tick, new ShapeKeyframe(state))), I18n.get("vector3.history.auto_key")));
+        editorState.markDirty();
+        vector3$selectKeyframe(trackIndex, tick);
+    }
+
+    private static void vector3$selectKeyframe(int trackIndex, int tick) {
+        selectedKeyframesList.clear();
+        IntSet ticks = new IntOpenHashSet();
+        ticks.add(tick);
+        selectedKeyframesList.add(new SelectedKeyframes(ShapeKeyframeType.INSTANCE, trackIndex, ticks));
+        editingKeyframeTrack = trackIndex;
+        editingKeyframeTick = tick;
+        PropertiesWindow.requestFocus();
+    }
+
     private static void vector3$syncGizmoSelection() {
         if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging() || Vector3.PREFABS.isDragging()) {
             return;
+        }
+        if (vector3$autoKeyframe != null) {
+            boolean cancelled = !ShapeManagerWindow.isAutoKey()
+                    || ImGui.isKeyPressed(ImGuiKey.Escape) && !ImGui.getIO().getWantTextInput();
+            if (!cancelled && selectedKeyframesList.isEmpty()) return;
+            vector3$autoKeyframe = null;
         }
         if (selectedKeyframesList.size() != 1
                 || selectedKeyframesList.getFirst().keyframeTicks().size() != 1) {

@@ -37,6 +37,7 @@
 		"flashback.ExportTickInfoAccessor",
 		"flashback.FlashbackGsonMixin",
 		"flashback.GrabMovementInfoAccessor",
+		"flashback.ImGuiHelperPopupMixin",
 		"flashback.KeyframeCopyGroupMixin",
 		"flashback.KeyframeGroupMixin",
 		"flashback.KeyframeTrackGroupMixin",

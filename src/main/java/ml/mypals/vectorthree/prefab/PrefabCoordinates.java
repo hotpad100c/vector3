@@ -107,7 +107,7 @@ public final class PrefabCoordinates {
     // area's corners name the recorded blocks it copies, so neither moves.
     private static ShapeState mapShape(ShapeState state, PrefabTransform t, Map<String, String> ids, Set<String> contained) {
         String parent = state.parentShapeId() == null ? "" : state.parentShapeId();
-        if (!contained.contains(parent)) {
+        if (!contained.contains(parent) && state.mount() == null) {
             Vector3d position = t.point(new Vector3d(state.x(), state.y(), state.z()));
             Quaternionf rotation = new Quaternionf(t.rotation()).mul(new Quaternionf().rotateXYZ(
                     (float) Math.toRadians(state.pitch()), (float) Math.toRadians(state.yaw()), (float) Math.toRadians(state.roll())));

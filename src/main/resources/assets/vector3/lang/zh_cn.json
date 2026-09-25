@@ -79,7 +79,7 @@
   "vector3.shape_manager.title": "形状管理器",
   "vector3.shape_manager.editor_mode": "编辑器模式",
   "vector3.shape_manager.debug_bypass_only": "调试：仅显示 Iris 旁路目标",
-  "vector3.shape_manager.copy_hint": "右键复制 ID",
+  "vector3.shape_manager.copy_hint": "拖到其他图形上设为子图形 · 右键编辑 · 中键复制 ID",
 
   "vector3.gizmo.viewport_gizmo": "视口操纵器",
   "vector3.gizmo.move": "移动 (G)",
@@ -174,5 +174,20 @@
   "vector3.keyframe.glow_follow_text": "辉光颜色跟随文字",
   "vector3.keyframe.glow_color": "辉光颜色",
   "vector3.keyframe.glow_sdf_only": "辉光只对自定义字体（.ttf/.otf）生效",
-  "vector3.keyframe.glow_spread": "辉光扩散"
+  "vector3.keyframe.glow_spread": "辉光扩散",
+  "vector3.gizmo.place_hint": "中键：移到鼠标指着的方块/实体（按住 Ctrl 对齐到方块格）",
+  "vector3.shape_manager.drop_to_unparent": "拖到这里解除父级",
+  "vector3.history.reparent": "更改 %s 的父级",
+  "vector3.eyedropper": "吸取",
+  "vector3.eyedropper.entity_tooltip": "在视口里点选一个实体",
+  "vector3.eyedropper.shape_tooltip": "在视口里点选一个图形",
+  "vector3.eyedropper.hint": "在视口里点击目标（右键 / Esc 取消）",
+  "vector3.shape_manager.auto_key": "自动关键帧",
+  "vector3.shape_manager.auto_key.tooltip": "没有选中关键帧时点选图形，会直接编辑播放头处的状态；移动后在播放头处建立关键帧",
+  "vector3.history.auto_key": "自动关键帧",
+  "vector3.keyframe.mount_entity": "挂载到实体",
+  "vector3.keyframe.mount_follow_rotation": "跟随旋转",
+  "vector3.keyframe.unmount": "解除挂载",
+  "vector3.properties.title": "属性",
+  "vector3.properties.empty": "在时间轴上选中一个关键帧，即可在这里编辑。"
 }
