@@ -35,6 +35,8 @@
 		"flashback.ExportJobSkipMixin",
 		"flashback.ExportTickInfoAccessor",
 		"flashback.FlashbackGsonMixin",
+		"flashback.KeyframeCopyGroupMixin",
+		"flashback.KeyframeGroupMixin",
 		"flashback.KeyframeTrackGroupMixin",
 		"flashback.KeyframeTypeAdapterMixin",
 		"flashback.MainMenuBarMixin",

@@ -9,6 +9,7 @@ import ml.mypals.vectorthree.prefab.PrefabGroupStore;
 import ml.mypals.vectorthree.prefab.PrefabGroupHolder;
 import ml.mypals.vectorthree.prefab.PrefabHistory;
 import ml.mypals.vectorthree.shape.ShapeTimelineSelection;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -21,8 +22,8 @@ import java.util.function.Consumer;
 
 @Mixin(EditorScene.class)
 public class EditorSceneMixin implements PrefabGroupHolder.Scene {
+    @Final
     @Shadow public List<KeyframeTrack> keyframeTracks;
-    // Saved with the scene through PrefabGroupStore's adapter; Gson skips field initializers, so it's created lazily.
     @Unique private PrefabGroupStore vector3$prefabGroups;
 
     @Override

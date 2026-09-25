@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.flashback.custom;
 
+import ml.mypals.vectorthree.prefab.PrefabGroups;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
@@ -38,6 +39,7 @@ public final class CustomKeyframes implements JsonSerializer<CustomKeyframe<?>>,
         json.addProperty("type", keyframe.type().id());
         json.add(keyframe.type().valueField(), context.serialize(keyframe.value, keyframe.type().valueType()));
         json.add("interpolation_type", context.serialize(keyframe.interpolationType()));
+        PrefabGroups.writeGroup(keyframe, json);
         return json;
     }
 
@@ -47,7 +49,9 @@ public final class CustomKeyframes implements JsonSerializer<CustomKeyframe<?>>,
         InterpolationType interpolation = json.has("interpolation_type")
                 ? context.deserialize(json.get("interpolation_type"), InterpolationType.class)
                 : InterpolationType.getDefault();
-        return type.newKeyframe(type.sanitize(value), interpolation);
+        CustomKeyframe<T> keyframe = type.newKeyframe(type.sanitize(value), interpolation);
+        PrefabGroups.readGroup(keyframe, json);
+        return keyframe;
     }
 
     @Override

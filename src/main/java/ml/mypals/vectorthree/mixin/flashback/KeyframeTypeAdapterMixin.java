@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import ml.mypals.vectorthree.prefab.PrefabGroups;
 import com.google.gson.*;
 import com.moulberry.flashback.keyframe.Keyframe;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
@@ -29,5 +30,17 @@ public class KeyframeTypeAdapterMixin {
         if (!json.has("type")) return;
         CustomKeyframeType<?> custom = CustomKeyframes.byId(json.get("type").getAsString());
         if (custom != null) cir.setReturnValue(CustomKeyframes.read(custom, json, context));
+    }
+
+    @Inject(method = "serialize(Lcom/moulberry/flashback/keyframe/Keyframe;Ljava/lang/reflect/Type;Lcom/google/gson/JsonSerializationContext;)Lcom/google/gson/JsonElement;", at = @At("RETURN"), remap = false)
+    private void vector3$serializeGroup(Keyframe keyframe, Type type, JsonSerializationContext context,
+            CallbackInfoReturnable<JsonElement> cir) {
+        if (cir.getReturnValue() instanceof JsonObject json) PrefabGroups.writeGroup(keyframe, json);
+    }
+
+    @Inject(method = "deserialize(Lcom/google/gson/JsonElement;Ljava/lang/reflect/Type;Lcom/google/gson/JsonDeserializationContext;)Lcom/moulberry/flashback/keyframe/Keyframe;", at = @At("RETURN"), remap = false)
+    private void vector3$deserializeGroup(JsonElement element, Type type, JsonDeserializationContext context,
+            CallbackInfoReturnable<Keyframe> cir) {
+        if (element.isJsonObject() && cir.getReturnValue() != null) PrefabGroups.readGroup(cir.getReturnValue(), element.getAsJsonObject());
     }
 }

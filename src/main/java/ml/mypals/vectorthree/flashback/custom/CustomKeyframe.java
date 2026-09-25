@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.flashback.custom;
 
+import ml.mypals.vectorthree.prefab.PrefabGroups;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.KeyframeType;
 import com.moulberry.flashback.keyframe.change.KeyframeChange;
@@ -34,7 +35,12 @@ public class CustomKeyframe<T> extends Keyframe {
     }
 
     @Override public final KeyframeType<?> keyframeType() { return type; }
-    @Override public final Keyframe copy() { return type.newKeyframe(value, interpolationType()); }
+    @Override
+    public final Keyframe copy() {
+        Keyframe copy = type.newKeyframe(value, interpolationType());
+        PrefabGroups.tag(copy, PrefabGroups.groupOf(this));
+        return copy;
+    }
     @Override public final KeyframeChange createChange() { return CustomKeyframeChange.of(type, value); }
 
     @Override

@@ -14,17 +14,16 @@ import java.util.Set;
 
 /**
  * History actions only rebuild tracks and keyframes, so a track an undo or redo brings back loses its
- * group, name and colour. Each push remembers those for the tracks it removes and adds; undo puts back
+ * name and colour. Each push remembers those for the tracks it removes and adds; undo puts back
  * the removed ones, redo the added ones. Tracks the entry left alone keep their own fields untouched.
  */
 public final class PrefabHistory {
-    private record Meta(@Nullable String group, @Nullable String name, int colour) {
+    private record Meta(@Nullable String name, int colour) {
         static Meta of(KeyframeTrack track) {
-            return new Meta(PrefabGroups.groupOf(track), track.customName, track.customColour);
+            return new Meta(track.customName, track.customColour);
         }
 
         void applyTo(KeyframeTrack track) {
-            PrefabGroups.tag(track, group);
             track.customName = name;
             track.customColour = colour;
         }

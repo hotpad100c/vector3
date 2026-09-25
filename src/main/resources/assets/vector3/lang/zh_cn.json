@@ -160,5 +160,7 @@
   "vector3.dolly_zoom.view": "朝向 Yaw / Pitch",
   "vector3.dolly_zoom.fov": "此处 FOV：%s°",
   "vector3.dolly_zoom.from_camera": "从当前相机设置",
-  "vector3.prefab.target_center": "放置中心"
+  "vector3.prefab.target_center": "放置中心",
+  "vector3.history.move_to_track": "移动关键帧到轨道",
+  "vector3.timeline.new_track": "新建轨道"
 }

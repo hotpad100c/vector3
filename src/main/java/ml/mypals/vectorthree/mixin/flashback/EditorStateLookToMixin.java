@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Applies Dolly Zoom, then Look To, after every track, so camera tracks can't overwrite them. */
 @Mixin(value = EditorState.class, remap = false)
 public class EditorStateLookToMixin {
     @Inject(method = "applyKeyframes(Lcom/moulberry/flashback/keyframe/handler/KeyframeHandler;FJ)V", at = @At("HEAD"))
