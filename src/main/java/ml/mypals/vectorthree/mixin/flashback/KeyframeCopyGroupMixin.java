@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import ml.mypals.vectorthree.flashback.curve.SpeedCurves;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.impl.AudioKeyframe;
 import com.moulberry.flashback.keyframe.impl.BlockOverrideKeyframe;
@@ -25,5 +26,6 @@ public class KeyframeCopyGroupMixin {
     @Inject(method = "copy", at = @At("RETURN"))
     private void vector3$copyGroup(CallbackInfoReturnable<Keyframe> cir) {
         PrefabGroups.tag(cir.getReturnValue(), PrefabGroups.groupOf((Keyframe) (Object) this));
+        SpeedCurves.set(cir.getReturnValue(), SpeedCurves.of((Keyframe) (Object) this));
     }
 }

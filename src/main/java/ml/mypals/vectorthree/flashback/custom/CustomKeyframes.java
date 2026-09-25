@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.flashback.custom;
 
+import ml.mypals.vectorthree.flashback.curve.SpeedCurves;
 import ml.mypals.vectorthree.prefab.PrefabGroups;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
@@ -40,6 +41,7 @@ public final class CustomKeyframes implements JsonSerializer<CustomKeyframe<?>>,
         json.add(keyframe.type().valueField(), context.serialize(keyframe.value, keyframe.type().valueType()));
         json.add("interpolation_type", context.serialize(keyframe.interpolationType()));
         PrefabGroups.writeGroup(keyframe, json);
+        SpeedCurves.write(keyframe, json);
         return json;
     }
 
@@ -51,6 +53,7 @@ public final class CustomKeyframes implements JsonSerializer<CustomKeyframe<?>>,
                 : InterpolationType.getDefault();
         CustomKeyframe<T> keyframe = type.newKeyframe(type.sanitize(value), interpolation);
         PrefabGroups.readGroup(keyframe, json);
+        SpeedCurves.read(keyframe, json);
         return keyframe;
     }
 

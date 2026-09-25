@@ -1,5 +1,9 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
+import ml.mypals.vectorthree.flashback.curve.SpeedCurves;
+import ml.mypals.vectorthree.flashback.curve.SpeedCurveEditor;
+import ml.mypals.vectorthree.flashback.curve.SpeedCurve;
 import org.spongepowered.asm.mixin.injection.Slice;
 import ml.mypals.vectorthree.flashback.PropertiesWindow;
 import ml.mypals.vectorthree.flashback.Eyedropper;
@@ -80,7 +84,6 @@ public abstract class TimelineWindowMixin {
     @Shadow private static int keyframeSize;
     @Shadow private static int openCreateKeyframeAtTickTrack;
     @Shadow private static boolean grabbedKeyframe;
-    @Shadow private static boolean grabbedPlayback;
     @Shadow private static int grabbedKeyframeTrack;
     @Unique
     private static GrabMovementInfoAccessor vector3$liveGrab;
@@ -185,6 +188,13 @@ public abstract class TimelineWindowMixin {
         vector3$selectionMenu();
     }
 
+    // Flashback previews keyframes while scrubbing the playhead only with Ctrl held; instant preview always does.
+    @WrapOperation(method = "renderInner", at = @At(value = "INVOKE",
+            target = "Lcom/moulberry/flashback/utils/InputHelper;isCtrlDownRaw()Z"))
+    private static boolean vector3$scrubWithKeyframes(Operation<Boolean> original) {
+        return original.call() || ShapeManagerWindow.isInstantPreview();
+    }
+
     // Flashback's keyframe popup becomes the Properties window: begin/end are swapped for the window's, and
     // the popup follows the selection instead of needing a right click.
     @WrapOperation(method = "renderInner", at = @At(value = "INVOKE",
@@ -195,8 +205,109 @@ public abstract class TimelineWindowMixin {
             editingKeyframeTrack = selectedKeyframesList.getFirst().trackIndex();
             editingKeyframeTick = selectedKeyframesList.getFirst().keyframeTicks().iterator().nextInt();
         }
+        Keyframe editing = vector3$editingKeyframe();
         return PropertiesWindow.begin(editingKeyframeTrack >= 0 && editingKeyframeTick >= 0,
-                ((long) editingKeyframeTrack << 32) | (editingKeyframeTick & 0xFFFFFFFFL));
+                ((long) editingKeyframeTrack << 32) | (editingKeyframeTick & 0xFFFFFFFFL),
+                editing != null && SpeedCurves.of(editing) != null);
+    }
+
+    private static Keyframe vector3$editingKeyframe() {
+        if (editorScene == null || editingKeyframeTrack < 0 || editingKeyframeTrack >= editorScene.keyframeTracks.size()) {
+            return null;
+        }
+        return editorScene.keyframeTracks.get(editingKeyframeTrack).keyframesByTick.get(editingKeyframeTick);
+    }
+
+    @WrapOperation(method = "renderInner", at = @At(value = "INVOKE",
+            target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;renderKeyframeOptionsPopup(I)V"))
+    private static void vector3$propertiesPage(int totalTicks, Operation<Void> original) {
+        if (PropertiesWindow.isCurveTab()) vector3$renderCurvePage();
+        else original.call(totalTicks);
+    }
+
+    // "Custom" joins the interpolation types: choosing it gives the selected keyframes a speed curve.
+    @WrapOperation(method = "renderKeyframeOptionsPopup", at = @At(value = "INVOKE", ordinal = 0,
+            target = "Lcom/moulberry/flashback/editor/ui/ImGuiHelper;combo(Ljava/lang/String;[I[Ljava/lang/String;)Z"))
+    private static boolean vector3$customInterpolation(String label, int[] selected, String[] names,
+            Operation<Boolean> original) {
+        Keyframe editing = vector3$editingKeyframe();
+        boolean custom = editing != null && SpeedCurves.of(editing) != null;
+        String[] withCustom = java.util.Arrays.copyOf(names, names.length + 1);
+        withCustom[names.length] = I18n.get("vector3.curve.custom");
+        if (custom) selected[0] = names.length;
+        if (!original.call(label, selected, withCustom)) return false;
+        if (selected[0] == names.length) {
+            if (!custom) vector3$setCurves(SpeedCurve.preset(SpeedCurve.Preset.EASE_IN_OUT));
+            return false;
+        }
+        vector3$clearCurvesOnPush = true;
+        return true;
+    }
+
+    private static boolean vector3$clearCurvesOnPush;
+
+    // The keyframes Flashback writes for the new interpolation type are copies, still carrying the curve.
+    @WrapOperation(method = "renderKeyframeOptionsPopup", at = @At(value = "INVOKE", ordinal = 0,
+            target = "Lcom/moulberry/flashback/state/EditorScene;push(Lcom/moulberry/flashback/state/EditorSceneHistoryEntry;)V"))
+    private static void vector3$dropCurvesWithType(EditorScene scene, EditorSceneHistoryEntry entry, Operation<Void> original) {
+        if (vector3$clearCurvesOnPush) {
+            for (EditorSceneHistoryAction action : entry.redo()) {
+                if (action instanceof EditorSceneHistoryAction.SetKeyframe set) SpeedCurves.set(set.keyframe(), null);
+            }
+            vector3$clearCurvesOnPush = false;
+        }
+        original.call(scene, entry);
+    }
+
+    private static void vector3$setCurves(SpeedCurve curve) {
+        upgradeToSceneWrite();
+        List<SelectedKeyframes> targets = selectedKeyframesList.isEmpty() && editingKeyframeTrack >= 0
+                ? List.of(new SelectedKeyframes(editorScene.keyframeTracks.get(editingKeyframeTrack).keyframeType,
+                        editingKeyframeTrack, IntSet.of(editingKeyframeTick)))
+                : selectedKeyframesList;
+        List<EditorSceneHistoryAction> undo = new ArrayList<>(), redo = new ArrayList<>();
+        for (SelectedKeyframes selected : targets) {
+            if (selected.trackIndex() >= editorScene.keyframeTracks.size()) continue;
+            KeyframeTrack track = editorScene.keyframeTracks.get(selected.trackIndex());
+            if (!track.keyframeType.allowChangingInterpolationType()) continue;
+            for (int tick : selected.keyframeTicks()) {
+                Keyframe keyframe = track.keyframesByTick.get(tick);
+                if (keyframe == null) continue;
+                Keyframe curved = keyframe.copy();
+                curved.interpolationType(InterpolationType.LINEAR);
+                SpeedCurves.set(curved, curve);
+                undo.add(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, selected.trackIndex(), tick, keyframe.copy()));
+                redo.add(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, selected.trackIndex(), tick, curved));
+            }
+        }
+        if (redo.isEmpty()) return;
+        editorScene.push(new EditorSceneHistoryEntry(undo, redo, I18n.get("vector3.history.speed_curve")));
+        vector3$keyframesChanged();
+    }
+
+    private static void vector3$renderCurvePage() {
+        Keyframe keyframe = vector3$editingKeyframe();
+        SpeedCurve curve = keyframe == null ? null : SpeedCurves.of(keyframe);
+        if (curve == null) return;
+        KeyframeTrack track = editorScene.keyframeTracks.get(editingKeyframeTrack);
+        Integer next = track.keyframesByTick.higherKey(editingKeyframeTick);
+        float playhead = next == null ? -1
+                : (TimelineWindow.getCursorTick() - editingKeyframeTick) / (float) (next - editingKeyframeTick);
+        SpeedCurveEditor.Result result = SpeedCurveEditor.render(curve, playhead);
+        if (result == null) return;
+        upgradeToSceneWrite();
+        keyframe = vector3$editingKeyframe();
+        if (keyframe == null) return;
+        SpeedCurves.set(keyframe, result.curve());
+        if (result.commit() && !result.curve().equals(result.before())) {
+            Keyframe before = keyframe.copy();
+            SpeedCurves.set(before, result.before());
+            editorScene.push(new EditorSceneHistoryEntry(
+                    List.of(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, editingKeyframeTrack, editingKeyframeTick, before)),
+                    List.of(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, editingKeyframeTrack, editingKeyframeTick, keyframe.copy())),
+                    I18n.get("vector3.history.speed_curve")));
+        }
+        vector3$keyframesChanged();
     }
 
     @Redirect(method = "renderInner", at = @At(value = "INVOKE", ordinal = 0, target = "Limgui/moulberry90/ImGui;endPopup()V"),
@@ -501,12 +612,6 @@ public abstract class TimelineWindowMixin {
     private static void vector3$previewDrag() {
         GrabMovementInfoAccessor movement = vector3$liveGrab;
         vector3$liveGrab = null;
-        if (ShapeManagerWindow.isInstantPreview() && grabbedPlayback && ImGui.isMouseDown(0)) {
-            // Flashback only seeks on release; until then keyframes follow the dragged playhead.
-            editorState.applyKeyframes(new MinecraftKeyframeHandler(Minecraft.getInstance()), timelineXToReplayTick(mouseX - x));
-            vector3$previewedDrag = true;
-            return;
-        }
         if (!ShapeManagerWindow.isInstantPreview() || !grabbedKeyframe || movement == null || !ImGui.isMouseDown(0)) {
             if (vector3$previewedDrag) {
                 vector3$previewedDrag = false;

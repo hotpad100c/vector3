@@ -39,6 +39,8 @@
 		"flashback.GrabMovementInfoAccessor",
 		"flashback.ImGuiHelperPopupMixin",
 		"flashback.KeyframeCopyGroupMixin",
+		"flashback.KeyframeCurveMixin",
+		"flashback.KeyframeTrackCurveMixin",
 		"flashback.KeyframeGroupMixin",
 		"flashback.KeyframeTrackGroupMixin",
 		"flashback.KeyframeTypeAdapterMixin",

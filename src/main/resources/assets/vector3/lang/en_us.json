@@ -189,5 +189,15 @@
   "vector3.keyframe.mount_follow_rotation": "Follow rotation",
   "vector3.keyframe.unmount": "Unmount",
   "vector3.properties.title": "Properties",
-  "vector3.properties.empty": "Select a keyframe on the timeline to edit it here."
+  "vector3.properties.empty": "Select a keyframe on the timeline to edit it here.",
+  "vector3.curve.custom": "Custom",
+  "vector3.curve.tab": "Speed curve",
+  "vector3.properties.tab.keyframe": "Keyframe",
+  "vector3.curve.hint": "Shapes the time from this keyframe to the next. Drag points and handles (Alt: break handle, Ctrl: snap), double-click to add, right-click to remove.",
+  "vector3.curve.preset.linear": "Linear",
+  "vector3.curve.preset.ease_in": "Ease in",
+  "vector3.curve.preset.ease_out": "Ease out",
+  "vector3.curve.preset.ease_in_out": "Ease in-out",
+  "vector3.curve.preset.bounce": "Overshoot",
+  "vector3.history.speed_curve": "Edit speed curve"
 }

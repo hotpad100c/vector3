@@ -9,9 +9,9 @@ public final class PropertiesWindow {
     public static final String KEYFRAME_POPUP = "##KeyframePopup";
     private static final PersistentWindow WINDOW = new PersistentWindow("vector3_properties");
     private static boolean focusRequested;
-    // Null until the window has been drawn once, so a docked window isn't closed before its dock is known.
     private static Boolean docked;
     private static long shownKeyframe = Long.MIN_VALUE;
+    private static boolean curveTab;
 
     private PropertiesWindow() {}
 
@@ -28,7 +28,12 @@ public final class PropertiesWindow {
      * Floating, the window behaves like the popup it replaces: it appears for a newly selected keyframe and
      * closes with the selection. Docked, it stays put and only its contents follow the selection.
      */
-    public static boolean begin(boolean hasKeyframe, long keyframe) {
+    public static boolean isCurveTab() {
+        return curveTab;
+    }
+
+    public static boolean begin(boolean hasKeyframe, long keyframe, boolean hasCurve) {
+        curveTab = false;
         if (docked != null && !docked) {
             if (hasKeyframe && keyframe != shownKeyframe && !WINDOW.isOpen()) WINDOW.toggle();
             if (!hasKeyframe && WINDOW.isOpen()) WINDOW.toggle();
@@ -42,7 +47,18 @@ public final class PropertiesWindow {
         ImGui.setNextWindowSize(380, 480, ImGuiCond.FirstUseEver);
         boolean visible = ImGui.begin(WINDOW.title(I18n.get("vector3.properties.title")), WINDOW.open());
         docked = ImGui.isWindowDocked();
-        if (visible && hasKeyframe) return true;
+        if (visible && hasKeyframe) {
+            // The speed curve page only exists for keyframes set to the custom interpolation.
+            if (hasCurve && ImGui.beginTabBar("##vector3_properties_tabs")) {
+                if (ImGui.beginTabItem(I18n.get("vector3.properties.tab.keyframe"))) ImGui.endTabItem();
+                if (ImGui.beginTabItem(I18n.get("vector3.curve.tab"))) {
+                    curveTab = true;
+                    ImGui.endTabItem();
+                }
+                ImGui.endTabBar();
+            }
+            return true;
+        }
         if (visible) ImGui.textDisabled(I18n.get("vector3.properties.empty"));
         end();
         return false;
