@@ -23,7 +23,7 @@ import java.util.TreeSet;
 import java.util.function.IntUnaryOperator;
 
 public final class TrackMove {
-    public record Plan(Map<Integer, Integer> targets, int trackCount) {
+    public record Plan(Map<Integer, Integer> targets, int trackCount, boolean valid) {
         public boolean creates(int target) {
             return target >= trackCount;
         }
@@ -31,18 +31,35 @@ public final class TrackMove {
 
     private TrackMove() {}
 
-    public static @Nullable Plan plan(EditorScene scene, List<SelectedKeyframes> selection, int rowDelta) {
+    // An invalid plan still carries its targets, so the drop preview can show where it would land.
+    public static @Nullable Plan plan(EditorScene scene, List<SelectedKeyframes> selection, int rowDelta,
+            @Nullable IntUnaryOperator retime) {
         if (rowDelta == 0 || selection.isEmpty()) return null;
         int count = scene.keyframeTracks.size();
+        Set<Long> moving = new HashSet<>();
+        for (SelectedKeyframes selected : selection) {
+            for (int tick : selected.keyframeTicks()) moving.add(key(selected.trackIndex(), tick));
+        }
+        boolean valid = true;
         Map<Integer, Integer> raw = new LinkedHashMap<>();
         for (SelectedKeyframes selected : selection) {
             int source = selected.trackIndex(), target = source + rowDelta;
-            if (source < 0 || source >= count || target < 0) return null;
+            if (source < 0 || source >= count) return null;
             KeyframeType<?> type = scene.keyframeTracks.get(source).keyframeType;
-            if (target < count) {
-                if (scene.keyframeTracks.get(target).keyframeType != type) return null;
+            if (target < 0) {
+                valid = false;
+            } else if (target < count) {
+                KeyframeTrack targetTrack = scene.keyframeTracks.get(target);
+                if (targetTrack.keyframeType != type) {
+                    valid = false;
+                } else if (retime != null) {
+                    for (int tick : selected.keyframeTicks()) {
+                        int to = retime.applyAsInt(tick);
+                        if (targetTrack.keyframesByTick.containsKey(to) && !moving.contains(key(target, to))) valid = false;
+                    }
+                }
             } else if (type == SkipKeyframeType.INSTANCE) {
-                return null;
+                valid = false;
             }
             raw.put(source, target);
         }
@@ -51,7 +68,7 @@ public final class TrackMove {
         Map<Integer, Integer> compact = new LinkedHashMap<>();
         List<Integer> order = new ArrayList<>(created);
         raw.forEach((source, target) -> compact.put(source, target >= count ? count + order.indexOf(target) : target));
-        return new Plan(compact, count);
+        return new Plan(compact, count, valid);
     }
 
     public static EditorSceneHistoryEntry entry(EditorScene scene, List<SelectedKeyframes> selection, Plan plan,

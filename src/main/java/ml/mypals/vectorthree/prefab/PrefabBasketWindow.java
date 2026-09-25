@@ -1,8 +1,8 @@
 package ml.mypals.vectorthree.prefab;
 
+import ml.mypals.vectorthree.flashback.PersistentWindow;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiCond;
-import imgui.moulberry90.type.ImBoolean;
 import ml.mypals.vectorthree.Vector3;
 import net.minecraft.client.resources.language.I18n;
 import org.jetbrains.annotations.Nullable;
@@ -13,7 +13,7 @@ public final class PrefabBasketWindow {
     public static final String PAYLOAD = "vector3_prefab";
     private static final String TEMPLATE = "template:";
     private static final String SAVED = "saved:";
-    private static final ImBoolean open = new ImBoolean(false);
+    private static final PersistentWindow WINDOW = new PersistentWindow("vector3_prefab_basket");
 
     private static @Nullable List<PrefabStore.Saved> saved;
     private static @Nullable String placeAtCursor;
@@ -22,7 +22,7 @@ public final class PrefabBasketWindow {
     private PrefabBasketWindow() {}
 
     public static void renderMenuItem() {
-        if (ImGui.menuItem(I18n.get("vector3.prefab.basket"))) open.set(!open.get());
+        if (ImGui.menuItem(I18n.get("vector3.prefab.basket"), "", WINDOW.isOpen())) WINDOW.toggle();
     }
 
     public static void reload() {
@@ -53,9 +53,9 @@ public final class PrefabBasketWindow {
     }
 
     public static void render(boolean hasSelection) {
-        if (!open.get()) return;
+        if (!WINDOW.isOpen()) return;
         ImGui.setNextWindowSize(280, 320, ImGuiCond.FirstUseEver);
-        if (ImGui.begin(I18n.get("vector3.prefab.basket"), open)) {
+        if (ImGui.begin(WINDOW.title(I18n.get("vector3.prefab.basket")), WINDOW.open())) {
             ImGui.textDisabled(I18n.get("vector3.prefab.drag_hint"));
             ImGui.separator();
             for (PrefabTemplates.Template template : PrefabTemplates.all()) {
@@ -87,6 +87,7 @@ public final class PrefabBasketWindow {
             if (ImGui.button(I18n.get("vector3.prefab.reload"))) reload();
         }
         ImGui.end();
+        WINDOW.sync();
     }
 
     private static void item(String name, String id) {

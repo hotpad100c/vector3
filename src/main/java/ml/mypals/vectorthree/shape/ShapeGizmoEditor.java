@@ -63,6 +63,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private ShapeKeyframe keyframe;
     private Consumer<ShapeState> commit = state -> {};
     private Mode mode = Mode.MOVE;
+    private boolean localSpace;
     private String layoutKey = "";
     private Handle hovered;
     private Handle dragging;
@@ -88,6 +89,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         setModeButton(I18n.get("vector3.gizmo.rotate"), Mode.ROTATE); ImGui.sameLine();
         setModeButton(I18n.get("vector3.gizmo.scale"), Mode.SCALE); ImGui.sameLine();
         setModeButton(I18n.get("vector3.gizmo.geometry"), Mode.GEOMETRY);
+        setSpaceButton(I18n.get("vector3.gizmo.global"), false); ImGui.sameLine();
+        setSpaceButton(I18n.get("vector3.gizmo.local"), true);
 
     }
 
@@ -186,6 +189,23 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         if (ImGui.radioButton(label + "##shape_gizmo", mode == candidate) && mode != candidate) {
             setMode(candidate);
         }
+    }
+
+    private void setSpaceButton(String label, boolean local) {
+        if (ImGui.radioButton(label + "##shape_gizmo_space", localSpace == local) && localSpace != local) {
+            localSpace = local;
+            dragging = null;
+            if (keyframe != null) updateHandles(previewState == null ? keyframe.value : previewState);
+        }
+    }
+
+    // Geometry handles always follow the shape; move, rotate and scale follow it only in local space.
+    private boolean usesLocalAxes(ShapeState state) {
+        return mode == Mode.GEOMETRY ? !usesAbsolutePoints(state) : localSpace;
+    }
+
+    private Vec3 gizmoAxis(ShapeState state, Axis axis) {
+        return usesLocalAxes(state) ? localAxis(state, axis) : axis(axis);
     }
 
     private void handleShortcuts() {
@@ -419,10 +439,12 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             if (handle.axis() == Axis.X) z = -90;
             if (handle.axis() == Axis.Z) x = 90;
         }
-        if (mode == Mode.GEOMETRY && !usesAbsolutePoints(state)) {
-            x += state.pitch(); y += state.yaw(); z += state.roll();
-        }
-        return new Vector3f(x, y, z);
+        if (!usesLocalAxes(state)) return new Vector3f(x, y, z);
+        Quaternionf base = new Quaternionf().rotateXYZ((float) Math.toRadians(x), (float) Math.toRadians(y),
+                (float) Math.toRadians(z));
+        Vector3f euler = rotation(state).mul(base).getEulerAnglesXYZ(new Vector3f());
+        return new Vector3f((float) Math.toDegrees(euler.x), (float) Math.toDegrees(euler.y),
+                (float) Math.toDegrees(euler.z));
     }
 
     public static double gizmoScale(Vec3 position) {
@@ -466,8 +488,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         dragAxis = handle.operation() == Operation.SCALE_UNIFORM
                 ? new Vec3(camera.leftVector()).scale(-1)
                 : handle.axis() == Axis.NONE ? Vec3.ZERO
-                : mode == Mode.GEOMETRY && !usesAbsolutePoints(state) ? localAxis(state, handle.axis())
-                : axis(handle.axis());
+                : gizmoAxis(state, handle.axis());
         dragPlaneNormal = new Vec3(camera.forwardVector());
         if (handle.operation() == Operation.MOVE_FREE
                 || handle.operation() == Operation.POINT && handle.axis() == Axis.NONE) {
@@ -491,9 +512,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         float[] position = {(float) snap(state.x(), dragStart.x(), GRID_STEP, false),
                 (float) snap(state.y(), dragStart.y(), GRID_STEP, false),
                 (float) snap(state.z(), dragStart.z(), GRID_STEP, false)};
-        float[] rotation = {(float) snap(state.pitch(), dragStart.pitch(), ANGLE_STEP, false),
-                (float) snap(state.yaw(), dragStart.yaw(), ANGLE_STEP, false),
-                (float) snap(state.roll(), dragStart.roll(), ANGLE_STEP, false)};
+        float[] rotation = {state.pitch(), state.yaw(), state.roll()};
         float[] scale = {(float) snap(state.scaleX(), dragStart.scaleX(), GRID_STEP, true),
                 (float) snap(state.scaleY(), dragStart.scaleY(), GRID_STEP, true),
                 (float) snap(state.scaleZ(), dragStart.scaleZ(), GRID_STEP, true)};
@@ -536,10 +555,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         if (dragging.operation() == Operation.ROTATE) {
             Vec3 point = intersectPlane(ray, dragOrigin, dragAxis);
             if (point == null) return null;
-            float delta = (float) Math.toDegrees(wrapAngle(angleOnPlane(point.subtract(dragOrigin), dragAxis) - dragAngle));
-            float[] rotation = {dragStart.pitch(), dragStart.yaw(), dragStart.roll()};
-            rotation[index(dragging.axis())] += delta;
-            return with(dragStart, null, rotation, null, null, null);
+            double delta = Math.toDegrees(wrapAngle(angleOnPlane(point.subtract(dragOrigin), dragAxis) - dragAngle));
+            if (InputHelper.isCtrlDownRaw()) delta = Math.round(delta / ANGLE_STEP) * ANGLE_STEP;
+            return with(dragStart, null, rotatedAbout(dragStart, dragAxis, delta), null, null, null);
         }
 
         double delta = axisParameter(ray, dragOrigin, dragAxis) - dragParameter;
@@ -547,8 +565,17 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             case MOVE_AXIS -> withPosition(dragStart, center(dragStart).add(dragAxis.scale(delta)));
             case SCALE_AXIS -> {
                 float[] scale = {(float) dragStart.scaleX(), (float) dragStart.scaleY(), (float) dragStart.scaleZ()};
-                int index = index(dragging.axis());
-                scale[index] = Math.max(0.001f, scale[index] + (float) delta);
+                if (usesLocalAxes(dragStart)) {
+                    int index = index(dragging.axis());
+                    scale[index] = Math.max(0.001f, scale[index] + (float) delta);
+                } else {
+                    // A world axis stretches each local axis by how much it lines up with it.
+                    Axis[] axes = {Axis.X, Axis.Y, Axis.Z};
+                    for (int i = 0; i < 3; i++) {
+                        double alignment = localAxis(dragStart, axes[i]).dot(dragAxis);
+                        scale[i] = Math.max(0.001f, scale[i] + (float) (delta * alignment * alignment));
+                    }
+                }
                 yield with(dragStart, null, null, scale, null, null);
             }
             case SCALE_UNIFORM -> {
@@ -564,6 +591,34 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             case POINT -> withPointDelta(dragStart, dragging.point(), dragAxis.scale(delta));
             default -> null;
         };
+    }
+
+    /** The shape's pitch/yaw/roll after turning it {@code degrees} about a world-space axis. */
+    private static float[] rotatedAbout(ShapeState state, Vec3 worldAxis, double degrees) {
+        Quaternionf parent = parentWorldTransform(state).getNormalizedRotation(new Quaternionf());
+        Quaternionf turned = new Quaternionf().rotateAxis((float) Math.toRadians(degrees),
+                worldAxis.toVector3f().normalize()).mul(rotation(state));
+        Vector3f euler = parent.invert().mul(turned).getEulerAnglesXYZ(new Vector3f());
+        double[] start = {state.pitch(), state.yaw(), state.roll()};
+        double x = Math.toDegrees(euler.x), y = Math.toDegrees(euler.y), z = Math.toDegrees(euler.z);
+        // XYZ angles have a second solution for the same orientation; keep whichever stays nearer the old
+        // angles so keyframe interpolation doesn't take the long way round.
+        double[] first = nearest(new double[]{x, y, z}, start);
+        double[] second = nearest(new double[]{x + 180, 180 - y, z + 180}, start);
+        double[] best = distance(first, start) <= distance(second, start) ? first : second;
+        return new float[]{(float) best[0], (float) best[1], (float) best[2]};
+    }
+
+    private static double[] nearest(double[] angles, double[] reference) {
+        double[] result = new double[3];
+        for (int i = 0; i < 3; i++) {
+            result[i] = angles[i] + Math.round((reference[i] - angles[i]) / 360.0) * 360.0;
+        }
+        return result;
+    }
+
+    private static double distance(double[] a, double[] b) {
+        return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
     }
 
     private static ShapeState withPointDelta(ShapeState state, int pointIndex, Vec3 worldDelta) {

@@ -22,21 +22,26 @@ public final class ShapeManagerWindow {
     private static final ImString search = new ImString("", 128);
     private static final ImBoolean editorMode = new ImBoolean(false);
     private static final ImBoolean debugBypassOnly = new ImBoolean(false);
-    private static final ImBoolean open = new ImBoolean(false);
+    private static final ImBoolean instantPreview = new ImBoolean(false);
+    private static final PersistentWindow WINDOW = new PersistentWindow("vector3_shape_manager");
 
     private ShapeManagerWindow() {}
 
     public static boolean isEditorMode() { return editorMode.get(); }
 
+    public static boolean isInstantPreview() { return instantPreview.get(); }
+
     public static void renderMenuItem() {
-        if (ImGui.menuItem(I18n.get("vector3.shape_manager.title"))) open.set(!open.get());
+        if (ImGui.menuItem(I18n.get("vector3.shape_manager.title"), "", WINDOW.isOpen())) WINDOW.toggle();
     }
 
     public static void render() {
-        if (!open.get()) return;
+        if (!WINDOW.isOpen()) return;
         ImGui.setNextWindowSize(360, 320, ImGuiCond.FirstUseEver);
-        if (ImGui.begin(I18n.get("vector3.shape_manager.title"), open)) {
+        if (ImGui.begin(WINDOW.title(I18n.get("vector3.shape_manager.title")), WINDOW.open())) {
             ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode);
+            ImGui.checkbox(I18n.get("vector3.shape_manager.instant_preview"), instantPreview);
+            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.instant_preview.tooltip"));
             ImGui.checkbox(I18n.get("vector3.shape_manager.debug_bypass_only"), debugBypassOnly);
             IrisBypassTarget.debugShowOnly = debugBypassOnly.get();
             ImGui.separator();
@@ -50,6 +55,7 @@ public final class ShapeManagerWindow {
             ImGui.endChild();
         }
         ImGui.end();
+        WINDOW.sync();
     }
 
     private static void renderTree() {

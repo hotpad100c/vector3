@@ -7,6 +7,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.KeyframeType;
+import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
 import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
 import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
 import com.moulberry.flashback.playback.ReplayServer;
@@ -43,10 +44,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.objectweb.asm.Opcodes;
+import org.spongepowered.asm.mixin.injection.Coerce;
+import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -72,7 +74,12 @@ public abstract class TimelineWindowMixin {
     @Shadow private static int openCreateKeyframeAtTickTrack;
     @Shadow private static boolean grabbedKeyframe;
     @Shadow private static int grabbedKeyframeTrack;
+    private static GrabMovementInfoAccessor vector3$liveGrab;
+    private static int vector3$liveGrabTotalTicks;
+    private static boolean vector3$previewedDrag;
+    @Unique
     private static int vector3$lastEditorModCount = -1;
+    @Unique
     private static boolean vector3$refreshKeyframes;
     @Shadow private static void upgradeToSceneWrite() {
         throw new AssertionError();
@@ -89,6 +96,8 @@ public abstract class TimelineWindowMixin {
     private static String vector3$draggedGroup;
     @Unique
     private static float vector3$groupDragStartX;
+    @Unique
+    private static float vector3$groupDragStartY;
     @Unique
     private static PrefabGroups.Drag vector3$groupDrag;
     @Unique
@@ -193,6 +202,7 @@ public abstract class TimelineWindowMixin {
         if (!selectedKeyframesList.isEmpty()) vector3$createGroupItem(-1);
     }
 
+    @Unique
     private static void vector3$selectionMenu() {
         if (vector3$openSelectionMenu) {
             ImGui.openPopup("##vector3SelectionPopup");
@@ -205,11 +215,13 @@ public abstract class TimelineWindowMixin {
     }
 
     // The selected keyframes, or the whole track when nothing is selected.
+    @Unique
     private static List<SelectedKeyframes> vector3$groupTargets(int trackIndex) {
         if (!selectedKeyframesList.isEmpty() || trackIndex < 0) return new ArrayList<>(selectedKeyframesList);
         return PrefabGroups.wholeTrack(editorScene, trackIndex);
     }
 
+    @Unique
     private static void vector3$createGroupItem(int trackIndex) {
         if (!ImGui.menuItem("\ue945 " + I18n.get("vector3.prefab.track.create_group"))) return;
         upgradeToSceneWrite();
@@ -274,8 +286,9 @@ public abstract class TimelineWindowMixin {
         float lineHeight = ImGui.getTextLineHeightWithSpacing() + ImGui.getStyle().getItemSpacingY();
         float barHeight = lineHeight * 0.3f;
         ImDrawList drawList = ImGui.getWindowDrawList();
-        vector3$dragGroup(x, mouseX);
-        vector3$drawTrackMoveTargets(drawList, x, y, lineHeight);
+        vector3$dragGroup(x, y, mouseX);
+        vector3$drawTrackMoveTargets(drawList, x, y, lineHeight, vector3$trackMovePlan(y));
+        vector3$drawTrackMoveTargets(drawList, x, y, lineHeight, vector3$groupMovePlan(y));
         for (PrefabGroups.Span span : PrefabGroups.spans(editorScene)) {
             float left = x + replayTickToTimelineX(span.firstTick()) - 5;
             float right = Math.max(left + 10, x + replayTickToTimelineX(span.lastTick()) + 5);
@@ -295,65 +308,66 @@ public abstract class TimelineWindowMixin {
         }
     }
 
-    private static TrackMove.Plan vector3$trackMovePlan(float rowsY) {
-        if (!grabbedKeyframe || editorScene == null) return null;
+    @Unique
+    private static int vector3$rowAt(float screenY, float rowsY) {
         float lineHeight = ImGui.getTextLineHeightWithSpacing() + ImGui.getStyle().getItemSpacingY();
-        int row = (int) Math.floor((mouseY - (rowsY + 2)) / lineHeight);
-        return TrackMove.plan(editorScene, selectedKeyframesList, row - grabbedKeyframeTrack);
+        return (int) Math.floor((screenY - (rowsY + 2)) / lineHeight);
     }
 
-    private static void vector3$drawTrackMoveTargets(ImDrawList drawList, float x, float y, float lineHeight) {
-        TrackMove.Plan plan = vector3$trackMovePlan(y);
+    @Unique
+    private static TrackMove.Plan vector3$trackMovePlan(float rowsY) {
+        if (!grabbedKeyframe || editorScene == null) return null;
+        return TrackMove.plan(editorScene, selectedKeyframesList, vector3$rowAt(mouseY, rowsY) - grabbedKeyframeTrack, null);
+    }
+
+    @Unique
+    private static TrackMove.Plan vector3$groupMovePlan(float rowsY) {
+        if (vector3$groupDrag == null || editorScene == null) return null;
+        int rowDelta = vector3$rowAt(mouseY, rowsY) - vector3$rowAt(vector3$groupDragStartY, rowsY);
+        return vector3$groupDrag.plan(editorScene, rowDelta);
+    }
+
+    @Unique
+    private static void vector3$drawTrackMoveTargets(ImDrawList drawList, float x, float y, float lineHeight,
+                                                     TrackMove.Plan plan) {
         if (plan == null) return;
+        int colour = plan.valid() ? 0x00FFC850 : 0x003C3CFF;
         for (int target : new java.util.TreeSet<>(plan.targets().values())) {
+            if (target < 0) continue;
             float top = y + 2 + target * lineHeight;
-            drawList.addRectFilled(x, top, x + width, top + lineHeight, 0x30FFC850, 3);
-            drawList.addRect(x, top, x + width, top + lineHeight, 0xA0FFC850, 3);
+            drawList.addRectFilled(x, top, x + width, top + lineHeight, colour | 0x30000000, 3);
+            drawList.addRect(x, top, x + width, top + lineHeight, colour | 0xA0000000, 3);
             if (plan.creates(target)) {
-                drawList.addText(x + 4, top + (lineHeight - ImGui.getTextLineHeight()) / 2, 0xC0FFC850,
+                drawList.addText(x + 4, top + (lineHeight - ImGui.getTextLineHeight()) / 2, colour | 0xC0000000,
                         I18n.get("vector3.timeline.new_track"));
             }
         }
     }
 
     // Dropping on another row of the same type moves the keyframes there instead of Flashback's in-track move.
-    @Inject(method = "releaseGrabbed", at = @At("HEAD"))
-    private static void vector3$moveAcrossTracks(ReplayServer server, int totalTicks, float rowsY, CallbackInfo ci) {
+    @Inject(method = "releaseGrabbed", at = @At(value = "FIELD", opcode = Opcodes.GETFIELD, ordinal = 0,
+            target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow$GrabMovementInfo;grabbedScalePivotTick:I"),
+            locals = LocalCapture.CAPTURE_FAILHARD)
+    private static void vector3$moveAcrossTracks(ReplayServer server, int totalTicks, float rowsY, CallbackInfo ci,
+            @Coerce GrabMovementInfoAccessor movement) {
         TrackMove.Plan plan = vector3$trackMovePlan(rowsY);
-        if (plan == null) return;
-        IntUnaryOperator retime = vector3$retime(totalTicks);
+        if (plan == null || !plan.valid()) return;
+        int delta = movement.vector3$delta(), pivot = movement.vector3$scalePivot();
+        float factor = movement.vector3$scaleFactor();
+        IntUnaryOperator retime = tick -> Math.clamp(
+                pivot >= 0 ? pivot + Math.round((tick - pivot) * factor) : tick + delta, 0, totalTicks);
         upgradeToSceneWrite();
         List<SelectedKeyframes> moved = new ArrayList<>();
         editorScene.push(TrackMove.entry(editorScene, new ArrayList<>(selectedKeyframesList), plan, retime, moved));
         selectedKeyframesList.clear();
         selectedKeyframesList.addAll(moved);
-        grabbedKeyframe = false;
+        // No offset and no scale pivot: Flashback's own move below then has nothing to do.
+        movement.vector3$setDelta(0);
+        movement.vector3$setScalePivot(-1);
         vector3$keyframesChanged();
     }
 
-    // Flashback's own tick mapping for the drag (offset, or Alt-scale around a pivot).
-    private static IntUnaryOperator vector3$retime(int totalTicks) {
-        try {
-            Method calculate = TimelineWindow.class.getDeclaredMethod("calculateGrabMovementInfo", int.class);
-            calculate.setAccessible(true);
-            Object info = calculate.invoke(null, totalTicks);
-            int delta = vector3$field(info, "grabbedDelta").getInt(info);
-            int pivot = vector3$field(info, "grabbedScalePivotTick").getInt(info);
-            float factor = vector3$field(info, "grabbedScaleFactor").getFloat(info);
-            return tick -> Math.clamp(pivot >= 0 ? pivot + Math.round((tick - pivot) * factor) : tick + delta, 0, totalTicks);
-        } catch (ReflectiveOperationException exception) {
-            Vector3.LOGGER.warn("Couldn't read Flashback's keyframe drag, keeping ticks", exception);
-            return tick -> tick;
-        }
-    }
-
-    private static Field vector3$field(Object owner, String name) throws NoSuchFieldException {
-        Field field = owner.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return field;
-    }
-
-    private static void vector3$dragGroup(float x, float mouseX) {
+    private static void vector3$dragGroup(float x, float rowsY, float mouseX) {
         if (vector3$draggedGroup == null) return;
         if (vector3$groupDrag == null) {
             PrefabGroups.Span span = vector3$span(vector3$draggedGroup);
@@ -376,7 +390,10 @@ public abstract class TimelineWindowMixin {
             if (vector3$groupDrag.update(editorScene, delta)) vector3$keyframesChanged();
             return;
         }
-        var entry = vector3$groupDrag.finish(editorScene);
+        TrackMove.Plan plan = vector3$groupMovePlan(rowsY);
+        var entry = plan != null && plan.valid()
+                ? vector3$groupDrag.finishAcross(editorScene, plan)
+                : vector3$groupDrag.finish(editorScene);
         if (entry != null) editorScene.push(entry);
         vector3$groupDrag = null;
         vector3$draggedGroup = null;
@@ -420,6 +437,61 @@ public abstract class TimelineWindowMixin {
         vector3$syncGizmoSelection();
     }
 
+    // The same drag offset Flashback draws the grabbed keyframes with this frame.
+    @Inject(method = "renderKeyframes", at = @At(value = "FIELD", opcode = Opcodes.GETSTATIC, ordinal = 0,
+            target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;timelineWidth:F"),
+            locals = LocalCapture.CAPTURE_FAILHARD)
+    private static void vector3$captureGrab(float x, float y, float mouseX, int minTicks, float availableTicks,
+            int totalTicks, CallbackInfo ci, float lineHeight, ImDrawList drawList,
+            @Coerce GrabMovementInfoAccessor movement) {
+        vector3$liveGrab = movement;
+        vector3$liveGrabTotalTicks = totalTicks;
+    }
+
+    // Flashback only moves dragged keyframes on release; this applies the moved scene once per frame and puts
+    // the scene back, all under one write lock so nothing else sees the temporary state.
+    private static void vector3$previewDrag() {
+        GrabMovementInfoAccessor movement = vector3$liveGrab;
+        vector3$liveGrab = null;
+        if (!ShapeManagerWindow.isInstantPreview() || !grabbedKeyframe || movement == null || !ImGui.isMouseDown(0)) {
+            if (vector3$previewedDrag) {
+                vector3$previewedDrag = false;
+                ((MinecraftExt) Minecraft.getInstance()).flashback$applyKeyframes();
+            }
+            return;
+        }
+        int delta = movement.vector3$delta(), pivot = movement.vector3$scalePivot(), totalTicks = vector3$liveGrabTotalTicks;
+        float factor = movement.vector3$scaleFactor();
+        long stamp = editorState.acquireWrite();
+        try {
+            List<KeyframeTrack> tracks = editorState.getCurrentScene(stamp).keyframeTracks;
+            Map<KeyframeTrack, TreeMap<Integer, Keyframe>> originals = new java.util.IdentityHashMap<>();
+            for (SelectedKeyframes selected : selectedKeyframesList) {
+                if (selected.trackIndex() >= tracks.size()) continue;
+                KeyframeTrack track = tracks.get(selected.trackIndex());
+                TreeMap<Integer, Keyframe> original = originals.computeIfAbsent(track, t -> t.keyframesByTick);
+                TreeMap<Integer, Keyframe> moved = new TreeMap<>(track.keyframesByTick);
+                for (int tick : selected.keyframeTicks()) moved.remove(tick);
+                for (int tick : selected.keyframeTicks()) {
+                    Keyframe keyframe = original.get(tick);
+                    if (keyframe == null) continue;
+                    int to = pivot >= 0 ? pivot + Math.round((tick - pivot) * factor) : tick + delta;
+                    moved.put(Math.clamp(to, 0, totalTicks), keyframe);
+                }
+                track.keyframesByTick = moved;
+            }
+            try {
+                editorState.applyKeyframes(new MinecraftKeyframeHandler(Minecraft.getInstance()),
+                        TimelineWindow.getCursorTick(), stamp);
+            } finally {
+                originals.forEach((track, keyframes) -> track.keyframesByTick = keyframes);
+            }
+        } finally {
+            editorState.release(stamp);
+        }
+        vector3$previewedDrag = true;
+    }
+
     @Inject(method = "render", at = @At("RETURN"))
     private static void vector3$refreshShapesAfterTimelineUnlock(CallbackInfo ci) {
         ShapeManagerWindow.render();
@@ -427,6 +499,7 @@ public abstract class TimelineWindowMixin {
         Vector3.PREFABS.renderPanel();
         if (ShapeTimelineSelection.consumeRefresh()) vector3$refreshKeyframes = true;
         if (editorState == null) return;
+        vector3$previewDrag();
        
         if (vector3$lastEditorModCount != editorState.modCount) {
             vector3$lastEditorModCount = editorState.modCount;
@@ -438,14 +511,19 @@ public abstract class TimelineWindowMixin {
         vector3$pruneDeletedShapes();
     }
 
+    // Runs after render() has released editorScene, so the scene is read under its own lock.
     private static void vector3$pruneDeletedShapes() {
-        if (editorScene == null) return;
         Set<String> liveShapeIds = new HashSet<>();
-        for (KeyframeTrack track : editorScene.keyframeTracks) {
-            if (track.keyframeType != ShapeKeyframeType.INSTANCE) continue;
-            for (Keyframe keyframe : track.keyframesByTick.values()) {
-                if (keyframe instanceof ShapeKeyframe shape) liveShapeIds.add(shape.value.shapeId());
+        long stamp = editorState.acquireRead();
+        try {
+            for (KeyframeTrack track : editorState.getCurrentScene(stamp).keyframeTracks) {
+                if (track.keyframeType != ShapeKeyframeType.INSTANCE || !track.enabled) continue;
+                for (Keyframe keyframe : track.keyframesByTick.values()) {
+                    if (keyframe instanceof ShapeKeyframe shape) liveShapeIds.add(shape.value.shapeId());
+                }
             }
+        } finally {
+            editorState.release(stamp);
         }
         ShapeTrackRegistry.retainOnly(liveShapeIds);
     }
@@ -513,6 +591,7 @@ public abstract class TimelineWindowMixin {
         if (button == 0 && vector3$draggedGroup == null) {
             vector3$draggedGroup = group;
             vector3$groupDragStartX = mouseX;
+            vector3$groupDragStartY = mouseY;
         } else if (button == 1) {
             vector3$menuGroup = group;
             vector3$openGroupMenu = true;

@@ -162,5 +162,10 @@
   "vector3.dolly_zoom.from_camera": "From Current Camera",
   "vector3.prefab.target_center": "The placement center",
   "vector3.history.move_to_track": "Move keyframes to track",
-  "vector3.timeline.new_track": "New track"
+  "vector3.timeline.new_track": "New track",
+  "vector3.menu.window": "Window",
+  "vector3.gizmo.global": "Global",
+  "vector3.gizmo.local": "Local",
+  "vector3.shape_manager.instant_preview": "Instant preview",
+  "vector3.shape_manager.instant_preview.tooltip": "Apply keyframes live while dragging them on the timeline, instead of only on release"
 }

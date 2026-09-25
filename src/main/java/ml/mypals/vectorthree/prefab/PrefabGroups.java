@@ -12,6 +12,7 @@ import com.google.gson.JsonObject;
 import it.unimi.dsi.fastutil.ints.IntAVLTreeSet;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSortedSet;
+import ml.mypals.vectorthree.flashback.TrackMove;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -62,6 +63,36 @@ public final class PrefabGroups {
             if (applied == 0) return null;
             for (Span span : spans(scene)) {
                 if (span.group().id().equals(groupId)) return move(scene, span, applied);
+            }
+            return null;
+        }
+
+        public @Nullable TrackMove.Plan plan(EditorScene scene, int rowDelta) {
+            if (!valid(scene)) return null;
+            List<SelectedKeyframes> selection = new ArrayList<>();
+            members.forEach((index, ticks) -> selection.add(new SelectedKeyframes(
+                    scene.keyframeTracks.get(index).keyframeType, index, new IntOpenHashSet(ticks))));
+            int delta = applied;
+            Map<Integer, TreeMap<Integer, Keyframe>> live = new LinkedHashMap<>();
+            originals.forEach((index, keyframes) -> {
+                live.put(index, scene.keyframeTracks.get(index).keyframesByTick);
+                scene.keyframeTracks.get(index).keyframesByTick = keyframes;
+            });
+            try {
+                return TrackMove.plan(scene, selection, rowDelta, tick -> tick + delta);
+            } finally {
+                live.forEach((index, keyframes) -> scene.keyframeTracks.get(index).keyframesByTick = keyframes);
+            }
+        }
+
+        public @Nullable EditorSceneHistoryEntry finishAcross(EditorScene scene, TrackMove.Plan plan) {
+            if (!valid(scene)) return null;
+            restore(scene);
+            for (Span span : spans(scene)) {
+                if (!span.group().id().equals(groupId)) continue;
+                int delta = applied;
+                groups(scene).put(groupId, span.group().withStartTick(span.group().startTick() + delta));
+                return TrackMove.entry(scene, selection(scene, span), plan, tick -> tick + delta, new ArrayList<>());
             }
             return null;
         }
