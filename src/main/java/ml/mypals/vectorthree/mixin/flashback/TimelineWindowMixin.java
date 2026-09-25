@@ -74,8 +74,11 @@ public abstract class TimelineWindowMixin {
     @Shadow private static int openCreateKeyframeAtTickTrack;
     @Shadow private static boolean grabbedKeyframe;
     @Shadow private static int grabbedKeyframeTrack;
+    @Unique
     private static GrabMovementInfoAccessor vector3$liveGrab;
+    @Unique
     private static int vector3$liveGrabTotalTicks;
+    @Unique
     private static boolean vector3$previewedDrag;
     @Unique
     private static int vector3$lastEditorModCount = -1;
@@ -367,6 +370,7 @@ public abstract class TimelineWindowMixin {
         vector3$keyframesChanged();
     }
 
+    @Unique
     private static void vector3$dragGroup(float x, float rowsY, float mouseX) {
         if (vector3$draggedGroup == null) return;
         if (vector3$groupDrag == null) {
@@ -400,17 +404,20 @@ public abstract class TimelineWindowMixin {
         vector3$keyframesChanged();
     }
 
+    @Unique
     private static void vector3$keyframesChanged() {
         editorState.markDirty();
         ((MinecraftExt) Minecraft.getInstance()).flashback$applyKeyframes();
     }
 
+    @Unique
     private static int vector3$groupColour(String groupId) {
         int rgb = java.awt.Color.HSBtoRGB((groupId.hashCode() & 0xFFFF) / 65535f, 0.55f, 0.95f);
         return 0xFF000000 | (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16 & 0xFF);
     }
 
     // Empty space in a group's rows counts too, but a click that would hit a keyframe stays Flashback's.
+    @Unique
     private static String vector3$groupAt(float mouseX, float mouseY) {
         for (PrefabGroups.Handle handle : vector3$groupHandles) {
             if (mouseX < handle.left() || mouseX > handle.right() || mouseY < handle.top() || mouseY > handle.bottom()) continue;
@@ -419,6 +426,7 @@ public abstract class TimelineWindowMixin {
         return null;
     }
 
+    @Unique
     private static boolean vector3$nearKeyframe(int row, float mouseX) {
         if (row >= editorScene.keyframeTracks.size()) return false;
         TreeMap<Integer, Keyframe> keyframes = editorScene.keyframeTracks.get(row).keyframesByTick;
@@ -449,7 +457,9 @@ public abstract class TimelineWindowMixin {
     }
 
     // Flashback only moves dragged keyframes on release; this applies the moved scene once per frame and puts
-    // the scene back, all under one write lock so nothing else sees the temporary state.
+    // the scene back. applyKeyframes takes the scene's read lock itself (StampedLock isn't reentrant), so it
+    // must run between the two write-locked steps, not inside one.
+    @Unique
     private static void vector3$previewDrag() {
         GrabMovementInfoAccessor movement = vector3$liveGrab;
         vector3$liveGrab = null;
@@ -462,10 +472,10 @@ public abstract class TimelineWindowMixin {
         }
         int delta = movement.vector3$delta(), pivot = movement.vector3$scalePivot(), totalTicks = vector3$liveGrabTotalTicks;
         float factor = movement.vector3$scaleFactor();
+        Map<KeyframeTrack, TreeMap<Integer, Keyframe>> originals = new java.util.IdentityHashMap<>();
         long stamp = editorState.acquireWrite();
         try {
             List<KeyframeTrack> tracks = editorState.getCurrentScene(stamp).keyframeTracks;
-            Map<KeyframeTrack, TreeMap<Integer, Keyframe>> originals = new java.util.IdentityHashMap<>();
             for (SelectedKeyframes selected : selectedKeyframesList) {
                 if (selected.trackIndex() >= tracks.size()) continue;
                 KeyframeTrack track = tracks.get(selected.trackIndex());
@@ -480,14 +490,18 @@ public abstract class TimelineWindowMixin {
                 }
                 track.keyframesByTick = moved;
             }
-            try {
-                editorState.applyKeyframes(new MinecraftKeyframeHandler(Minecraft.getInstance()),
-                        TimelineWindow.getCursorTick(), stamp);
-            } finally {
-                originals.forEach((track, keyframes) -> track.keyframesByTick = keyframes);
-            }
         } finally {
             editorState.release(stamp);
+        }
+        try {
+            editorState.applyKeyframes(new MinecraftKeyframeHandler(Minecraft.getInstance()), TimelineWindow.getCursorTick());
+        } finally {
+            long restore = editorState.acquireWrite();
+            try {
+                originals.forEach((track, keyframes) -> track.keyframesByTick = keyframes);
+            } finally {
+                editorState.release(restore);
+            }
         }
         vector3$previewedDrag = true;
     }
@@ -512,6 +526,7 @@ public abstract class TimelineWindowMixin {
     }
 
     // Runs after render() has released editorScene, so the scene is read under its own lock.
+    @Unique
     private static void vector3$pruneDeletedShapes() {
         Set<String> liveShapeIds = new HashSet<>();
         long stamp = editorState.acquireRead();
@@ -553,6 +568,7 @@ public abstract class TimelineWindowMixin {
         }
     }
 
+    @Unique
     private static String vector3$sharedGroup(List<SelectedKeyframes> targets) {
         String shared = null;
         for (SelectedKeyframes selected : targets) {
@@ -609,6 +625,7 @@ public abstract class TimelineWindowMixin {
         return ImGui.isMouseDragging(button);
     }
 
+    @Unique
     private static void vector3$syncGizmoSelection() {
         if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging() || Vector3.PREFABS.isDragging()) {
             return;
@@ -654,6 +671,7 @@ public abstract class TimelineWindowMixin {
         });
     }
 
+    @Unique
     private static boolean vector3$isMouseInTimeline() {
         return !ReplayUI.isMainFrameHovered()
                 && mouseX >= x && mouseX < x + width
