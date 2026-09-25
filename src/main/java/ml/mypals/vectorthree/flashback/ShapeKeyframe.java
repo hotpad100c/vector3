@@ -334,9 +334,14 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 }
             }
             case "obj" -> changed |= ImGui.inputText(I18n.get("vector3.keyframe.obj_resource"), model);
-            case "image" -> changed |= ImGui.inputText(I18n.get("vector3.keyframe.image_file"), imageFile);
+            case "image" -> {
+                changed |= ImGui.inputText(I18n.get("vector3.keyframe.image_file"), imageFile);
+                changed |= FileBrowse.button("image", imageFile, I18n.get("vector3.file.image_filter"), "png");
+            }
             case "video" -> {
                 changed |= ImGui.inputText(I18n.get("vector3.keyframe.video_file"), videoFile);
+                changed |= FileBrowse.button("video", videoFile, I18n.get("vector3.file.video_filter"),
+                        "mp4", "mov", "mkv", "webm", "avi", "gif");
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.auto_play"), videoAutoPlay);
                 if (videoAutoPlay.get()) {
                     changed |= ImGui.inputInt(I18n.get("vector3.keyframe.start_tick"), videoStartTick);

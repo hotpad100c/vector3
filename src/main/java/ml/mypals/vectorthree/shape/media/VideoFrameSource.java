@@ -27,6 +27,8 @@ final class VideoFrameSource {
     private volatile double requestedSeconds;
 
     private volatile boolean ready;
+    private volatile boolean failed;
+    private volatile boolean seeking = true;
     private volatile int width = 1;
     private volatile int height = 1;
     private volatile double durationSeconds;
@@ -47,6 +49,9 @@ final class VideoFrameSource {
     }
 
     boolean isReady() { return ready; }
+    boolean failed() { return failed; }
+    /** True while opening, or while a far seek has not produced its frame yet. */
+    boolean isLoading() { return !failed && (!ready || seeking || frameVersion.get() == 0); }
     int width() { return width; }
     int height() { return height; }
     double duration() { return durationSeconds; }
@@ -82,6 +87,7 @@ final class VideoFrameSource {
             grabber.start();
         } catch (Exception exception) {
             Vector3.LOGGER.warn("Could not open video file {}", file, exception);
+            failed = true;
             return;
         }
         width = Math.max(1, grabber.getImageWidth());
@@ -127,6 +133,7 @@ final class VideoFrameSource {
                         || seconds < lastDecodedSeconds
                         || seconds - lastDecodedSeconds > SEEK_THRESHOLD_SECONDS;
                 if (farJump) {
+                    seeking = true;
                     grabber.setTimestamp((long) (seconds * 1_000_000));
                     lastDecodedSeconds = -1;
                 } else if (lastDecodedSeconds >= seconds) {
@@ -141,14 +148,19 @@ final class VideoFrameSource {
                     lastDecodedSeconds = frame.timestamp / 1_000_000.0;
                     if (lastDecodedSeconds >= seconds) break;
                 }
-                if (chosen == null) continue;
+                if (chosen == null) {
+                    seeking = false;
+                    continue;
+                }
 
                 BufferedImage image = converter.getBufferedImage(chosen);
                 latestFrame.set(toAbgrPixels(image));
                 frameVersion.incrementAndGet();
+                seeking = false;
             } catch (Exception exception) {
                 Vector3.LOGGER.warn("Video seek/decode failed for {} at {}s, skipping", file, seconds, exception);
                 lastDecodedSeconds = -1;
+                seeking = false;
             }
         }
     }

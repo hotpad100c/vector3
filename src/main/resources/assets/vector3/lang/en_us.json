@@ -199,5 +199,20 @@
   "vector3.curve.preset.ease_out": "Ease out",
   "vector3.curve.preset.ease_in_out": "Ease in-out",
   "vector3.curve.preset.bounce": "Overshoot",
-  "vector3.history.speed_curve": "Edit speed curve"
+  "vector3.history.speed_curve": "Edit speed curve",
+  "vector3.shake.roll_frequency": "Roll frequency",
+  "vector3.shake.roll_amplitude": "Roll amplitude",
+  "vector3.shake.position_frequency": "Position frequency",
+  "vector3.shake.position_amplitude": "Position amplitude (m)",
+  "vector3.shake.octaves": "Octaves",
+  "vector3.shake.roughness": "Roughness",
+  "vector3.shake.seed": "Seed",
+  "vector3.shake.presets": "Presets",
+  "vector3.shake.preset.handheld": "Handheld",
+  "vector3.shake.preset.walking": "Walking",
+  "vector3.shake.preset.vehicle": "Vehicle",
+  "vector3.shake.preset.impact": "Impact",
+  "vector3.file.browse": "Browse...",
+  "vector3.file.image_filter": "PNG images",
+  "vector3.file.video_filter": "Videos"
 }

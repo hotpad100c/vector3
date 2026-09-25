@@ -63,7 +63,11 @@ public final class VideoShape extends Shape implements EmptyMesh {
 
     @Override
     protected void drawInternal(VertexBuilder builder) {
-        if (source == null || !source.isReady()) return;
+        if (source == null) return;
+        if (!source.isReady()) {
+            drawProgress(builder, source.failed());
+            return;
+        }
         if (!sized) {
             sized = true;
             aspect = (float) source.width() / source.height();
@@ -93,6 +97,53 @@ public final class VideoShape extends Shape implements EmptyMesh {
         submits.submitCustomGeometry(poseStack, ShapeTrackRegistry.imageType(textureId, seeThrough),
                 (pose, consumer) -> quad(pose, consumer, halfWidth, argb));
         IrisBypassTarget.renderFeatures(() -> Helpers.renderFeatures(minecraft, submits));
+        if (source.isLoading()) drawProgress(builder, false);
+    }
+
+    private static final int TRACK = 0x90181818, FILL = 0xE650C8FF, FAILED = 0xE6E04040;
+    private static Identifier white;
+
+    // No percentage is available from ffmpeg while opening or seeking, so the bar sweeps.
+    private void drawProgress(VertexBuilder builder, boolean failed) {
+        float halfWidth = aspect * 0.5f * 0.8f, y = sized ? -0.5f + 0.08f : 0, half = 0.03f;
+        float sweep = (System.nanoTime() % 1_400_000_000L) / 1_400_000_000f;
+        float segment = 0.3f, start = -segment + sweep * (1 + segment);
+        float from = -halfWidth + Math.max(0, start) * halfWidth * 2;
+        float to = -halfWidth + Math.min(1, start + segment) * halfWidth * 2;
+        SubmitNodeStorage submits = new SubmitNodeStorage();
+        PoseStack poseStack = new PoseStack();
+        poseStack.mulPose(builder.getPositionMatrix());
+        submits.submitCustomGeometry(poseStack, ShapeTrackRegistry.imageType(white(), seeThrough), (pose, consumer) -> {
+            box(consumer, pose, -halfWidth, y - half, -half, halfWidth, y + half, half, TRACK);
+            float grow = 0.004f;
+            if (failed) box(consumer, pose, -halfWidth - grow, y - half - grow, -half - grow, halfWidth + grow, y + half + grow, half + grow, FAILED);
+            else if (to > from) box(consumer, pose, from, y - half - grow, -half - grow, to, y + half + grow, half + grow, FILL);
+        });
+        IrisBypassTarget.renderFeatures(() -> Helpers.renderFeatures(Minecraft.getInstance(), submits));
+    }
+
+    private static Identifier white() {
+        if (white == null) {
+            white = Vector3.id("video_progress_white");
+            DynamicTexture texture = new DynamicTexture(() -> "Vector3 video progress", 1, 1, false);
+            texture.getPixels().setPixelABGR(0, 0, 0xFFFFFFFF);
+            texture.upload();
+            Minecraft.getInstance().getTextureManager().register(white, texture);
+        }
+        return white;
+    }
+
+    private static void box(VertexConsumer c, PoseStack.Pose p, float x0, float y0, float z0, float x1, float y1, float z1, int argb) {
+        face(c, p, argb, x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1);
+        face(c, p, argb, x1, y0, z0, x0, y0, z0, x0, y1, z0, x1, y1, z0);
+        face(c, p, argb, x1, y0, z1, x1, y0, z0, x1, y1, z0, x1, y1, z1);
+        face(c, p, argb, x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0);
+        face(c, p, argb, x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0);
+        face(c, p, argb, x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1);
+    }
+
+    private static void face(VertexConsumer c, PoseStack.Pose p, int argb, float... v) {
+        for (int i = 0; i < 12; i += 3) c.addVertex(p, v[i], v[i + 1], v[i + 2]).setUv(0, 0).setColor(argb);
     }
 
     private static void quad(PoseStack.Pose pose, VertexConsumer consumer, float halfWidth, int argb) {

@@ -24,10 +24,7 @@ public final class PropertiesWindow {
         focusRequested = true;
     }
 
-    /**
-     * Floating, the window behaves like the popup it replaces: it appears for a newly selected keyframe and
-     * closes with the selection. Docked, it stays put and only its contents follow the selection.
-     */
+
     public static boolean isCurveTab() {
         return curveTab;
     }

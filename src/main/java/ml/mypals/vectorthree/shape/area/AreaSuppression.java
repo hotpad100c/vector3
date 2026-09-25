@@ -3,6 +3,8 @@ package ml.mypals.vectorthree.shape.area;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Map;
@@ -27,7 +29,7 @@ public final class AreaSuppression {
     private AreaSuppression() {}
 
     public static boolean isSuppressed(BlockPos pos) {
-        if (bypassThread == Thread.currentThread()) return false;
+        if (ACTIVE.isEmpty() || bypassThread == Thread.currentThread()) return false;
         for (Bounds bounds : ACTIVE.values()) {
             if (bounds.contains(pos)) return true;
         }
@@ -70,12 +72,68 @@ public final class AreaSuppression {
         if (newBounds.equals(oldBounds)) return;
         if (oldBounds != null) touch(oldBounds);
         touch(newBounds);
+        relightChanged(oldBounds, newBounds);
     }
 
     public static void clear(String shapeId) {
         Bounds bounds = ACTIVE.remove(shapeId);
         DIRTY.remove(shapeId);
-        if (bounds != null) touch(bounds);
+        if (bounds != null) {
+            touch(bounds);
+            relightChanged(bounds, null);
+        }
+    }
+
+    // The client light engine sees suppressed blocks as air, so sky sources and light around them are redone.
+    private static void relightChanged(Bounds a, Bounds b) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
+        Set<Long> chunks = new java.util.HashSet<>();
+        for (Bounds bounds : new Bounds[]{a, b}) {
+            if (bounds == null) continue;
+            for (int cx = (bounds.min().getX() - 1) >> 4; cx <= (bounds.max().getX() + 1) >> 4; cx++) {
+                for (int cz = (bounds.min().getZ() - 1) >> 4; cz <= (bounds.max().getZ() + 1) >> 4; cz++) {
+                    chunks.add(ChunkPos.pack(cx, cz));
+                }
+            }
+        }
+        for (long packed : chunks) {
+            int cx = ChunkPos.getX(packed), cz = ChunkPos.getZ(packed);
+            LevelChunk chunk = level.getChunkSource().getChunk(cx, cz, false);
+            if (chunk == null) continue;
+            int[] before = new int[256];
+            for (int i = 0; i < 256; i++) before[i] = chunk.getSkyLightSources().getLowestSourceY(i & 15, i >> 4);
+            chunk.initializeLightSources();
+            for (Bounds bounds : new Bounds[]{a, b}) {
+                if (bounds != null) relight(level, chunk, bounds, before);
+            }
+        }
+    }
+
+    public static void relightChunk(int chunkX, int chunkZ) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null || ACTIVE.isEmpty()) return;
+        LevelChunk chunk = level.getChunkSource().getChunk(chunkX, chunkZ, false);
+        if (chunk == null) return;
+        for (Bounds bounds : ACTIVE.values()) relight(level, chunk, bounds, null);
+    }
+
+    private static void relight(ClientLevel level, LevelChunk chunk, Bounds bounds, int[] sourcesBefore) {
+        int minX = Math.max(bounds.min().getX() - 1, chunk.getPos().getMinBlockX());
+        int maxX = Math.min(bounds.max().getX() + 1, chunk.getPos().getMinBlockX() + 15);
+        int minZ = Math.max(bounds.min().getZ() - 1, chunk.getPos().getMinBlockZ());
+        int maxZ = Math.min(bounds.max().getZ() + 1, chunk.getPos().getMinBlockZ() + 15);
+        if (minX > maxX || minZ > maxZ) return;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                int index = (x & 15) | (z & 15) << 4;
+                int source = chunk.getSkyLightSources().getLowestSourceY(x & 15, z & 15);
+                if (sourcesBefore != null) source = Math.min(source, sourcesBefore[index]);
+                int bottom = Math.max(level.getMinY(), Math.min(bounds.min().getY() - 1, source));
+                for (int y = bounds.max().getY() + 1; y >= bottom; y--) level.getLightEngine().checkBlock(pos.set(x, y, z));
+            }
+        }
     }
 
     /**

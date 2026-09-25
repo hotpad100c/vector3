@@ -199,5 +199,20 @@
   "vector3.curve.preset.ease_out": "缓出",
   "vector3.curve.preset.ease_in_out": "缓入缓出",
   "vector3.curve.preset.bounce": "回弹",
-  "vector3.history.speed_curve": "修改速度曲线"
+  "vector3.history.speed_curve": "修改速度曲线",
+  "vector3.shake.roll_frequency": "滚转频率",
+  "vector3.shake.roll_amplitude": "滚转幅度",
+  "vector3.shake.position_frequency": "位置频率",
+  "vector3.shake.position_amplitude": "位置幅度（米）",
+  "vector3.shake.octaves": "噪声层数",
+  "vector3.shake.roughness": "粗糙度",
+  "vector3.shake.seed": "种子",
+  "vector3.shake.presets": "预设",
+  "vector3.shake.preset.handheld": "手持",
+  "vector3.shake.preset.walking": "走路",
+  "vector3.shake.preset.vehicle": "车载",
+  "vector3.shake.preset.impact": "冲击",
+  "vector3.file.browse": "浏览…",
+  "vector3.file.image_filter": "PNG 图片",
+  "vector3.file.video_filter": "视频"
 }

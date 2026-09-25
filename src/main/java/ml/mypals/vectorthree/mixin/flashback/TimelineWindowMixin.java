@@ -201,11 +201,20 @@ public abstract class TimelineWindowMixin {
             target = "Lcom/moulberry/flashback/editor/ui/ImGuiHelper;beginPopup(Ljava/lang/String;)Z"))
     private static boolean vector3$beginProperties(String id, Operation<Boolean> original) {
         if (!PropertiesWindow.KEYFRAME_POPUP.equals(id)) return original.call(id);
+        // Undo can remove tracks or keyframes that the persistent window still points at.
+        if (editorScene != null) {
+            int tracks = editorScene.keyframeTracks.size();
+            selectedKeyframesList.removeIf(selected -> selected.trackIndex() >= tracks);
+        }
         if (selectedKeyframesList.size() == 1 && selectedKeyframesList.getFirst().keyframeTicks().size() == 1) {
             editingKeyframeTrack = selectedKeyframesList.getFirst().trackIndex();
             editingKeyframeTick = selectedKeyframesList.getFirst().keyframeTicks().iterator().nextInt();
         }
         Keyframe editing = vector3$editingKeyframe();
+        if (editing == null) {
+            editingKeyframeTrack = -1;
+            editingKeyframeTick = -1;
+        }
         return PropertiesWindow.begin(editingKeyframeTrack >= 0 && editingKeyframeTick >= 0,
                 ((long) editingKeyframeTrack << 32) | (editingKeyframeTick & 0xFFFFFFFFL),
                 editing != null && SpeedCurves.of(editing) != null);
