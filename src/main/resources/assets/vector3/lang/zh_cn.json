@@ -173,5 +173,6 @@
   "vector3.keyframe.glow_strength": "辉光强度",
   "vector3.keyframe.glow_follow_text": "辉光颜色跟随文字",
   "vector3.keyframe.glow_color": "辉光颜色",
-  "vector3.keyframe.glow_sdf_only": "辉光只对自定义字体（.ttf/.otf）生效"
+  "vector3.keyframe.glow_sdf_only": "辉光只对自定义字体（.ttf/.otf）生效",
+  "vector3.keyframe.glow_spread": "辉光扩散"
 }

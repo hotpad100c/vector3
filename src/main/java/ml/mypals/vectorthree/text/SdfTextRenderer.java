@@ -42,7 +42,7 @@ public final class SdfTextRenderer {
     private record Char(int codepoint, Style style) {}
 
     /** How the glow pass recolors a line: glowing fill (optionally recolored), glowing outline, strength in eighths. */
-    private record Glow(boolean fill, Integer fillColor, boolean outline, int strength) {}
+    private record Glow(boolean fill, Integer fillColor, boolean outline, int strength, float spread) {}
 
     private SdfTextRenderer() {}
 
@@ -96,7 +96,7 @@ public final class SdfTextRenderer {
                             (pose, consumer) -> {
                                 for (Quad quad : glowQuads) if (quad.page() == page) emit(pose, consumer, quad);
                             }));
-            TextGlow.render(() -> Helpers.renderFeatures(minecraft, glowSubmits));
+            TextGlow.render(glow.spread(), () -> Helpers.renderFeatures(minecraft, glowSubmits));
         }
         return bounds;
     }
@@ -106,7 +106,7 @@ public final class SdfTextRenderer {
         boolean outline = shape.outline && fontShape.outlineGlow;
         int strength = Math.round(fontShape.glowStrength * 8);
         if (!fontShape.glow && !outline || strength <= 0) return null;
-        return new Glow(fontShape.glow, fontShape.glowColor, outline, Math.min(strength, 63));
+        return new Glow(fontShape.glow, fontShape.glowColor, outline, Math.min(strength, 63), fontShape.glowSpread);
     }
 
     private static float lineWidth(SdfFont font, List<Char> chars) {

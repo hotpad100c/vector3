@@ -154,6 +154,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         ImBoolean textGlow = new ImBoolean(currentText.glow());
         ImBoolean textOutlineGlow = new ImBoolean(currentText.outlineGlow());
         float[] glowStrength = {currentText.glowStrengthOrDefault()};
+        float[] glowSpread = {currentText.glowSpreadOrDefault()};
         ImBoolean glowFollowsText = new ImBoolean(currentText.glowColor() == null);
         int glowArgb = currentText.glowColor() == null ? state.color() : currentText.glowColor();
         float[] glowColor = {((glowArgb >>> 16) & 255) / 255.0f, ((glowArgb >>> 8) & 255) / 255.0f,
@@ -255,6 +256,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 if (textGlow.get() || textOutline.get() && textOutlineGlow.get()) {
                     changed |= ImGui.sliderFloat(I18n.get("vector3.keyframe.glow_strength"), glowStrength, 0,
                             TextSettings.MAX_GLOW_STRENGTH);
+                    changed |= ImGui.sliderFloat(I18n.get("vector3.keyframe.glow_spread"), glowSpread,
+                            TextSettings.MIN_GLOW_SPREAD, TextSettings.MAX_GLOW_SPREAD);
                 }
                 if (textGlow.get()) {
                     changed |= ImGui.checkbox(I18n.get("vector3.keyframe.glow_follow_text"), glowFollowsText);
@@ -405,7 +408,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                                     textOutline.get(), billboard[0], font.get(), textGlow.get(), textOutlineGlow.get(),
                                     glowStrength[0], glowFollowsText.get() ? null
                                             : (Math.round(glowColor[3] * 255) << 24) | (Math.round(glowColor[0] * 255) << 16)
-                                            | (Math.round(glowColor[1] * 255) << 8) | Math.round(glowColor[2] * 255))
+                                            | (Math.round(glowColor[1] * 255) << 8) | Math.round(glowColor[2] * 255),
+                                    glowSpread[0])
                             : state.text(),
                     parentId[0],
                     seeThrough.get(), visible.get(), outline.get(), outlineArgb, playAudio.get(),

@@ -27,6 +27,7 @@ public final class FontTextShape extends TextShape {
     public boolean outlineGlow;
     public float glowStrength = TextSettings.DEFAULT_GLOW_STRENGTH;
     public Integer glowColor;
+    public float glowSpread = TextSettings.DEFAULT_GLOW_SPREAD;
 
     private Matrix4f lastPose;
     private Vec3 lastCamera;

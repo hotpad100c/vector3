@@ -312,6 +312,7 @@ public final class ShapeTrackRegistry {
                 fontShape.outlineGlow = settings.outlineGlow();
                 fontShape.glowStrength = settings.glowStrengthOrDefault();
                 fontShape.glowColor = settings.glowColor();
+                fontShape.glowSpread = settings.glowSpreadOrDefault();
             }
         }
         if (previous != null && previous.seeThrough() != state.seeThrough()) {

@@ -23,36 +23,58 @@ import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
 
 /**
  * Bloom for text: glowing text is drawn a second time into an HDR buffer, which is blurred at half and
- * quarter resolution and added onto the main target once per frame.
+ * quarter resolution and added onto the main target once per frame. Each spread (in quarter steps) gets
+ * its own buffers, since one blur can only have one width.
  */
 public final class TextGlow {
     public static final GpuFormat FORMAT = GpuFormat.RGBA16_FLOAT;
-    private static final float SPREAD = 1.5f;
+    private static final int IDLE_FRAMES_BEFORE_FREE = 5;
 
-    private static RenderTarget glow;
-    private static RenderTarget halfA;
-    private static RenderTarget halfB;
-    private static RenderTarget quarterA;
-    private static RenderTarget quarterB;
+    private static final class Layer {
+        final float spread;
+        RenderTarget glow, halfA, halfB, quarterA, quarterB;
+        final GpuBuffer[] steps = new GpuBuffer[4];
+        boolean prepared, used;
+        int idleFrames;
+
+        Layer(float spread) {
+            this.spread = spread;
+        }
+
+        void close() {
+            for (RenderTarget target : new RenderTarget[]{glow, halfA, halfB, quarterA, quarterB}) {
+                if (target != null) target.destroyBuffers();
+            }
+            for (GpuBuffer step : steps) {
+                if (step != null) step.close();
+            }
+        }
+    }
+
+    private static final Map<Integer, Layer> LAYERS = new HashMap<>();
     private static RenderPipeline blurPipeline;
     private static RenderPipeline compositePipeline;
-    private static final GpuBuffer[] steps = new GpuBuffer[4];
-    private static boolean preparedThisFrame;
-    private static boolean usedThisFrame;
+    private static Layer routing;
     private static int routeDepth;
 
     private TextGlow() {}
 
     public static boolean isRouting() {
-        return routeDepth > 0;
+        return routeDepth > 0 && routing != null;
     }
 
-    /** Runs {@code draw} with Helpers#renderFeatures pointed at the glow buffer (see HelpersIrisBypassMixin). */
-    public static void render(Runnable draw) {
+    /** Runs {@code draw} with Helpers#renderFeatures pointed at this spread's glow buffer (see HelpersIrisBypassMixin). */
+    public static void render(float spread, Runnable draw) {
+        int key = Math.max(1, Math.round(spread * 4));
+        Layer previous = routing;
+        routing = LAYERS.computeIfAbsent(key, k -> new Layer(k / 4f));
         IrisBypassTarget.beginIrisBypass();
         routeDepth++;
         try {
@@ -60,30 +82,46 @@ public final class TextGlow {
         } finally {
             routeDepth--;
             IrisBypassTarget.endIrisBypass();
+            routing = previous;
         }
     }
 
     public static RenderTarget prepareForDraw() {
-        ensureTargets();
-        if (!preparedThisFrame) {
-            RenderSystem.getDevice().createCommandEncoder().clearColorTexture(glow.getColorTexture(), new Vector4f(0, 0, 0, 0));
-            glow.copyDepthFrom(Minecraft.getInstance().gameRenderer.mainRenderTarget());
-            preparedThisFrame = true;
+        Layer layer = routing;
+        ensureTargets(layer);
+        if (!layer.prepared) {
+            RenderSystem.getDevice().createCommandEncoder().clearColorTexture(layer.glow.getColorTexture(), new Vector4f(0, 0, 0, 0));
+            layer.glow.copyDepthFrom(Minecraft.getInstance().gameRenderer.mainRenderTarget());
+            layer.prepared = true;
         }
-        usedThisFrame = true;
-        return glow;
+        layer.used = true;
+        return layer.glow;
     }
 
     public static void composite() {
-        boolean used = usedThisFrame;
-        preparedThisFrame = false;
-        usedThisFrame = false;
-        if (!used || glow == null) return;
+        if (LAYERS.isEmpty()) return;
+        Iterator<Layer> iterator = LAYERS.values().iterator();
+        while (iterator.hasNext()) {
+            Layer layer = iterator.next();
+            boolean used = layer.used;
+            layer.prepared = false;
+            layer.used = false;
+            if (used && layer.glow != null) {
+                layer.idleFrames = 0;
+                composite(layer);
+            } else if (++layer.idleFrames > IDLE_FRAMES_BEFORE_FREE) {
+                layer.close();
+                iterator.remove();
+            }
+        }
+    }
+
+    private static void composite(Layer layer) {
         ensurePipelines();
-        blur(glow, halfA, 0, 1, 0);
-        blur(halfA, halfB, 1, 0, 1);
-        blur(halfB, quarterA, 2, 1, 0);
-        blur(quarterA, quarterB, 3, 0, 1);
+        blur(layer, layer.glow, layer.halfA, 0, 1, 0);
+        blur(layer, layer.halfA, layer.halfB, 1, 0, 1);
+        blur(layer, layer.halfB, layer.quarterA, 2, 1, 0);
+        blur(layer, layer.quarterA, layer.quarterB, 3, 0, 1);
 
         RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
         GpuSampler linear = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
@@ -91,18 +129,18 @@ public final class TextGlow {
                 () -> "vector3_text_glow_composite", main.getColorTextureView(), Optional.empty())) {
             pass.setPipeline(RenderSystem.getCompiledPipeline(compositePipeline));
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("HalfSampler", halfB.getColorTextureView(), linear);
-            pass.setUniform("QuarterSampler", quarterB.getColorTextureView(), linear);
+            pass.setUniform("HalfSampler", layer.halfB.getColorTextureView(), linear);
+            pass.setUniform("QuarterSampler", layer.quarterB.getColorTextureView(), linear);
             pass.draw(3, 1, 0, 0);
         }
     }
 
-    private static void blur(RenderTarget source, RenderTarget target, int index, float dx, float dy) {
+    private static void blur(Layer layer, RenderTarget source, RenderTarget target, int index, float dx, float dy) {
         CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             ByteBuffer data = Std140Builder.onStack(stack, 16)
-                    .putVec4(dx * SPREAD / target.width, dy * SPREAD / target.height, 0, 0).get();
-            encoder.writeToBuffer(steps[index].slice(), data);
+                    .putVec4(dx * layer.spread / target.width, dy * layer.spread / target.height, 0, 0).get();
+            encoder.writeToBuffer(layer.steps[index].slice(), data);
         }
         try (RenderPass pass = encoder.createRenderPass(() -> "vector3_text_glow_blur", target.getColorTextureView(),
                 Optional.empty())) {
@@ -110,7 +148,7 @@ public final class TextGlow {
             RenderSystem.bindDefaultUniforms(pass);
             pass.setUniform("InSampler", source.getColorTextureView(),
                     RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
-            pass.setUniform("GlowBlur", steps[index]);
+            pass.setUniform("GlowBlur", layer.steps[index]);
             pass.draw(3, 1, 0, 0);
         }
     }
@@ -142,28 +180,28 @@ public final class TextGlow {
                         ColorTargetState.WRITE_COLOR))
                 .withDepthStencilState(Optional.empty())
                 .build());
-        for (int i = 0; i < steps.length; i++) {
-            int index = i;
-            steps[i] = RenderSystem.getDevice().createBuffer(() -> "vector3_text_glow_step_" + index,
-                    GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 16);
-        }
     }
 
-    private static void ensureTargets() {
+    private static void ensureTargets(Layer layer) {
         RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
         int width = Math.max(1, main.width), height = Math.max(1, main.height);
-        if (glow == null) {
-            glow = new TextureTarget("vector3_text_glow", width, height, FORMAT, GpuFormat.D32_FLOAT);
-            halfA = new TextureTarget("vector3_text_glow_half_a", half(width), half(height), FORMAT, null);
-            halfB = new TextureTarget("vector3_text_glow_half_b", half(width), half(height), FORMAT, null);
-            quarterA = new TextureTarget("vector3_text_glow_quarter_a", quarter(width), quarter(height), FORMAT, null);
-            quarterB = new TextureTarget("vector3_text_glow_quarter_b", quarter(width), quarter(height), FORMAT, null);
-        } else if (glow.width != width || glow.height != height) {
-            glow.resize(width, height);
-            halfA.resize(half(width), half(height));
-            halfB.resize(half(width), half(height));
-            quarterA.resize(quarter(width), quarter(height));
-            quarterB.resize(quarter(width), quarter(height));
+        if (layer.glow == null) {
+            layer.glow = new TextureTarget("vector3_text_glow", width, height, FORMAT, GpuFormat.D32_FLOAT);
+            layer.halfA = new TextureTarget("vector3_text_glow_half_a", half(width), half(height), FORMAT, null);
+            layer.halfB = new TextureTarget("vector3_text_glow_half_b", half(width), half(height), FORMAT, null);
+            layer.quarterA = new TextureTarget("vector3_text_glow_quarter_a", quarter(width), quarter(height), FORMAT, null);
+            layer.quarterB = new TextureTarget("vector3_text_glow_quarter_b", quarter(width), quarter(height), FORMAT, null);
+            for (int i = 0; i < layer.steps.length; i++) {
+                int index = i;
+                layer.steps[i] = RenderSystem.getDevice().createBuffer(() -> "vector3_text_glow_step_" + index,
+                        GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 16);
+            }
+        } else if (layer.glow.width != width || layer.glow.height != height) {
+            layer.glow.resize(width, height);
+            layer.halfA.resize(half(width), half(height));
+            layer.halfB.resize(half(width), half(height));
+            layer.quarterA.resize(quarter(width), quarter(height));
+            layer.quarterB.resize(quarter(width), quarter(height));
         }
     }
 
