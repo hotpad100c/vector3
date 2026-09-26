@@ -5,6 +5,7 @@ import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import imgui.moulberry90.ImDrawList;
 import imgui.moulberry90.ImGui;
+import ml.mypals.vectorthree.flashback.VectorIcons;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframeType;
 import net.minecraft.client.resources.language.I18n;
@@ -30,7 +31,7 @@ public final class ClipKeyframeType extends CustomKeyframeType<ClipRef> {
         super("vector3_clips", "vector3.keyframe_type.clips", ClipRef.class);
     }
 
-    @Override public String icon() { return ""; }
+    @Override public String icon() { return VectorIcons.icon(VectorIcons.CLIPS_TRACK, ""); }
     @Override public boolean allowChangingInterpolationType() { return false; }
     @Override public boolean canBeCreatedNormally() { return false; }
     @Override public boolean supportsHandler(KeyframeHandler handler) { return false; }

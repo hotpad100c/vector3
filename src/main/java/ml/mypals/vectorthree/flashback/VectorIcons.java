@@ -26,7 +26,8 @@ import static org.lwjgl.stb.STBTruetype.stbtt_InitFont;
  * next to its Material icons (same 20px size and offset, tinted by the text colour). The font is
  * optional and may hold any subset of the codepoints below; every missing glyph falls back.
  * <ul>
- *   <li>U+F500 Shape track, U+F501 Look To track, U+F502 Skip track, U+F503 Dolly Zoom track</li>
+ *   <li>U+F500 Shape track, U+F501 Look To track, U+F502 Skip track, U+F503 Dolly Zoom track,
+ *       U+F504 Clips track</li>
  *   <li>U+F510 onward: one per shape type, in {@link #SHAPE_TYPES} order
  *       (box F510, sphere F511, face_circle F512, ... area F51F)</li>
  * </ul>
@@ -36,6 +37,7 @@ public final class VectorIcons {
     public static final char LOOK_TO_TRACK = '\uF501';
     public static final char SKIP_TRACK = '\uF502';
     public static final char DOLLY_ZOOM_TRACK = '\uF503';
+    public static final char CLIPS_TRACK = '\uF504';
     private static final char FIRST_SHAPE_TYPE = '\uF510';
     private static final List<String> SHAPE_TYPES = List.of("box", "sphere", "face_circle", "cylinder", "cone",
             "line", "line_strip", "text", "block", "item", "entity", "obj", "arrow", "image", "video", "area");
