@@ -1,5 +1,12 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import com.moulberry.flashback.utils.InputHelper;
+import ml.mypals.vectorthree.prefab.PrefabGroup;
+import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
+import ml.mypals.vectorthree.flashback.ShapeCommands;
+import ml.mypals.vectorthree.multiedit.PropertySelection;
+import ml.mypals.vectorthree.multiedit.PropertyClipboard;
+import ml.mypals.vectorthree.multiedit.MultiEditSession;
 import com.moulberry.flashback.keyframe.impl.CameraKeyframe;
 import ml.mypals.vectorthree.multiedit.MultiSelection;
 import ml.mypals.vectorthree.multiedit.MultiPropertiesPage;
@@ -88,6 +95,7 @@ public abstract class TimelineWindowMixin {
     @Shadow private static float mouseY;
     @Shadow private static int keyframeSize;
     @Shadow private static int openCreateKeyframeAtTickTrack;
+    @Shadow private static int repositioningKeyframeTrack;
     @Shadow private static boolean grabbedKeyframe;
     @Shadow private static int grabbedKeyframeTrack;
     @Unique
@@ -140,6 +148,7 @@ public abstract class TimelineWindowMixin {
         ShapeTrackRegistry.fixSeeThroughPipelines();
         Vector3.ORBIT_GIZMO.frame();
         Vector3.CAMERA_GIZMO.frame();
+        vector3$shapeShortcuts();
         Vector3.GIZMO_EDITOR.frame();
         vector3$handlePrefabs();
         if (ShapeManagerWindow.isEditorMode()) Vector3.EDITOR_CAMERA.frame();
@@ -245,10 +254,26 @@ public abstract class TimelineWindowMixin {
     @WrapOperation(method = "renderInner", at = @At(value = "INVOKE",
             target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;renderKeyframeOptionsPopup(I)V"))
     private static void vector3$propertiesPage(int totalTicks, Operation<Void> original) {
-        if (PropertiesWindow.isCurveTab()) vector3$renderCurvePage();
-        else if (MultiSelection.count(selectedKeyframesList) > 1) {
+        if (PropertiesWindow.isCurveTab()) {
+            vector3$renderCurvePage();
+            return;
+        }
+        PropertySelection.beginFrame(java.util.Objects.hash(selectedKeyframesList, editingKeyframeTrack, editingKeyframeTick));
+        if (MultiSelection.count(selectedKeyframesList) > 1) {
             MultiPropertiesPage.render(selectedKeyframesList, editingKeyframeTrack, editingKeyframeTick, vector3$multiHost());
-        } else original.call(totalTicks);
+        } else {
+            MultiEditSession.display("single", List.of(), key -> true, false, () -> original.call(totalTicks));
+        }
+        List<PropertyClipboard.Clip> paste = PropertySelection.frame();
+        if (paste != null) {
+            List<SelectedKeyframes> targets = selectedKeyframesList;
+            if (targets.isEmpty() && editingKeyframeTrack >= 0 && editingKeyframeTrack < editorScene.keyframeTracks.size()) {
+                targets = List.of(new SelectedKeyframes(editorScene.keyframeTracks.get(editingKeyframeTrack).keyframeType,
+                        editingKeyframeTrack, IntSet.of(editingKeyframeTick)));
+            }
+            int applied = MultiPropertiesPage.paste(paste, targets, editingKeyframeTrack, editingKeyframeTick, vector3$multiHost());
+            PropertySelection.pasted(applied, paste.size());
+        }
     }
 
     // "Custom" joins the interpolation types: choosing it gives the selected keyframes a speed curve.
@@ -535,11 +560,27 @@ public abstract class TimelineWindowMixin {
     private static void vector3$moveAcrossTracks(ReplayServer server, int totalTicks, float rowsY, CallbackInfo ci,
             @Coerce GrabMovementInfoAccessor movement) {
         TrackMove.Plan plan = vector3$trackMovePlan(rowsY);
-        if (plan == null || !plan.valid()) return;
         int delta = movement.vector3$delta(), pivot = movement.vector3$scalePivot();
         float factor = movement.vector3$scaleFactor();
         IntUnaryOperator retime = tick -> Math.clamp(
                 pivot >= 0 ? pivot + Math.round((tick - pivot) * factor) : tick + delta, 0, totalTicks);
+        // Alt drops copies where the drag ends and leaves the originals where they were, as in Resolve.
+        if (ImGui.getIO().getKeyAlt() && !ImGui.getIO().getKeyCtrl()) {
+            List<SelectedKeyframes> selection = new ArrayList<>(selectedKeyframesList);
+            TrackMove.Plan target = plan != null && plan.valid() ? plan : TrackMove.inPlace(editorScene, selection);
+            List<SelectedKeyframes> copies = new ArrayList<>();
+            upgradeToSceneWrite();
+            EditorSceneHistoryEntry entry = TrackMove.copyEntry(editorScene, selection, target, retime, null, copies);
+            movement.vector3$setDelta(0);
+            movement.vector3$setScalePivot(-1);
+            if (entry == null) return;
+            editorScene.push(entry);
+            selectedKeyframesList.clear();
+            selectedKeyframesList.addAll(copies);
+            vector3$keyframesChanged();
+            return;
+        }
+        if (plan == null || !plan.valid()) return;
         upgradeToSceneWrite();
         List<SelectedKeyframes> moved = new ArrayList<>();
         editorScene.push(TrackMove.entry(editorScene, new ArrayList<>(selectedKeyframesList), plan, retime, moved));
@@ -576,12 +617,69 @@ public abstract class TimelineWindowMixin {
             return;
         }
         TrackMove.Plan plan = vector3$groupMovePlan(rowsY);
+        if (ImGui.getIO().getKeyAlt()) {
+            vector3$copyGroup(plan, timelineXToReplayTick(mouseX - x) - timelineXToReplayTick(vector3$groupDragStartX - x));
+            return;
+        }
         var entry = plan != null && plan.valid()
                 ? vector3$groupDrag.finishAcross(editorScene, plan)
                 : vector3$groupDrag.finish(editorScene);
         if (entry != null) editorScene.push(entry);
         vector3$groupDrag = null;
         vector3$draggedGroup = null;
+        vector3$keyframesChanged();
+    }
+
+    // The drag has been showing the group moving; put it back and drop a copy there instead, as a new group.
+    @Unique
+    private static void vector3$copyGroup(TrackMove.Plan plan, int delta) {
+        PrefabGroups.Span span = vector3$span(vector3$draggedGroup);
+        vector3$groupDrag.cancel(editorScene);
+        vector3$groupDrag = null;
+        vector3$draggedGroup = null;
+        if (span != null) {
+            List<SelectedKeyframes> selection = PrefabGroups.selection(editorScene, span);
+            int shift = Math.max(delta, -span.firstTick());
+            TrackMove.Plan target = plan != null && plan.valid() ? plan : TrackMove.inPlace(editorScene, selection);
+            String group = java.util.UUID.randomUUID().toString();
+            List<SelectedKeyframes> copies = new ArrayList<>();
+            EditorSceneHistoryEntry entry = TrackMove.copyEntry(editorScene, selection, target, tick -> tick + shift, group, copies);
+            if (entry != null) {
+                PrefabGroup source = span.group();
+                PrefabGroups.groups(editorScene).put(group, new PrefabGroup(group,
+                        I18n.get("vector3.shape.copy_name", source.name()), source.prefab(), source.transform(),
+                        source.timeScale(), source.startTick() + shift));
+                editorScene.push(entry);
+                selectedKeyframesList.clear();
+                selectedKeyframesList.addAll(copies);
+            }
+        }
+        vector3$keyframesChanged();
+    }
+
+    // Flashback scales the dragged keyframes about a pivot while Alt is held; Alt now copies, so scaling moves to Ctrl+Alt.
+    @WrapOperation(method = "calculateGrabMovementInfo", at = @At(value = "INVOKE",
+            target = "Lcom/moulberry/flashback/utils/InputHelper;isAltDownRaw()Z"))
+    private static boolean vector3$scaleWithCtrlAlt(Operation<Boolean> original) {
+        return original.call() && InputHelper.isCtrlDownRaw();
+    }
+
+    // Alt on a track's drag handle leaves a copy of the track behind; the original is the one being dragged.
+    @Inject(method = "renderKeyframeElements", at = @At(value = "FIELD", opcode = Opcodes.PUTSTATIC, shift = At.Shift.AFTER,
+            target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;repositioningKeyframeTrack:I"))
+    private static void vector3$copyDraggedTrack(float x, float y, int cursorTicks, int middleX, CallbackInfo ci) {
+        if (!ImGui.getIO().getKeyAlt() || repositioningKeyframeTrack < 0
+                || repositioningKeyframeTrack >= editorScene.keyframeTracks.size()) return;
+        int index = repositioningKeyframeTrack;
+        upgradeToSceneWrite();
+        KeyframeTrack original = editorScene.keyframeTracks.get(index);
+        editorScene.push(TrackMove.copyTrack(editorScene, index));
+        KeyframeTrack copy = editorScene.keyframeTracks.get(index);
+        copy.enabled = original.enabled;
+        copy.customName = original.customName;
+        copy.customColour = original.customColour;
+        repositioningKeyframeTrack = index + 1;
+        selectedKeyframesList.clear();
         vector3$keyframesChanged();
     }
 
@@ -870,6 +968,36 @@ public abstract class TimelineWindowMixin {
         editingKeyframeTrack = trackIndex;
         editingKeyframeTick = tick;
         PropertiesWindow.requestFocus();
+    }
+
+    // Over the viewport or the Shape Manager, Ctrl+D duplicates the selected shapes and Delete removes them whole;
+    // over the timeline, Delete keeps deleting just the selected keyframes.
+    @Unique
+    private static void vector3$shapeShortcuts() {
+        if (ImGui.getIO().getWantTextInput() || selectedKeyframesList.isEmpty()
+                || Vector3.GIZMO_EDITOR.isDragging() || Vector3.CAMERA_GIZMO.isDragging()) return;
+        if (!ShapeGizmoEditor.mouseInViewport() && !ShapeManagerWindow.isHovered()) return;
+        boolean duplicate = ImGui.getIO().getKeyCtrl() && ImGui.isKeyPressed(ImGuiKey.D, false);
+        boolean delete = ImGui.isKeyPressed(ImGuiKey.Delete, false);
+        if (!duplicate && !delete) return;
+        Set<String> shapes = ShapeCommands.shapesIn(editorScene, selectedKeyframesList);
+        if (shapes.isEmpty()) return;
+        upgradeToSceneWrite();
+        if (duplicate) {
+            ShapeCommands.Duplicate copy = ShapeCommands.duplicate(editorScene, shapes);
+            if (copy == null) return;
+            editorScene.push(copy.entry());
+            selectedKeyframesList.clear();
+            selectedKeyframesList.addAll(copy.selection());
+        } else {
+            EditorSceneHistoryEntry removal = ShapeCommands.delete(editorScene, shapes);
+            if (removal == null) return;
+            editorScene.push(removal);
+            selectedKeyframesList.clear();
+            editingKeyframeTrack = -1;
+            editingKeyframeTick = -1;
+        }
+        vector3$keyframesChanged();
     }
 
     @Unique

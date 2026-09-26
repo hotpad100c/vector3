@@ -11,13 +11,15 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
  * Drives ImGuiMultiEditMixin. A keyframe's own editor UI is run once per target without drawing (CAPTURE) to learn
  * every widget's value, then drawn for the primary target (DISPLAY) with mixed widgets locked behind Ctrl, and the
  * edit the user made is replayed into every other target's editor (REPLAY) so each target applies it through its
- * own UI code. Widgets are keyed by label plus how many times that label came before.
+ * own UI code. Widgets are keyed by label plus how many times that label came before. DISPLAY also reports every
+ * widget to PropertySelection, which is how rows get selected, copied and pasted.
  */
 public final class MultiEditSession {
     private enum Mode { OFF, CAPTURE, DISPLAY, REPLAY }
@@ -32,6 +34,8 @@ public final class MultiEditSession {
     private static final Pending COMBO_ITEM = new Pending("", "", false, new boolean[0], Kind.BUTTON, "");
 
     private static Mode mode = Mode.OFF;
+    private static boolean shared;
+    private static String scope = "";
     private static final Map<String, Integer> COUNTS = new HashMap<>();
     private static Map<String, Object> capture;
     private static List<Map<String, Object>> captures;
@@ -40,13 +44,16 @@ public final class MultiEditSession {
     private static final ArrayDeque<String> OPEN_COMBOS = new ArrayDeque<>();
     private static int nesting;
     private static @Nullable Change change;
-    private static @Nullable Change inject;
-    private static boolean replayComboOpen;
+    private static Map<String, Change> injects = Map.of();
+    private static @Nullable Set<String> hits;
+    private static @Nullable Change replayCombo;
+    private static String lastSelectable;
 
     private MultiEditSession() {}
 
+    /** True while one editor stands for several keyframes (or runs silently for one of them). */
     public static boolean active() {
-        return mode != Mode.OFF;
+        return shared;
     }
 
     /** True while an editor runs without being drawn, so it must not touch anything outside its keyframe. */
@@ -55,7 +62,7 @@ public final class MultiEditSession {
     }
 
     public static Map<String, Object> capture(Runnable render) {
-        begin(Mode.CAPTURE);
+        begin(Mode.CAPTURE, true);
         capture = new LinkedHashMap<>();
         try {
             render.run();
@@ -65,8 +72,11 @@ public final class MultiEditSession {
         }
     }
 
-    public static @Nullable Change display(List<Map<String, Object>> targets, Predicate<String> shown, Runnable render) {
-        begin(Mode.DISPLAY);
+    /** Draws the primary's editor; {@code targets} are the other targets' captures, empty when it edits one keyframe. */
+    public static @Nullable Change display(String rowScope, List<Map<String, Object>> targets, Predicate<String> shown,
+            boolean severalTargets, Runnable render) {
+        begin(Mode.DISPLAY, severalTargets);
+        scope = rowScope;
         captures = targets;
         visible = shown;
         change = null;
@@ -81,9 +91,13 @@ public final class MultiEditSession {
         }
     }
 
-    public static void replay(Change edit, Runnable render) {
-        begin(Mode.REPLAY);
-        inject = edit;
+    /** Feeds these edits into one target's editor; the keys it actually had are added to {@code applied}. */
+    public static void replay(List<Change> edits, @Nullable Set<String> applied, Runnable render) {
+        begin(Mode.REPLAY, true);
+        Map<String, Change> byKey = new HashMap<>();
+        for (Change edit : edits) byKey.put(edit.key(), edit);
+        injects = byKey;
+        hits = applied;
         try {
             render.run();
         } finally {
@@ -91,21 +105,25 @@ public final class MultiEditSession {
         }
     }
 
-    private static void begin(Mode next) {
+    private static void begin(Mode next, boolean severalTargets) {
         mode = next;
+        shared = severalTargets;
         COUNTS.clear();
         PENDING.clear();
         OPEN_COMBOS.clear();
         nesting = 0;
-        replayComboOpen = false;
+        replayCombo = null;
     }
 
     private static void end() {
         mode = Mode.OFF;
+        shared = false;
+        scope = "";
         capture = null;
         captures = null;
         visible = key -> true;
-        inject = null;
+        injects = Map.of();
+        hits = null;
     }
 
     private static String key(String label) {
@@ -144,12 +162,14 @@ public final class MultiEditSession {
             cir.setReturnValue(false);
             return;
         }
-        if (inject != null && key.equals(inject.key())) {
-            if (kind == Kind.COMBO) replayComboOpen = true;
-            cir.setReturnValue(WidgetValues.inject(inject, container, kind));
-        } else {
+        Change edit = injects.get(key);
+        if (edit == null) {
             cir.setReturnValue(false);
+            return;
         }
+        if (hits != null) hits.add(key);
+        if (kind == Kind.COMBO) replayCombo = edit;
+        cir.setReturnValue(WidgetValues.inject(edit, container, kind));
     }
 
     public static void tail(@Nullable Object container, boolean result) {
@@ -165,6 +185,8 @@ public final class MultiEditSession {
         }
         if (pending.locked()) ImGui.endDisabled();
         if (WidgetValues.any(pending.mixed())) MixedOverlay.draw(pending.label(), pending.mixed(), pending.kind(), pending.locked());
+        Object value = pending.kind() == Kind.VALUE ? WidgetValues.snapshot(container) : pending.before();
+        if (pending.kind() != Kind.BUTTON) PropertySelection.record(scope, pending.key(), pending.kind(), value);
         if (pending.kind() == Kind.COMBO) {
             if (result) OPEN_COMBOS.push(pending.key());
             return;
@@ -174,14 +196,9 @@ public final class MultiEditSession {
             case CHECK -> new Change(pending.key(), !(Boolean) pending.before(), null, null);
             case RADIO -> new Change(pending.key(), true, null, null);
             case BUTTON -> new Change(pending.key(), null, null, null);
-            default -> {
-                Object after = WidgetValues.snapshot(container);
-                yield new Change(pending.key(), after, WidgetValues.changed(pending.before(), after), null);
-            }
+            default -> new Change(pending.key(), value, WidgetValues.changed(pending.before(), value), null);
         };
     }
-
-    private static String lastSelectable;
 
     public static void selectableHead(String label, CallbackInfoReturnable<Boolean> cir) {
         if (mode == Mode.OFF) return;
@@ -191,8 +208,8 @@ public final class MultiEditSession {
             nesting = 1;
             return;
         }
-        if (mode == Mode.REPLAY && replayComboOpen) {
-            cir.setReturnValue(inject != null && label.equals(inject.selection()));
+        if (mode == Mode.REPLAY && replayCombo != null) {
+            cir.setReturnValue(label.equals(replayCombo.selection()));
             return;
         }
         head(label, null, Kind.BUTTON, cir);
@@ -200,8 +217,8 @@ public final class MultiEditSession {
 
     public static void endComboHead(CallbackInfo ci) {
         if (mode == Mode.DISPLAY && nesting == 0 && !OPEN_COMBOS.isEmpty()) OPEN_COMBOS.pop();
-        if (mode == Mode.REPLAY && replayComboOpen) {
-            replayComboOpen = false;
+        if (mode == Mode.REPLAY && replayCombo != null) {
+            replayCombo = null;
             ci.cancel();
         }
     }

@@ -18,74 +18,74 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 // Every overload of a widget family starts with the label and its value holder, so one handler covers them all.
 @Mixin(value = ImGui.class, remap = false)
 public class ImGuiMultiEditMixin {
-    @Inject(method = {"dragFloat", "dragFloat2", "dragFloat3", "dragFloat4", "sliderFloat", "sliderFloat2", "sliderFloat3",
-            "sliderFloat4", "sliderAngle", "inputFloat2", "inputFloat3", "inputFloat4", "colorEdit3", "colorEdit4"},
+    @Inject(method = {"dragFloat*", "dragFloat2*", "dragFloat3*", "dragFloat4*", "sliderFloat*", "sliderFloat2*", "sliderFloat3*",
+            "sliderFloat4*", "sliderAngle*", "inputFloat2*", "inputFloat3*", "inputFloat4*", "colorEdit3*", "colorEdit4*"},
             at = @At("HEAD"), cancellable = true)
     private static void vector3$floats(CallbackInfoReturnable<Boolean> cir,
             @Local(argsOnly = true, ordinal = 0) String label, @Local(argsOnly = true, ordinal = 0) float[] value) {
         MultiEditSession.head(label, value, Kind.VALUE, cir);
     }
 
-    @Inject(method = {"dragFloat", "dragFloat2", "dragFloat3", "dragFloat4", "sliderFloat", "sliderFloat2", "sliderFloat3",
-            "sliderFloat4", "sliderAngle", "inputFloat2", "inputFloat3", "inputFloat4", "colorEdit3", "colorEdit4"},
+    @Inject(method = {"dragFloat*", "dragFloat2*", "dragFloat3*", "dragFloat4*", "sliderFloat*", "sliderFloat2*", "sliderFloat3*",
+            "sliderFloat4*", "sliderAngle*", "inputFloat2*", "inputFloat3*", "inputFloat4*", "colorEdit3*", "colorEdit4*"},
             at = @At("RETURN"))
     private static void vector3$floatsEnd(CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true, ordinal = 0) float[] value) {
         MultiEditSession.tail(value, cir.getReturnValueZ());
     }
 
-    @Inject(method = {"dragInt", "dragInt2", "dragInt3", "dragInt4", "sliderInt", "sliderInt2", "sliderInt3", "sliderInt4",
-            "inputInt2", "inputInt3", "inputInt4"}, at = @At("HEAD"), cancellable = true)
+    @Inject(method = {"dragInt*", "dragInt2*", "dragInt3*", "dragInt4*", "sliderInt*", "sliderInt2*", "sliderInt3*", "sliderInt4*",
+            "inputInt2*", "inputInt3*", "inputInt4*"}, at = @At("HEAD"), cancellable = true)
     private static void vector3$ints(CallbackInfoReturnable<Boolean> cir,
             @Local(argsOnly = true, ordinal = 0) String label, @Local(argsOnly = true, ordinal = 0) int[] value) {
         MultiEditSession.head(label, value, Kind.VALUE, cir);
     }
 
-    @Inject(method = {"dragInt", "dragInt2", "dragInt3", "dragInt4", "sliderInt", "sliderInt2", "sliderInt3", "sliderInt4",
-            "inputInt2", "inputInt3", "inputInt4"}, at = @At("RETURN"))
+    @Inject(method = {"dragInt*", "dragInt2*", "dragInt3*", "dragInt4*", "sliderInt*", "sliderInt2*", "sliderInt3*", "sliderInt4*",
+            "inputInt2*", "inputInt3*", "inputInt4*"}, at = @At("RETURN"))
     private static void vector3$intsEnd(CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true, ordinal = 0) int[] value) {
         MultiEditSession.tail(value, cir.getReturnValueZ());
     }
 
-    @Inject(method = {"inputInt", "combo"}, at = @At("HEAD"), cancellable = true)
+    @Inject(method = {"inputInt*", "combo*"}, at = @At("HEAD"), cancellable = true)
     private static void vector3$imInt(CallbackInfoReturnable<Boolean> cir,
             @Local(argsOnly = true, ordinal = 0) String label, @Local(argsOnly = true) ImInt value) {
         MultiEditSession.head(label, value, Kind.VALUE, cir);
     }
 
-    @Inject(method = {"inputInt", "combo"}, at = @At("RETURN"))
+    @Inject(method = {"inputInt*", "combo*"}, at = @At("RETURN"))
     private static void vector3$imIntEnd(CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true) ImInt value) {
         MultiEditSession.tail(value, cir.getReturnValueZ());
     }
 
-    @Inject(method = "inputFloat", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "inputFloat*", at = @At("HEAD"), cancellable = true)
     private static void vector3$imFloat(CallbackInfoReturnable<Boolean> cir,
             @Local(argsOnly = true, ordinal = 0) String label, @Local(argsOnly = true) ImFloat value) {
         MultiEditSession.head(label, value, Kind.VALUE, cir);
     }
 
-    @Inject(method = "inputFloat", at = @At("RETURN"))
+    @Inject(method = "inputFloat*", at = @At("RETURN"))
     private static void vector3$imFloatEnd(CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true) ImFloat value) {
         MultiEditSession.tail(value, cir.getReturnValueZ());
     }
 
-    @Inject(method = "inputDouble", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "inputDouble*", at = @At("HEAD"), cancellable = true)
     private static void vector3$imDouble(CallbackInfoReturnable<Boolean> cir,
             @Local(argsOnly = true, ordinal = 0) String label, @Local(argsOnly = true) ImDouble value) {
         MultiEditSession.head(label, value, Kind.VALUE, cir);
     }
 
-    @Inject(method = "inputDouble", at = @At("RETURN"))
+    @Inject(method = "inputDouble*", at = @At("RETURN"))
     private static void vector3$imDoubleEnd(CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true) ImDouble value) {
         MultiEditSession.tail(value, cir.getReturnValueZ());
     }
 
-    @Inject(method = {"inputText", "inputTextMultiline", "inputTextWithHint"}, at = @At("HEAD"), cancellable = true)
+    @Inject(method = {"inputText*", "inputTextMultiline*", "inputTextWithHint*"}, at = @At("HEAD"), cancellable = true)
     private static void vector3$text(CallbackInfoReturnable<Boolean> cir,
             @Local(argsOnly = true, ordinal = 0) String label, @Local(argsOnly = true) ImString value) {
         MultiEditSession.head(label, value, Kind.VALUE, cir);
     }
 
-    @Inject(method = {"inputText", "inputTextMultiline", "inputTextWithHint"}, at = @At("RETURN"))
+    @Inject(method = {"inputText*", "inputTextMultiline*", "inputTextWithHint*"}, at = @At("RETURN"))
     private static void vector3$textEnd(CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true) ImString value) {
         MultiEditSession.tail(value, cir.getReturnValueZ());
     }
@@ -130,38 +130,38 @@ public class ImGuiMultiEditMixin {
         MultiEditSession.tail(value, cir.getReturnValueZ());
     }
 
-    @Inject(method = {"button", "smallButton"}, at = @At("HEAD"), cancellable = true)
+    @Inject(method = {"button*", "smallButton*"}, at = @At("HEAD"), cancellable = true)
     private static void vector3$button(CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true, ordinal = 0) String label) {
         MultiEditSession.head(label, null, Kind.BUTTON, cir);
     }
 
-    @Inject(method = {"button", "smallButton"}, at = @At("RETURN"))
+    @Inject(method = {"button*", "smallButton*"}, at = @At("RETURN"))
     private static void vector3$buttonEnd(CallbackInfoReturnable<Boolean> cir) {
         MultiEditSession.tail(null, cir.getReturnValueZ());
     }
 
-    @Inject(method = "beginCombo", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "beginCombo*", at = @At("HEAD"), cancellable = true)
     private static void vector3$combo(CallbackInfoReturnable<Boolean> cir,
             @Local(argsOnly = true, ordinal = 0) String label, @Local(argsOnly = true, ordinal = 1) String preview) {
         MultiEditSession.head(label, preview, Kind.COMBO, cir);
     }
 
-    @Inject(method = "beginCombo", at = @At("RETURN"))
+    @Inject(method = "beginCombo*", at = @At("RETURN"))
     private static void vector3$comboEnd(CallbackInfoReturnable<Boolean> cir) {
         MultiEditSession.tail(null, cir.getReturnValueZ());
     }
 
-    @Inject(method = "endCombo", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "endCombo*", at = @At("HEAD"), cancellable = true)
     private static void vector3$endCombo(CallbackInfo ci) {
         MultiEditSession.endComboHead(ci);
     }
 
-    @Inject(method = "selectable", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "selectable*", at = @At("HEAD"), cancellable = true)
     private static void vector3$selectable(CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true, ordinal = 0) String label) {
         MultiEditSession.selectableHead(label, cir);
     }
 
-    @Inject(method = "selectable", at = @At("RETURN"))
+    @Inject(method = "selectable*", at = @At("RETURN"))
     private static void vector3$selectableEnd(CallbackInfoReturnable<Boolean> cir) {
         MultiEditSession.tail(null, cir.getReturnValueZ());
     }

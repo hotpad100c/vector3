@@ -218,5 +218,16 @@
   "vector3.multi.locked": "各项的值不同。按住 Ctrl 解锁，即可统一修改。",
   "vector3.multi.selected": "已选中 %s 个关键帧",
   "vector3.multi.shapes": "图形",
-  "vector3.history.multi_edit": "修改 %s 个关键帧"
+  "vector3.history.multi_edit": "修改 %s 个关键帧",
+  "vector3.properties.copy": "复制 %s 项",
+  "vector3.properties.paste": "粘贴 %s 项",
+  "vector3.properties.clear_selection": "清空选择",
+  "vector3.properties.clipboard_hint": "已选 %s 项 · 剪贴板 %s 项 · Ctrl+右键选择，Ctrl+C / Ctrl+V",
+  "vector3.properties.copied": "已复制 %s 项",
+  "vector3.properties.pasted": "已粘贴 %s / %s 项",
+  "vector3.history.delete_shapes": "删除 %s 个图形",
+  "vector3.history.duplicate_shapes": "复制 %s 个图形",
+  "vector3.shape.copy_name": "%s 副本",
+  "vector3.history.copy_keyframes": "复制 %s 个关键帧",
+  "vector3.history.copy_track": "复制轨道"
 }

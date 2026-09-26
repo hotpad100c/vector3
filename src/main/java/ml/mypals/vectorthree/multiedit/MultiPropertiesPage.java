@@ -88,7 +88,8 @@ public final class MultiPropertiesPage {
         ImGui.pushID("vector3_multi_section_" + section);
         MultiEditSession.Change change;
         try {
-            change = MultiEditSession.display(captures, shown, () -> primary.working.renderEditKeyframe(primary.update()));
+            change = MultiEditSession.display("section" + section, captures, shown, true,
+                    () -> primary.working.renderEditKeyframe(primary.update()));
         } finally {
             ImGui.popID();
         }
@@ -97,10 +98,28 @@ public final class MultiPropertiesPage {
             for (int i = 1; i < targets.size(); i++) {
                 MultiSelection.Entry target = targets.get(i);
                 ImGui.pushID(i);
-                MultiEditSession.replay(change, () -> target.working.renderEditKeyframe(target.update()));
+                MultiEditSession.replay(List.of(change), null, () -> target.working.renderEditKeyframe(target.update()));
                 ImGui.popID();
             }
         });
+    }
+
+    /** Pastes copied rows onto every selected keyframe that has them; returns how many of the rows found a home. */
+    public static int paste(List<PropertyClipboard.Clip> clips, List<SelectedKeyframes> selection, int editingTrack,
+            int editingTick, Host host) {
+        List<MultiSelection.Entry> entries = MultiSelection.gather(host.scene().get(), selection, editingTrack, editingTick);
+        List<MultiEditSession.Change> changes = clips.stream().map(PropertyClipboard.Clip::change).toList();
+        Set<String> applied = new HashSet<>();
+        silently(-1, () -> {
+            for (int i = 0; i < entries.size(); i++) {
+                MultiSelection.Entry target = entries.get(i);
+                ImGui.pushID(i);
+                MultiEditSession.replay(changes, applied, () -> target.working.renderEditKeyframe(target.update()));
+                ImGui.popID();
+            }
+        });
+        if (MultiSelection.commit(entries, host.upgradeToWrite(), host.scene())) host.keyframesChanged().run();
+        return applied.size();
     }
 
     private static List<Map<String, Object>> captureAll(List<MultiSelection.Entry> targets, int section) {

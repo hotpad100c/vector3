@@ -218,5 +218,16 @@
   "vector3.multi.locked": "Values differ. Hold Ctrl to unlock and set them all.",
   "vector3.multi.selected": "%s keyframes selected",
   "vector3.multi.shapes": "Shapes",
-  "vector3.history.multi_edit": "Edit %s keyframes"
+  "vector3.history.multi_edit": "Edit %s keyframes",
+  "vector3.properties.copy": "Copy %s rows",
+  "vector3.properties.paste": "Paste %s rows",
+  "vector3.properties.clear_selection": "Clear selection",
+  "vector3.properties.clipboard_hint": "%s rows selected · %s on clipboard · Ctrl+right-click to select, Ctrl+C / Ctrl+V",
+  "vector3.properties.copied": "Copied %s rows",
+  "vector3.properties.pasted": "Pasted %s of %s rows",
+  "vector3.history.delete_shapes": "Delete %s shapes",
+  "vector3.history.duplicate_shapes": "Duplicate %s shapes",
+  "vector3.shape.copy_name": "%s copy",
+  "vector3.history.copy_keyframes": "Copy %s keyframes",
+  "vector3.history.copy_track": "Copy track"
 }

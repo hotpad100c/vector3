@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.flashback;
 
+import imgui.moulberry90.flag.ImGuiHoveredFlags;
 import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.state.EditorState;
 import ml.mypals.vectorthree.shape.ShapeReparent;
@@ -32,6 +33,7 @@ public final class ShapeManagerWindow {
     private static String pendingParent;
     private static boolean hasPendingReparent;
     private static final PersistentWindow WINDOW = new PersistentWindow("vector3_shape_manager");
+    private static boolean hovered;
 
     private ShapeManagerWindow() {}
 
@@ -41,14 +43,18 @@ public final class ShapeManagerWindow {
 
     public static boolean isAutoKey() { return autoKey.get(); }
 
+    public static boolean isHovered() { return hovered; }
+
     public static void renderMenuItem() {
         if (ImGui.menuItem(I18n.get("vector3.shape_manager.title"), "", WINDOW.isOpen())) WINDOW.toggle();
     }
 
     public static void render() {
+        hovered = false;
         if (!WINDOW.isOpen()) return;
         ImGui.setNextWindowSize(360, 320, ImGuiCond.FirstUseEver);
         if (ImGui.begin(WINDOW.title(I18n.get("vector3.shape_manager.title")), WINDOW.open())) {
+            hovered = ImGui.isWindowHovered(ImGuiHoveredFlags.RootAndChildWindows);
             ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode);
             ImGui.checkbox(I18n.get("vector3.shape_manager.instant_preview"), instantPreview);
             if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.instant_preview.tooltip"));

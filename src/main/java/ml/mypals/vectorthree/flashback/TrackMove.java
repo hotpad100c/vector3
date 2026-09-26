@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.flashback;
 
+import ml.mypals.vectorthree.prefab.PrefabGroups;
 import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.KeyframeType;
@@ -125,6 +126,70 @@ public final class TrackMove {
             if (entry.getValue() == target) return entry.getKey();
         }
         throw new IllegalStateException("No source for track " + target);
+    }
+
+    /** Every source row onto itself: an Alt-drag that stays on its tracks. */
+    public static Plan inPlace(EditorScene scene, List<SelectedKeyframes> selection) {
+        Map<Integer, Integer> targets = new LinkedHashMap<>();
+        for (SelectedKeyframes selected : selection) targets.put(selected.trackIndex(), selected.trackIndex());
+        return new Plan(targets, scene.keyframeTracks.size(), true);
+    }
+
+    /**
+     * Like {@link #entry} but the originals stay: copies land where the drag would have put them, tagged with
+     * {@code group} (null leaves them ungrouped). Returns null when every copy would sit on its own original.
+     */
+    public static @Nullable EditorSceneHistoryEntry copyEntry(EditorScene scene, List<SelectedKeyframes> selection, Plan plan,
+            IntUnaryOperator retime, @Nullable String group, List<SelectedKeyframes> copiedSelection) {
+        List<EditorSceneHistoryAction> redo = new ArrayList<>(), undo = new ArrayList<>(), undoCovered = new ArrayList<>();
+        TreeSet<Integer> newTracks = new TreeSet<>();
+        for (SelectedKeyframes selected : selection) {
+            int source = selected.trackIndex(), target = plan.targets().get(source);
+            KeyframeTrack sourceTrack = scene.keyframeTracks.get(source);
+            KeyframeTrack targetTrack = plan.creates(target) ? null : scene.keyframeTracks.get(target);
+            if (targetTrack == null) newTracks.add(target);
+            IntSet copiedTicks = new IntOpenHashSet();
+            for (int from : selected.keyframeTicks()) {
+                Keyframe keyframe = sourceTrack.keyframesByTick.get(from);
+                int to = retime.applyAsInt(from);
+                if (keyframe == null || target == source && to == from) continue;
+                Keyframe copy = keyframe.copy();
+                PrefabGroups.tag(copy, group);
+                redo.add(new EditorSceneHistoryAction.SetKeyframe(sourceTrack.keyframeType, target, to, copy));
+                undo.add(new EditorSceneHistoryAction.RemoveKeyframe(sourceTrack.keyframeType, target, to));
+                Keyframe covered = targetTrack == null ? null : targetTrack.keyframesByTick.get(to);
+                if (covered != null) {
+                    undoCovered.add(new EditorSceneHistoryAction.SetKeyframe(sourceTrack.keyframeType, target, to, covered.copy()));
+                }
+                copiedTicks.add(to);
+            }
+            if (!copiedTicks.isEmpty()) copiedSelection.add(new SelectedKeyframes(sourceTrack.keyframeType, target, copiedTicks));
+        }
+        if (redo.isEmpty()) return null;
+        List<EditorSceneHistoryAction> fullRedo = new ArrayList<>();
+        for (int index : newTracks) {
+            fullRedo.add(new EditorSceneHistoryAction.AddTrack(scene.keyframeTracks.get(sourceOf(plan, index)).keyframeType, index));
+        }
+        fullRedo.addAll(redo);
+        undo.addAll(undoCovered);
+        for (int index : newTracks.descendingSet()) {
+            undo.add(new EditorSceneHistoryAction.RemoveTrack(scene.keyframeTracks.get(sourceOf(plan, index)).keyframeType, index));
+        }
+        return new EditorSceneHistoryEntry(undo, fullRedo, I18n.get("vector3.history.copy_keyframes", redo.size()));
+    }
+
+    /** A copy of one whole track inserted at its own index, so the original can be dragged away from it. */
+    public static EditorSceneHistoryEntry copyTrack(EditorScene scene, int index) {
+        KeyframeTrack track = scene.keyframeTracks.get(index);
+        List<EditorSceneHistoryAction> redo = new ArrayList<>();
+        redo.add(new EditorSceneHistoryAction.AddTrack(track.keyframeType, index));
+        for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+            Keyframe copy = entry.getValue().copy();
+            PrefabGroups.tag(copy, null);
+            redo.add(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, index, entry.getKey(), copy));
+        }
+        return new EditorSceneHistoryEntry(List.of(new EditorSceneHistoryAction.RemoveTrack(track.keyframeType, index)),
+                redo, I18n.get("vector3.history.copy_track"));
     }
 
     private static long key(int track, int tick) {
