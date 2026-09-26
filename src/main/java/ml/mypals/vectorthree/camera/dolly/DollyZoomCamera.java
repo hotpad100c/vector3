@@ -2,6 +2,7 @@ package ml.mypals.vectorthree.camera.dolly;
 
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
+import ml.mypals.vectorthree.camera.CameraPreview;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
@@ -29,6 +30,7 @@ public final class DollyZoomCamera {
     public static void finish(KeyframeHandler handler) {
         if (!(handler instanceof MinecraftKeyframeHandler) || !pending) return;
         pending = false;
+        if (CameraPreview.detachesMainView()) return;
         Minecraft minecraft = handler.getMinecraft();
         LocalPlayer player = minecraft.player;
         if (player == null || minecraft.getCameraEntity() != player) return;

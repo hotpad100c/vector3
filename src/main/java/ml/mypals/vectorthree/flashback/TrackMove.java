@@ -61,7 +61,7 @@ public final class TrackMove {
                         if (targetTrack.keyframesByTick.containsKey(to) && !moving.contains(key(target, to))) valid = false;
                     }
                 }
-            } else if (type == SkipKeyframeType.INSTANCE) {
+            } else if (type == SkipKeyframeType.INSTANCE || type == ml.mypals.vectorthree.flashback.loop.LoopKeyframeType.INSTANCE) {
                 valid = false;
             }
             raw.put(source, target);

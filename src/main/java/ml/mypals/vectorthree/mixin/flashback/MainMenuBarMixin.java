@@ -6,10 +6,13 @@ import com.moulberry.flashback.editor.ui.windows.MainMenuBar;
 import com.moulberry.flashback.editor.ui.windows.WindowType;
 import imgui.moulberry90.ImGui;
 import ml.mypals.vectorthree.flashback.PropertiesWindow;
+import ml.mypals.vectorthree.flashback.HelpWindow;
+import ml.mypals.vectorthree.camera.CameraPreview;
 import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
 import ml.mypals.vectorthree.prefab.PrefabBasketWindow;
 import net.minecraft.client.resources.language.I18n;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -23,6 +26,12 @@ import java.util.Locale;
 public class MainMenuBarMixin {
     @Inject(method = "renderInner", at = @At(value = "CONSTANT", args = "stringValue=flashback.player_list"))
     private static void vector3$windowMenu(CallbackInfo ci) {
+        vector3$window();
+        HelpWindow.renderMenu();
+    }
+
+    @Unique
+    private static void vector3$window() {
         if (!ImGui.beginMenu(I18n.get("vector3.menu.window"))) return;
         for (WindowType type : WindowType.values()) {
             String id = type.name().toLowerCase(Locale.ROOT);
@@ -34,6 +43,7 @@ public class MainMenuBarMixin {
         ShapeManagerWindow.renderMenuItem();
         PrefabBasketWindow.renderMenuItem();
         ClipsWindow.renderMenuItem();
+        CameraPreview.renderMenuItem();
         ImGui.endMenu();
     }
 

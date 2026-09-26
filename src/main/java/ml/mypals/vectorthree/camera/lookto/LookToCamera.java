@@ -2,6 +2,7 @@ package ml.mypals.vectorthree.camera.lookto;
 
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
+import ml.mypals.vectorthree.camera.CameraPreview;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
@@ -31,6 +32,7 @@ public final class LookToCamera {
     public static void finish(KeyframeHandler handler) {
         if (!(handler instanceof MinecraftKeyframeHandler) || !pending) return;
         pending = false;
+        if (CameraPreview.detachesMainView()) return;
         Minecraft minecraft = handler.getMinecraft();
         LocalPlayer player = minecraft.player;
         // While spectating an entity the camera isn't the player, same as Flashback's camera keyframes.

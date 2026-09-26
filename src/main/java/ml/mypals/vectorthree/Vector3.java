@@ -11,6 +11,9 @@ import ml.mypals.vectorthree.camera.lookto.LookToKeyframeType;
 import ml.mypals.vectorthree.camera.orbit.OrbitGizmoEditor;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframes;
 import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
+import ml.mypals.vectorthree.flashback.loop.LoopKeyframeType;
+import ml.mypals.vectorthree.flashback.fade.FadeKeyframeType;
+import ml.mypals.vectorthree.flashback.fade.FadeOverlay;
 import ml.mypals.vectorthree.prefab.PrefabPlacement;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
@@ -47,6 +50,8 @@ public class Vector3 implements ClientModInitializer {
 		ShapeKeyframeType.register();
 		CustomKeyframes.register(LookToKeyframeType.INSTANCE);
 		CustomKeyframes.register(SkipKeyframeType.INSTANCE);
+		CustomKeyframes.register(LoopKeyframeType.INSTANCE);
+		CustomKeyframes.register(FadeKeyframeType.INSTANCE);
 		CustomKeyframes.register(DollyZoomKeyframeType.INSTANCE);
 		CustomKeyframes.register(ClipKeyframeType.INSTANCE);
 		net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(ml.mypals.vectorthree.clips.EmptyProject::tick);
@@ -58,6 +63,7 @@ public class Vector3 implements ClientModInitializer {
 			PREFABS.clear();
 			EDITOR_CAMERA.reset();
 			ShapeTrackRegistry.clear();
+			FadeOverlay.clear();
 		});
 		LOGGER.info("Registered RyansRenderingKit shape tracks with Flashback");
 	}

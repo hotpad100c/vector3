@@ -3,6 +3,7 @@ package ml.mypals.vectorthree.mixin.flashback;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import imgui.moulberry90.flag.ImGuiFocusedFlags;
 import ml.mypals.vectorthree.flashback.TrackSelection;
+import ml.mypals.vectorthree.flashback.Ripple;
 import com.moulberry.flashback.keyframe.types.AudioKeyframeType;
 import ml.mypals.vectorthree.clips.Trimming;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -43,6 +44,8 @@ import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.KeyframeType;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
 import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
+import ml.mypals.vectorthree.flashback.loop.LoopKeyframeType;
+import ml.mypals.vectorthree.flashback.loop.TrackRepeat;
 import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
 import com.moulberry.flashback.playback.ReplayServer;
 import com.moulberry.flashback.state.EditorScene;
@@ -763,6 +766,7 @@ public abstract class TimelineWindowMixin {
         ImDrawList drawList = ImGui.getWindowDrawList();
         vector3$dragGroup(x, y, mouseX);
         vector3$clipEdges(x, y, lineHeight);
+        vector3$drawRepeats(drawList, x, y, lineHeight);
         vector3$drawTrackMoveTargets(drawList, x, y, lineHeight, vector3$trackMovePlan(y));
         vector3$drawTrackMoveTargets(drawList, x, y, lineHeight, vector3$groupMovePlan(y));
         for (PrefabGroups.Span span : PrefabGroups.spans(editorScene)) {
@@ -1187,6 +1191,8 @@ public abstract class TimelineWindowMixin {
         PrefabBasketWindow.render(!selectedKeyframesList.isEmpty());
         ClipsWindow.render(vector3$clipsDirty);
         ClipsWindow.renderProgress();
+        ml.mypals.vectorthree.camera.CameraPreview.render();
+        ml.mypals.vectorthree.flashback.HelpWindow.render();
         Vector3.PREFABS.renderPanel();
         if (ShapeTimelineSelection.consumeRefresh()) vector3$refreshKeyframes = true;
         if (editorState == null) return;
@@ -1243,6 +1249,55 @@ public abstract class TimelineWindowMixin {
             PrefabGroups.tagSelection(editorScene, targets, null);
             editorState.markDirty();
         }
+        vector3$repeatMenu(trackIndex);
+    }
+
+    @Unique
+    private static void vector3$repeatMenu(int trackIndex) {
+        if (trackIndex < 0 || trackIndex >= editorScene.keyframeTracks.size()) return;
+        KeyframeTrack track = editorScene.keyframeTracks.get(trackIndex);
+        if (vector3$trimmableTrack(track) || track.keyframeType == SkipKeyframeType.INSTANCE
+                || track.keyframeType == LoopKeyframeType.INSTANCE) return;
+        TrackRepeat current = TrackRepeat.of(track);
+        if (!ImGui.beginMenu(I18n.get("vector3.repeat") + "###vector3Repeat")) return;
+        for (TrackRepeat repeat : TrackRepeat.values()) {
+            if (!ImGui.menuItem(I18n.get(repeat.translationKey()), "", repeat == current) || repeat == current) continue;
+            upgradeToSceneWrite();
+            TrackRepeat.set(track, repeat);
+            vector3$keyframesChanged();
+        }
+        ImGui.separator();
+        ImGui.textDisabled(I18n.get("vector3.repeat.tooltip"));
+        ImGui.endMenu();
+    }
+
+    // Past a repeating track's last keyframe, faint copies show where its keyframes play again.
+    @Unique
+    private static void vector3$drawRepeats(ImDrawList drawList, float x, float y, float lineHeight) {
+        float right = x + width;
+        for (int row = 0; row < editorScene.keyframeTracks.size(); row++) {
+            KeyframeTrack track = editorScene.keyframeTracks.get(row);
+            TrackRepeat repeat = TrackRepeat.of(track);
+            if (repeat == TrackRepeat.NONE || track.keyframesByTick.size() < 2) continue;
+            int first = track.keyframesByTick.firstKey(), span = track.keyframesByTick.lastKey() - first;
+            if (span <= 0) continue;
+            float top = y + 2 + row * lineHeight, middle = top + lineHeight / 2, radius = keyframeSize * 0.45f;
+            int colour = track.enabled ? 0x55FFFFFF : 0x30FFFFFF;
+            for (int cycle = 1; cycle < 2000; cycle++) {
+                int base = first + cycle * span;
+                float baseX = x + replayTickToTimelineX(base);
+                if (baseX > right) break;
+                float endX = x + replayTickToTimelineX(base + span);
+                if (endX < x) continue;
+                drawList.addLine(baseX, top + 3, baseX, top + lineHeight - 3, colour, 1);
+                boolean reversed = repeat == TrackRepeat.PING_PONG && (cycle & 1) == 1;
+                for (int tick : track.keyframesByTick.keySet()) {
+                    int offset = tick - first;
+                    float keyX = x + replayTickToTimelineX(reversed ? base + span - offset : base + offset);
+                    drawList.addCircle(keyX, middle, radius, colour, 8, 1.5f);
+                }
+            }
+        }
     }
 
     @Unique
@@ -1261,13 +1316,32 @@ public abstract class TimelineWindowMixin {
         return shared;
     }
 
-    // The add-track menu's check (the first one is the per-track add button): one Skip track at most.
+    // Ctrl+Delete: delete the selection and pull everything after it back by the time it took up.
+    @WrapOperation(method = "handleKeyPresses", at = @At(value = "INVOKE",
+            target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;removeAllSelectedKeyframes()V"))
+    private static void vector3$rippleDelete(Operation<Void> original) {
+        if (!ImGui.getIO().getKeyCtrl() || editorScene == null) {
+            original.call();
+            return;
+        }
+        upgradeToSceneWrite();
+        Ripple.Result ripple = Ripple.delete(editorScene, selectedKeyframesList);
+        if (ripple.entry() == null) {
+            ReplayUI.setInfoOverlayShort(I18n.get(ripple.problem()));
+            return;
+        }
+        editorScene.push(ripple.entry());
+        vector3$clearKeyframeSelection();
+        vector3$keyframesChanged();
+    }
+
+    // The add-track menu's check (the first one is the per-track add button): one Skip and one Loop track at most.
     @WrapOperation(method = "renderKeyframeElements", at = @At(value = "INVOKE", ordinal = 1,
             target = "Lcom/moulberry/flashback/keyframe/KeyframeType;canBeCreatedNormally()Z"))
     private static boolean vector3$singleSkipTrack(KeyframeType<?> type, Operation<Boolean> original) {
-        if (type == SkipKeyframeType.INSTANCE && editorScene != null) {
+        if ((type == SkipKeyframeType.INSTANCE || type == LoopKeyframeType.INSTANCE) && editorScene != null) {
             for (KeyframeTrack track : editorScene.keyframeTracks) {
-                if (track.keyframeType == SkipKeyframeType.INSTANCE) return false;
+                if (track.keyframeType == type) return false;
             }
         }
         return original.call(type);
