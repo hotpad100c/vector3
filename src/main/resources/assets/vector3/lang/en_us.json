@@ -238,5 +238,9 @@
   "vector3.clips.composing": "Composing clips...",
   "vector3.clips.compose_failed": "Could not compose the clips",
   "vector3.clips.range": "In / out",
-  "vector3.clips.range_hint": "Source ticks, 0 to %s. Apply to take effect."
+  "vector3.clips.range_hint": "Source ticks, 0 to %s. Apply to take effect.",
+  "vector3.clips.empty_project": "Empty project",
+  "vector3.clips.empty_project_preparing": "Preparing the empty project template...",
+  "vector3.clips.incompatible": "Clip not added",
+  "vector3.clips.incompatible_detail": "It was recorded on %s, this project on %s."
 }

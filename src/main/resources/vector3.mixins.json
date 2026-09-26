@@ -59,6 +59,7 @@
 		"flashback.ReplayUIAccessor",
 		"flashback.ReplayServerSkipMixin",
 		"flashback.ReplayUIFontMixin",
+		"flashback.SelectReplayScreenMixin",
 		"flashback.ReplayVisualsShakeMixin",
 		"flashback.TimelineWindowMixin",
 		"flashback.TrackEntityPickerMixin",

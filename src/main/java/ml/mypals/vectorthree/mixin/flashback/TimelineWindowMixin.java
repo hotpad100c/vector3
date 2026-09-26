@@ -201,6 +201,12 @@ public abstract class TimelineWindowMixin {
             upgradeToSceneWrite();
             try {
                 ClipProject.addClip(editorScene, java.nio.file.Path.of(path), timelineXToReplayTick(mouseX - x));
+            } catch (ClipProject.IncompatibleClipException exception) {
+                net.minecraft.client.gui.components.toasts.SystemToast.add(Minecraft.getInstance().gui.toastManager(),
+                        net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                        net.minecraft.network.chat.Component.translatable("vector3.clips.incompatible"),
+                        net.minecraft.network.chat.Component.translatable("vector3.clips.incompatible_detail",
+                                exception.clipVersion, exception.projectVersion));
             } catch (java.io.IOException exception) {
                 Vector3.LOGGER.warn("Could not add clip {}", path, exception);
             }

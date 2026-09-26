@@ -114,6 +114,11 @@ public final class ClipProject {
         }
         ReplayArchive.Info info = ReplayArchive.read(replay);
         if (info == null) throw new IOException("Not a readable replay: " + replay);
+        // ReplayCombiner refuses to join recordings from different game versions, so refuse them up front.
+        ReplayArchive.Info open = openReplay == null ? null : ReplayArchive.read(openReplay);
+        if (open != null && open.meta().dataVersion != info.meta().dataVersion) {
+            throw new IncompatibleClipException(info.meta().versionString, open.meta().versionString);
+        }
         Path copy = keepSource(replay);
         int at = Math.max(0, tick);
         while (track.keyframesByTick.containsKey(at)) at++;
@@ -210,6 +215,16 @@ public final class ClipProject {
             result.put(Math.max(0, moved), entry.getValue());
         }
         return result;
+    }
+
+    public static final class IncompatibleClipException extends IOException {
+        public final String clipVersion, projectVersion;
+
+        IncompatibleClipException(String clipVersion, String projectVersion) {
+            super("Clip recorded on " + clipVersion + ", project on " + projectVersion);
+            this.clipVersion = clipVersion;
+            this.projectVersion = projectVersion;
+        }
     }
 
     /** Implemented on EditorScene by EditorSceneMixin: undo steps are meaningless once the timeline is rebuilt. */

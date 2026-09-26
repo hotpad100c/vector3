@@ -49,6 +49,7 @@ public class Vector3 implements ClientModInitializer {
 		CustomKeyframes.register(SkipKeyframeType.INSTANCE);
 		CustomKeyframes.register(DollyZoomKeyframeType.INSTANCE);
 		CustomKeyframes.register(ClipKeyframeType.INSTANCE);
+		net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(ml.mypals.vectorthree.clips.EmptyProject::tick);
 		ShapeKeyframe.setEditor(GIZMO_EDITOR);
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			GIZMO_EDITOR.clear();

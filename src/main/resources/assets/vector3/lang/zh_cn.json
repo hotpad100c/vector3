@@ -238,5 +238,9 @@
   "vector3.clips.composing": "正在合成片段……",
   "vector3.clips.compose_failed": "片段合成失败",
   "vector3.clips.range": "入点 / 出点",
-  "vector3.clips.range_hint": "源回放的 tick，范围 0 到 %s。应用后生效。"
+  "vector3.clips.range_hint": "源回放的 tick，范围 0 到 %s。应用后生效。",
+  "vector3.clips.empty_project": "空项目",
+  "vector3.clips.empty_project_preparing": "正在准备空项目模板……",
+  "vector3.clips.incompatible": "无法添加片段",
+  "vector3.clips.incompatible_detail": "该回放录制于 %s，当前项目为 %s。"
 }
