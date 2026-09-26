@@ -242,5 +242,13 @@
   "vector3.clips.empty_project": "空项目",
   "vector3.clips.empty_project_preparing": "正在准备空项目模板……",
   "vector3.clips.incompatible": "无法添加片段",
-  "vector3.clips.incompatible_detail": "该回放录制于 %s，当前项目为 %s。"
+  "vector3.clips.incompatible_detail": "该回放录制于 %s，当前项目为 %s。",
+  "vector3.clips.composing_hint": "可以继续编辑，合成完成后会自动重新打开回放。",
+  "vector3.clips.reopening": "正在重新打开回放……",
+  "vector3.history.trim_clip": "裁剪片段",
+  "vector3.history.split_clip": "切割片段",
+  "vector3.audio.file": "音频文件",
+  "vector3.audio.volume": "音量",
+  "vector3.audio.pitch": "音高",
+  "vector3.file.audio_filter": "音频文件"
 }

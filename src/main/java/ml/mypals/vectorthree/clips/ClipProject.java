@@ -31,6 +31,7 @@ import java.util.UUID;
 public final class ClipProject {
     private static @Nullable Path openReplay;
     private static volatile boolean composing;
+    private static volatile double progress;
 
     private ClipProject() {}
 
@@ -40,6 +41,19 @@ public final class ClipProject {
 
     public static @Nullable Path openReplay() {
         return openReplay;
+    }
+
+    /** Extra height the Clips track row gets above itself on the timeline; 0 when it isn't the top track. */
+    private static float band;
+
+    public static float band() {
+        return band;
+    }
+
+    public static float updateBand(EditorScene scene, float lineHeight) {
+        band = !scene.keyframeTracks.isEmpty() && scene.keyframeTracks.getFirst().keyframeType == ClipKeyframeType.INSTANCE
+                ? lineHeight * 2 : 0;
+        return band;
     }
 
     public static boolean isComposing() {
@@ -77,20 +91,59 @@ public final class ClipProject {
             if (!(entry.getValue() instanceof ClipKeyframeType.ClipKeyframe keyframe)) continue;
             ClipRef clip = keyframe.value;
             if (!clip.composed() || clip.placedAt() < lastPlaced || entry.getKey() != clip.visibleStart()) return true;
-            if (clip.in() < clip.spanStart() || clip.out() > clip.spanStart() + clip.spanLength()) return true;
+            // Trimmed clips leave a skipped gap until they are composed again, cut exactly to their range.
+            if (clip.in() != clip.spanStart() || clip.out() != clip.spanStart() + clip.spanLength()) return true;
             lastPlaced = clip.placedAt();
         }
         return false;
     }
 
-    /** The parts of each composed clip's chunk span it doesn't show; merged into the Skip scopes. */
+    /** Where the last clip ends, so the timeline can show clips placed past the end of the open replay. */
+    public static int end(EditorScene scene) {
+        KeyframeTrack track = clipTrack(scene);
+        int end = 0;
+        if (track != null) {
+            for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+                if (entry.getValue() instanceof ClipKeyframeType.ClipKeyframe clip) end = Math.max(end, entry.getKey() + clip.value.length());
+            }
+        }
+        return end;
+    }
+
+    /** The clip boundary (a start, an end, or 0) nearest {@code tick}, ignoring the clip at {@code ignore}. */
+    public static int snap(EditorScene scene, int tick, int ignore) {
+        KeyframeTrack track = clipTrack(scene);
+        int best = 0;
+        if (track == null) return best;
+        for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+            if (entry.getKey() == ignore || !(entry.getValue() instanceof ClipKeyframeType.ClipKeyframe clip)) continue;
+            for (int boundary : new int[]{entry.getKey(), entry.getKey() + clip.value.length()}) {
+                if (Math.abs(boundary - tick) < Math.abs(best - tick)) best = boundary;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The parts of each composed chunk span no clip shows; merged into the Skip scopes. A split clip leaves two
+     * clips on one span, so the span is cut against all of them together.
+     */
     public static NavigableMap<Integer, Integer> hiddenRanges(EditorScene scene) {
-        NavigableMap<Integer, Integer> hidden = new TreeMap<>();
+        Map<Integer, List<ClipRef>> bySpan = new TreeMap<>();
         for (ClipRef clip : clips(scene)) {
-            if (!clip.composed()) continue;
-            int spanEnd = clip.placedAt() + clip.spanLength();
-            if (clip.visibleStart() > clip.placedAt()) hidden.put(clip.placedAt(), clip.visibleStart());
-            if (clip.visibleEnd() < spanEnd) hidden.put(clip.visibleEnd(), spanEnd);
+            if (clip.composed()) bySpan.computeIfAbsent(clip.placedAt(), start -> new ArrayList<>()).add(clip);
+        }
+        NavigableMap<Integer, Integer> hidden = new TreeMap<>();
+        for (Map.Entry<Integer, List<ClipRef>> span : bySpan.entrySet()) {
+            List<ClipRef> clips = span.getValue();
+            clips.sort(java.util.Comparator.comparingInt(ClipRef::visibleStart));
+            int cursor = span.getKey(), end = cursor + clips.getFirst().spanLength();
+            for (ClipRef clip : clips) {
+                int from = Math.clamp(clip.visibleStart(), span.getKey(), end), to = Math.clamp(clip.visibleEnd(), from, end);
+                if (from > cursor) hidden.put(cursor, from);
+                cursor = Math.max(cursor, to);
+            }
+            if (cursor < end) hidden.put(cursor, end);
         }
         return hidden;
     }
@@ -120,7 +173,7 @@ public final class ClipProject {
             throw new IncompatibleClipException(info.meta().versionString, open.meta().versionString);
         }
         Path copy = keepSource(replay);
-        int at = Math.max(0, tick);
+        int at = snap(scene, Math.max(0, tick), -1);
         while (track.keyframesByTick.containsKey(at)) at++;
         track.keyframesByTick.put(at, new ClipKeyframeType.ClipKeyframe(
                 new ClipRef(copy.toString(), label(info, replay), 0, info.totalTicks(), -1, 0, info.totalTicks()),
@@ -138,83 +191,98 @@ public final class ClipProject {
         return copy;
     }
 
+    public static double progress() {
+        return progress;
+    }
+
     /**
-     * Lays the clips out in timeline order, carries every other keyframe along with the clip it sat in, then
-     * leaves the replay, rebuilds the working replay and opens it again.
+     * Composes the clips in timeline order into a pending archive in the background, while the replay stays open.
+     * Once that is written the replay is left, swapped for the new archive and opened again. Other keyframes keep
+     * their ticks, so reordering clips never reshuffles them.
      */
     public static void apply(EditorState editorState, EditorScene scene) throws IOException {
         Path working = openReplay;
-        KeyframeTrack track = clipTrack(scene);
-        if (working == null || track == null || composing) return;
+        if (working == null || clipTrack(scene) == null || composing) return;
         List<ClipRef> before = clips(scene);
         if (before.isEmpty()) return;
         List<ClipRef> after = ClipComposer.layout(before);
-        for (KeyframeTrack other : scene.keyframeTracks) {
-            if (other != track) other.keyframesByTick = shifted(other.keyframesByTick, before, after);
-        }
-        TreeMap<Integer, Keyframe> placed = new TreeMap<>();
-        for (ClipRef clip : after) {
-            placed.put(clip.visibleStart(), new ClipKeyframeType.ClipKeyframe(clip,
-                    com.moulberry.flashback.keyframe.interpolation.InterpolationType.LINEAR));
-        }
-        track.keyframesByTick = placed;
-        ((ClearableHistory) scene).vector3$clearHistory();
-        editorState.markDirty();
-
         ReplayArchive.Info info = ReplayArchive.read(working);
         if (info == null) throw new IOException("Cannot read the open replay");
         UUID id = info.meta().replayIdentifier;
         String name = info.meta().name;
-        Minecraft minecraft = Minecraft.getInstance();
-        RegistryAccess registries = minecraft.level.registryAccess();
+        RegistryAccess registries = Minecraft.getInstance().level.registryAccess();
+        Path pending = sourcesFolder().resolve("pending-" + id + ".zip");
         composing = true;
-        minecraft.execute(() -> {
-            if (minecraft.level != null) minecraft.level.disconnect(Component.empty());
-            minecraft.disconnect(new GenericMessageScreen(Component.translatable("vector3.clips.composing")), false);
-            Thread worker = new Thread(() -> rebuild(after, id, name, working, registries), "vector3-clip-compose");
-            worker.setDaemon(true);
-            worker.start();
-        });
+        progress = 0;
+        Thread worker = new Thread(() -> {
+            Exception failure = null;
+            try {
+                ClipComposer.compose(after, id, name, pending, registries, value -> progress = value);
+            } catch (Exception exception) {
+                failure = exception;
+                Vector3.LOGGER.error("Could not compose the clips into {}", working, exception);
+            }
+            Exception error = failure;
+            Minecraft.getInstance().execute(() -> {
+                if (error == null) swapIn(editorState, after, pending, working);
+                else failed(error, pending);
+            });
+        }, "vector3-clip-compose");
+        worker.setDaemon(true);
+        worker.start();
     }
 
-    private static void rebuild(List<ClipRef> clips, UUID id, String name, Path working, RegistryAccess registries) {
-        Minecraft minecraft = Minecraft.getInstance();
-        Exception failure = null;
+    private static void failed(Exception error, Path pending) {
+        composing = false;
         try {
-            // The replay server still holds the working archive open until it has fully stopped.
-            while (minecraft.getSingleplayerServer() != null) Thread.sleep(50);
-            ClipComposer.compose(clips, id, name, working, registries);
-        } catch (Exception exception) {
-            failure = exception;
-            Vector3.LOGGER.error("Could not compose the clips into {}", working, exception);
+            Files.deleteIfExists(pending);
+        } catch (IOException ignored) {
+            // Left for the next compose to overwrite.
         }
-        Exception error = failure;
-        minecraft.execute(() -> {
-            composing = false;
-            if (error != null) {
-                SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                        Component.translatable("vector3.clips.compose_failed"), Component.literal(String.valueOf(error.getMessage())));
-            }
-            Flashback.openReplayWorld(working);
-        });
+        Minecraft minecraft = Minecraft.getInstance();
+        SystemToast.add(minecraft.gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                Component.translatable("vector3.clips.compose_failed"), Component.literal(String.valueOf(error.getMessage())));
     }
 
-    // Keyframes follow the clip whose composed span held them; ones outside every span stay put.
-    private static TreeMap<Integer, Keyframe> shifted(TreeMap<Integer, Keyframe> keyframes, List<ClipRef> before,
-            List<ClipRef> after) {
-        TreeMap<Integer, Keyframe> result = new TreeMap<>();
-        for (Map.Entry<Integer, Keyframe> entry : keyframes.entrySet()) {
-            int tick = entry.getKey(), moved = tick;
-            for (int i = 0; i < before.size(); i++) {
-                ClipRef old = before.get(i);
-                if (old.composed() && tick >= old.placedAt() && tick < old.placedAt() + old.spanLength()) {
-                    moved = tick - old.placedAt() + old.spanStart() - after.get(i).spanStart() + after.get(i).placedAt();
-                    break;
+    private static void swapIn(EditorState editorState, List<ClipRef> after, Path pending, Path working) {
+        long stamp = editorState.acquireWrite();
+        try {
+            EditorScene scene = editorState.getCurrentScene(stamp);
+            KeyframeTrack track = clipTrack(scene);
+            if (track != null) {
+                TreeMap<Integer, Keyframe> placed = new TreeMap<>();
+                for (ClipRef clip : after) {
+                    placed.put(clip.visibleStart(), new ClipKeyframeType.ClipKeyframe(clip,
+                            com.moulberry.flashback.keyframe.interpolation.InterpolationType.LINEAR));
                 }
+                track.keyframesByTick = placed;
             }
-            result.put(Math.max(0, moved), entry.getValue());
+            ((ClearableHistory) scene).vector3$clearHistory();
+        } finally {
+            editorState.release(stamp);
         }
-        return result;
+        editorState.markDirty();
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.disconnect(new GenericMessageScreen(Component.translatable("vector3.clips.reopening")), false);
+        Thread mover = new Thread(() -> {
+            Exception failure = null;
+            try {
+                // The replay server holds the working archive open until it has fully stopped.
+                while (minecraft.getSingleplayerServer() != null) Thread.sleep(50);
+                Files.move(pending, working, StandardCopyOption.REPLACE_EXISTING);
+            } catch (Exception exception) {
+                failure = exception;
+                Vector3.LOGGER.error("Could not replace {} with the composed clips", working, exception);
+            }
+            Exception error = failure;
+            minecraft.execute(() -> {
+                composing = false;
+                if (error != null) failed(error, pending);
+                Flashback.openReplayWorld(working);
+            });
+        }, "vector3-clip-swap");
+        mover.setDaemon(true);
+        mover.start();
     }
 
     public static final class IncompatibleClipException extends IOException {

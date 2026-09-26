@@ -80,7 +80,6 @@ public final class EmptyProject {
                 if (++ticks < RECORD_TICKS) return;
                 saveTemplate();
                 stage = Stage.LEAVING;
-                if (minecraft.level != null) minecraft.level.disconnect(Component.empty());
                 minecraft.disconnect(new GenericMessageScreen(Component.translatable("vector3.clips.empty_project_preparing")), false);
             }
             case LEAVING -> {

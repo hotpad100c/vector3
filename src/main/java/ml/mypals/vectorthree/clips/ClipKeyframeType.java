@@ -12,12 +12,11 @@ import net.minecraft.client.resources.language.I18n;
 import java.nio.file.Path;
 import java.util.TreeMap;
 
-/** The Clips track: each keyframe is a clip, drawn as a bar across the part of the timeline it shows. */
 public final class ClipKeyframeType extends CustomKeyframeType<ClipRef> {
     public static final ClipKeyframeType INSTANCE = new ClipKeyframeType();
 
     public static final class ClipKeyframe extends CustomKeyframe<ClipRef> {
-        ClipKeyframe(ClipRef value, InterpolationType interpolation) {
+        public ClipKeyframe(ClipRef value, InterpolationType interpolation) {
             super(INSTANCE, value, interpolation);
         }
 
@@ -64,15 +63,26 @@ public final class ClipKeyframeType extends CustomKeyframeType<ClipRef> {
     protected boolean drawOnTimeline(CustomKeyframe<ClipRef> keyframe, ImDrawList drawList, int size, float x, float y,
             int colour, float ticksPerPixel, float minX, float maxX, int tick, TreeMap<Integer, Keyframe> keyframes) {
         ClipRef clip = keyframe.value;
+        float top = y - size - ClipProject.band(), bottom = y + size;
         float right = Math.min(maxX, x + clip.length() / Math.max(ticksPerPixel, 1.0e-6f));
         float left = Math.max(minX, x);
         if (right <= left) return true;
         int hue = java.awt.Color.HSBtoRGB((clip.source().hashCode() & 0xFFFF) / 65535f, 0.45f, 0.75f);
         int fill = 0xC0000000 | (hue & 0xFF) << 16 | (hue & 0xFF00) | (hue >> 16 & 0xFF);
-        drawList.addRectFilled(left, y - size, right, y + size, fill, 3);
-        drawList.addRect(left, y - size, right, y + size, clip.composed() ? colour : 0xFF40A0FF, 3, 0, 1.5f);
-        drawList.pushClipRect(left + 3, y - size, right - 3, y + size, true);
-        drawList.addText(left + 4, y - ImGui.getTextLineHeight() / 2, 0xFFFFFFFF, clip.label());
+        drawList.addRectFilled(left, top, right, bottom, fill, 3);
+        ClipCovers.Cover cover = ClipCovers.of(clip.source());
+        if (cover != null) {
+            float height = bottom - top, width = height * cover.aspect();
+            drawList.pushClipRect(left, top, right, bottom, true);
+            for (float tileX = x; tileX < right; tileX += width) {
+                if (tileX + width > left) drawList.addImage(cover.textureId(), tileX, top, tileX + width, bottom);
+            }
+            drawList.popClipRect();
+            drawList.addRectFilled(left, bottom - ImGui.getTextLineHeight() - 4, right, bottom, 0x90000000, 3);
+        }
+        drawList.addRect(left, top, right, bottom, clip.composed() ? colour : 0xFF40A0FF, 3, 0, 1.5f);
+        drawList.pushClipRect(left + 3, top, right - 3, bottom, true);
+        drawList.addText(left + 4, bottom - ImGui.getTextLineHeight() - 2, 0xFFFFFFFF, clip.label());
         drawList.popClipRect();
         return true;
     }

@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.flashback;
 
+import ml.mypals.vectorthree.clips.ClipKeyframeType;
 import ml.mypals.vectorthree.prefab.PrefabGroups;
 import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.keyframe.Keyframe;
@@ -47,7 +48,8 @@ public final class TrackMove {
             int source = selected.trackIndex(), target = source + rowDelta;
             if (source < 0 || source >= count) return null;
             KeyframeType<?> type = scene.keyframeTracks.get(source).keyframeType;
-            if (target < 0) {
+            // There is one Clips track, and a clip only means something on it.
+            if (target < 0 || type == ClipKeyframeType.INSTANCE) {
                 valid = false;
             } else if (target < count) {
                 KeyframeTrack targetTrack = scene.keyframeTracks.get(target);

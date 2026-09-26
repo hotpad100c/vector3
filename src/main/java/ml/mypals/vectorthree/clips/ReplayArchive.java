@@ -86,6 +86,28 @@ public final class ReplayArchive {
      * Writes a copy of {@code source} holding only {@code keep}'s chunks. Everything else in the archive (level
      * chunk caches, icon) is copied as is, which ReplayCombiner then remaps when it joins archives.
      */
+    /** Like {@link #writeSubset(Path, List, Path)}, but the first and last chunks are cut to exactly in..out. */
+    static void writeRange(Path source, List<Chunk> keep, int in, int out, Path target) throws IOException {
+        writeSubset(source, keep, target);
+        try (FileSystem zip = FileSystems.newFileSystem(target)) {
+            FlashbackMeta meta = readMeta(zip);
+            int total = 0;
+            for (Chunk chunk : keep) {
+                int drop = Math.max(0, in - chunk.start());
+                int end = Math.min(chunk.end(), out);
+                int length = Math.max(1, end - chunk.start() - drop);
+                if (drop > 0 || end < chunk.end()) {
+                    Path file = zip.getPath("/" + chunk.name());
+                    Files.write(file, ChunkCutter.cut(Files.readAllBytes(file), drop, length));
+                    meta.chunks.get(chunk.name()).duration = length;
+                }
+                total += meta.chunks.get(chunk.name()).duration;
+            }
+            meta.totalTicks = total;
+            Files.writeString(zip.getPath("/metadata.json"), GSON.toJson(meta.toJson()), StandardCharsets.UTF_8);
+        }
+    }
+
     static void writeSubset(Path source, List<Chunk> keep, Path target) throws IOException {
         Files.deleteIfExists(target);
         try (FileSystem in = FileSystems.newFileSystem(source);

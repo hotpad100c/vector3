@@ -10,6 +10,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.DoubleConsumer;
 
 /**
  * Builds a project's working replay from its clips: each clip is cut down to the Flashback chunks it touches, and
@@ -26,18 +27,19 @@ public final class ClipComposer {
             ReplayArchive.Info info = ReplayArchive.read(Path.of(clip.source()));
             if (info == null) throw new IOException("Cannot read clip source " + clip.source());
             int in = Math.clamp(clip.in(), 0, info.totalTicks()), out = Math.clamp(clip.out(), in, info.totalTicks());
-            List<ReplayArchive.Chunk> span = ReplayArchive.span(info, in, out);
-            int start = span.getFirst().start(), length = span.getLast().end() - start;
-            placed.add(clip.withRange(in, out).placed(position, start, length));
+            // Composing cuts the chunks to exactly in..out, so nothing of the clip is left to skip.
+            int length = Math.max(1, out - in);
+            placed.add(clip.withRange(in, in + length).placed(position, in, length));
             position += length;
         }
         return placed;
     }
 
     /** Writes the working replay for {@code clips} (already laid out) to {@code output}, keeping {@code id}. */
-    public static void compose(List<ClipRef> clips, UUID id, String name, Path output, RegistryAccess registries)
-            throws Exception {
+    public static void compose(List<ClipRef> clips, UUID id, String name, Path output, RegistryAccess registries,
+            DoubleConsumer progress) throws Exception {
         Path work = Files.createTempDirectory(output.getParent(), ".vector3_compose");
+        int steps = clips.size() * 2 - 1, done = 0;
         try {
             Path joined = null;
             for (int i = 0; i < clips.size(); i++) {
@@ -46,13 +48,15 @@ public final class ClipComposer {
                 ReplayArchive.Info info = ReplayArchive.read(source);
                 if (info == null) throw new IOException("Cannot read clip source " + clip.source());
                 Path cut = work.resolve("clip" + i + ".zip");
-                ReplayArchive.writeSubset(source, ReplayArchive.span(info, clip.in(), clip.out()), cut);
+                ReplayArchive.writeRange(source, ReplayArchive.span(info, clip.in(), clip.out()), clip.in(), clip.out(), cut);
+                progress.accept(++done / (double) steps);
                 if (joined == null) {
                     joined = cut;
                 } else {
                     Path next = work.resolve("joined" + i + ".zip");
                     ReplayCombiner.combine(registries, name, joined, cut, next);
                     joined = next;
+                    progress.accept(++done / (double) steps);
                 }
             }
             if (joined == null) throw new IOException("A project needs at least one clip");

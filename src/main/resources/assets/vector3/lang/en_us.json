@@ -242,5 +242,13 @@
   "vector3.clips.empty_project": "Empty project",
   "vector3.clips.empty_project_preparing": "Preparing the empty project template...",
   "vector3.clips.incompatible": "Clip not added",
-  "vector3.clips.incompatible_detail": "It was recorded on %s, this project on %s."
+  "vector3.clips.incompatible_detail": "It was recorded on %s, this project on %s.",
+  "vector3.clips.composing_hint": "You can keep editing; the replay reopens once the clips are composed.",
+  "vector3.clips.reopening": "Reopening the replay...",
+  "vector3.history.trim_clip": "Trim clip",
+  "vector3.history.split_clip": "Split clip",
+  "vector3.audio.file": "Audio file",
+  "vector3.audio.volume": "Volume",
+  "vector3.audio.pitch": "Pitch",
+  "vector3.file.audio_filter": "Audio files"
 }
