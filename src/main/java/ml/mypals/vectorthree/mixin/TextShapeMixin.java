@@ -1,6 +1,11 @@
 package ml.mypals.vectorthree.mixin;
 
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import ml.mypals.vectorthree.text.VanillaText;
+import net.minecraft.client.renderer.SubmitNodeStorage;
+import net.minecraft.network.chat.TextColor;
 import org.joml.Vector3f;
 import org.joml.Matrix4f;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -43,6 +48,21 @@ public class TextShapeMixin {
         TextShape shape = (TextShape) (Object) this;
         return font.width(TextFormatting.formatLine(text,
                 shape instanceof FontTextShape fontShape ? fontShape.font : "minecraft:default"));
+    }
+
+    // The glow pass: fill in its glow colour, or black to cut it out of the outline's glow; strength rides in the light.
+    @WrapOperation(method = "drawInternal", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/renderer/SubmitNodeStorage;submitText(Lcom/mojang/blaze3d/vertex/PoseStack;FFLnet/minecraft/util/FormattedCharSequence;ZLnet/minecraft/client/gui/Font$DisplayMode;IIII)V"))
+    private void vector3$glowText(SubmitNodeStorage submits, PoseStack pose, float x, float y, FormattedCharSequence text,
+            boolean dropShadow, Font.DisplayMode mode, int light, int color, int background, int outline, Operation<Void> original) {
+        VanillaText.Glow glow = VanillaText.glow;
+        if (glow == null) {
+            original.call(submits, pose, x, y, text, dropShadow, mode, light, color, background, outline);
+            return;
+        }
+        FormattedCharSequence recolored = glow.fill() && glow.fillColor() == null ? text
+                : sink -> text.accept((index, style, codepoint) -> sink.accept(index, style.withColor((TextColor) null), codepoint));
+        original.call(submits, pose, x, y, recolored, false, mode, glow.strength(), VanillaText.glowFill(glow, color), 0, outline);
     }
 
     @Inject(method = "beforeDraw(Lcom/mojang/blaze3d/vertex/PoseStack;FZ)V", at = @At(value = "INVOKE", ordinal = 0,

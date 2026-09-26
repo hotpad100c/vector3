@@ -39,6 +39,7 @@ public final class EmptyProject {
     private static final int SETTLE_TICKS = 40;
     private static final int RECORD_TICKS = 40;
 
+    public static boolean hoveredInList;
     private static Stage stage = Stage.IDLE;
     private static int ticks;
 

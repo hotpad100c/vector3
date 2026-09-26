@@ -53,6 +53,7 @@ public final class SdfTextRenderer {
         float top = -lines.length * LINE_ADVANCE / 2f;
         boolean shadow = shape.shadow && !shape.outline;
         Integer outlineRgb = shape instanceof FontTextShape fontShape ? fontShape.outlineColor : null;
+        int outlineWidth = Math.clamp(Math.round((shape instanceof FontTextShape fontShape ? fontShape.outlineWidth : 1) * 32), 0, 255);
         List<Quad> quads = new ArrayList<>();
         List<Quad> glowQuads = new ArrayList<>();
         Glow glow = glowOf(shape);
@@ -69,11 +70,11 @@ public final class SdfTextRenderer {
             float startX = -lineWidth(font, chars) * unit / 2f;
             halfWidth = Math.max(halfWidth, -startX);
             if (shadow) layoutLine(font, chars, unit, startX + SHADOW_OFFSET, baseline + SHADOW_OFFSET, 0,
-                    lineColor, true, false, null, null, quads);
+                    lineColor, true, false, null, outlineWidth, null, quads);
             layoutLine(font, chars, unit, startX, baseline, shadow ? MAIN_Z : 0, lineColor, false, shape.outline,
-                    outlineRgb, null, quads);
+                    outlineRgb, outlineWidth, null, quads);
             if (glow != null) layoutLine(font, chars, unit, startX, baseline, shadow ? MAIN_Z : 0, lineColor, false,
-                    glow.outline(), outlineRgb, glow, glowQuads);
+                    glow.outline(), outlineRgb, outlineWidth, glow, glowQuads);
         }
         float[] bounds = {-halfWidth, top, halfWidth, -top};
         if (quads.isEmpty()) return bounds;
@@ -122,7 +123,8 @@ public final class SdfTextRenderer {
     }
 
     private static void layoutLine(SdfFont font, List<Char> chars, float unit, float x, float baseline, float z,
-            Color lineColor, boolean isShadow, boolean outline, Integer outlineOverride, Glow glow, List<Quad> out) {
+            Color lineColor, boolean isShadow, boolean outline, Integer outlineOverride, int outlineWidth, Glow glow,
+            List<Quad> out) {
         float pen = 0;
         int previous = -1;
         for (Char c : chars) {
@@ -145,8 +147,9 @@ public final class SdfTextRenderer {
                 }
                 flags |= glow.strength() << 2;
             }
-            int style0 = ((outlineRgb >> 16) & 0xFF) | (((outlineRgb >> 8) & 0xFF) << 8);
-            int style1 = (outlineRgb & 0xFF) | (flags << 8);
+            // Outline colour as RGB565, leaving a byte for the outline width in 1/32 steps.
+            int style0 = ((outlineRgb >> 8) & 0xF800) | ((outlineRgb >> 5) & 0x07E0) | ((outlineRgb >> 3) & 0x001F);
+            int style1 = outlineWidth | (flags << 8);
             float shear = style.isItalic() ? ITALIC_SHEAR : 0;
 
             if (glyph.visible()) {

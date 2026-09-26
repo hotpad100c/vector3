@@ -9,6 +9,7 @@ layout(location = 0) in vec2 texCoord0;
 layout(location = 1) in vec4 vertexColor;
 layout(location = 2) flat in vec3 outlineColor;
 layout(location = 3) flat in int styleFlags;
+layout(location = 4) flat in float outlineWidth;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -26,7 +27,8 @@ void main() {
 
     vec4 color;
     if ((styleFlags & 2) != 0) {
-        float outlineEdge = fillEdge - OUTLINE;
+        // The field runs out a little before 0, which caps how wide an outline can get.
+        float outlineEdge = fillEdge - min(OUTLINE * outlineWidth, fillEdge - 0.03);
         float outer = smoothstep(outlineEdge - smoothing, outlineEdge + smoothing, dist);
         color = vec4(mix(outlineColor, vertexColor.rgb, fill), vertexColor.a * outer);
     } else {

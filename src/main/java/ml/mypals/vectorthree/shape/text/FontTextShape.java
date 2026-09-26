@@ -6,6 +6,8 @@ import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
 import ml.mypals.vectorthree.text.SdfFont;
 import ml.mypals.vectorthree.text.SdfTextRenderer;
+import ml.mypals.vectorthree.text.VanillaText;
+import ml.mypals.vectorthree.render.TextGlow;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
@@ -28,6 +30,7 @@ public final class FontTextShape extends TextShape {
     public float glowStrength = TextSettings.DEFAULT_GLOW_STRENGTH;
     public Integer glowColor;
     public float glowSpread = TextSettings.DEFAULT_GLOW_SPREAD;
+    public float outlineWidth = 1;
 
     private Matrix4f lastPose;
     private Vec3 lastCamera;
@@ -47,7 +50,13 @@ public final class FontTextShape extends TextShape {
         SdfFont sdf = SdfFont.get(font);
         float[] bounds;
         if (sdf == null) {
-            super.drawInternal(builder);
+            VanillaText.outlineWidth = outline ? outlineWidth : 1;
+            try {
+                super.drawInternal(builder);
+                drawVanillaGlow(builder);
+            } finally {
+                VanillaText.outlineWidth = 1;
+            }
             bounds = vanillaBounds();
         } else {
             bounds = SdfTextRenderer.draw(this, builder, sdf);
@@ -58,6 +67,24 @@ public final class FontTextShape extends TextShape {
         maxY = bounds[3];
         lastPose = new Matrix4f(builder.getPositionMatrix());
         lastCamera = Minecraft.getInstance().gameRenderer.mainCamera().position();
+    }
+
+    // The same text again into TextGlow's buffer, outlined only when the outline glows and without its shadow.
+    private void drawVanillaGlow(VertexBuilder builder) {
+        boolean outlineGlows = outline && outlineGlow;
+        int strength = Math.min(Math.round(glowStrength * 8), 63);
+        if (!glow && !outlineGlows || strength <= 0) return;
+        boolean wasOutline = outline, wasShadow = shadow;
+        outline = outlineGlows;
+        shadow = false;
+        VanillaText.glow = new VanillaText.Glow(glow, glowColor, strength);
+        try {
+            TextGlow.render(glowSpread, () -> super.drawInternal(builder));
+        } finally {
+            VanillaText.glow = null;
+            outline = wasOutline;
+            shadow = wasShadow;
+        }
     }
 
     /** Same centered layout TextShape uses: 9-unit lines at 1.25× spacing. */
