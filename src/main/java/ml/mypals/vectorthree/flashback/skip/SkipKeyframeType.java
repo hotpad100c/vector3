@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.flashback.skip;
 
+import ml.mypals.vectorthree.clips.ClipProject;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.state.EditorScene;
@@ -42,10 +43,15 @@ public final class SkipKeyframeType extends CustomKeyframeType<Skip> {
         long stamp = editorState.acquireRead();
         try {
             EditorScene scene = editorState.getCurrentScene(stamp);
+            // Trimmed clips hide the ends of their chunk spans the same way.
+            NavigableMap<Integer, Integer> scopes = ClipProject.hiddenRanges(scene);
             for (KeyframeTrack track : scene.keyframeTracks) {
-                if (track.enabled && track.keyframeType == INSTANCE) return scopes(track.keyframesByTick);
+                if (track.enabled && track.keyframeType == INSTANCE) {
+                    scopes.putAll(scopes(track.keyframesByTick));
+                    break;
+                }
             }
-            return new TreeMap<>();
+            return scopes;
         } finally {
             editorState.release(stamp);
         }

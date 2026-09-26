@@ -203,6 +203,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         ImBoolean textOutlineGlow = new ImBoolean(currentText.outlineGlow());
         float[] glowStrength = {currentText.glowStrengthOrDefault()};
         float[] glowSpread = {currentText.glowSpreadOrDefault()};
+        float[] outlineWidth = {currentText.outlineWidthOrDefault()};
         ImBoolean glowFollowsText = new ImBoolean(currentText.glowColor() == null);
         int glowArgb = currentText.glowColor() == null ? state.color() : currentText.glowColor();
         float[] glowColor = {((glowArgb >>> 16) & 255) / 255.0f, ((glowArgb >>> 8) & 255) / 255.0f,
@@ -300,6 +301,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), textOutline);
                 if (textOutline.get()) {
                     changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.outline_color") + "##text", outlineColor);
+                    changed |= ImGui.sliderFloat(I18n.get("vector3.keyframe.outline_width"), outlineWidth,
+                            TextSettings.MIN_OUTLINE_WIDTH, TextSettings.MAX_OUTLINE_WIDTH, "%.2f");
                     changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline_glow"), textOutlineGlow);
                 }
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.glow"), textGlow);
@@ -467,7 +470,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                                     glowStrength[0], glowFollowsText.get() ? null
                                             : (Math.round(glowColor[3] * 255) << 24) | (Math.round(glowColor[0] * 255) << 16)
                                             | (Math.round(glowColor[1] * 255) << 8) | Math.round(glowColor[2] * 255),
-                                    glowSpread[0])
+                                    glowSpread[0], outlineWidth[0])
                             : state.text(),
                     parentId[0],
                     seeThrough.get(), visible.get(), outline.get(), outlineArgb, playAudio.get(),

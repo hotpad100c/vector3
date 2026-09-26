@@ -1,5 +1,17 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
+import imgui.moulberry90.flag.ImGuiFocusedFlags;
+import ml.mypals.vectorthree.flashback.TrackSelection;
+import com.moulberry.flashback.keyframe.types.AudioKeyframeType;
+import ml.mypals.vectorthree.clips.Trimming;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import imgui.moulberry90.flag.ImGuiMouseCursor;
+import ml.mypals.vectorthree.clips.ReplayArchive;
+import ml.mypals.vectorthree.clips.ClipRef;
+import ml.mypals.vectorthree.clips.ClipKeyframeType;
+import ml.mypals.vectorthree.clips.ClipsWindow;
+import ml.mypals.vectorthree.clips.ClipProject;
 import com.moulberry.flashback.utils.InputHelper;
 import ml.mypals.vectorthree.prefab.PrefabGroup;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
@@ -71,6 +83,7 @@ import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -96,6 +109,7 @@ public abstract class TimelineWindowMixin {
     @Shadow private static int keyframeSize;
     @Shadow private static int openCreateKeyframeAtTickTrack;
     @Shadow private static int repositioningKeyframeTrack;
+    @Shadow private static float dragStartMouseY;
     @Shadow private static boolean grabbedKeyframe;
     @Shadow private static int grabbedKeyframeTrack;
     @Unique
@@ -189,6 +203,257 @@ public abstract class TimelineWindowMixin {
         vector3$syncGizmoSelection();
     }
 
+    // Every track row is laid out from contentY, so moving it down frees a band above the top track for the Clips track.
+    @ModifyVariable(method = "renderInner", at = @At("STORE"), name = "contentY")
+    private static float vector3$clipBand(float contentY) {
+        if (editorScene == null) return contentY;
+        return contentY + ClipProject.updateBand(editorScene, ImGui.getTextLineHeightWithSpacing() + ImGui.getStyle().getItemSpacingY());
+    }
+
+    @ModifyVariable(method = "renderInner", at = @At("STORE"), name = "totalTrackHeight")
+    private static float vector3$clipBandHeight(float totalTrackHeight) {
+        return totalTrackHeight + ClipProject.band();
+    }
+
+    @Unique
+    private static boolean vector3$clipsDirty;
+    @Unique
+    private static int vector3$clipsEnd;
+
+    // Until they are composed, clips can reach past the end of the open replay; the timeline stretches to show them.
+    @WrapOperation(method = {"renderInner", "handleClick"}, at = @At(value = "INVOKE",
+            target = "Lcom/moulberry/flashback/playback/ReplayServer;getTotalReplayTicks()I"))
+    private static int vector3$timelineCoversClips(ReplayServer server, Operation<Integer> original) {
+        return Math.max(original.call(server), vector3$clipsEnd);
+    }
+
+    // Both the drag preview and the drop read this, so a single dragged clip visibly snaps while it moves.
+    @Inject(method = "calculateGrabMovementInfo", at = @At("RETURN"))
+    private static void vector3$snapGrabbedClip(int totalTicks, CallbackInfoReturnable<Object> cir) {
+        if (editorScene == null || !(cir.getReturnValue() instanceof GrabMovementInfoAccessor movement)) return;
+        int delta = movement.vector3$delta(), snapped = vector3$snappedClipDelta(delta, movement.vector3$scalePivot());
+        if (snapped != delta) movement.vector3$setDelta(snapped);
+    }
+
+    // Its start or end snaps onto the nearest other clip's boundary or the playhead.
+    @Unique
+    private static int vector3$snappedClipDelta(int delta, int pivot) {
+        if (pivot >= 0 || selectedKeyframesList.size() != 1) return delta;
+        SelectedKeyframes selected = selectedKeyframesList.getFirst();
+        if (selected.type() != ClipKeyframeType.INSTANCE || selected.keyframeTicks().size() != 1) return delta;
+        int from = selected.keyframeTicks().iterator().nextInt();
+        if (!(editorScene.keyframeTracks.get(selected.trackIndex()).keyframesByTick.get(from)
+                instanceof ClipKeyframeType.ClipKeyframe clip)) return delta;
+        int threshold = Math.max(1, timelineXToReplayTick(12) - timelineXToReplayTick(0));
+        int start = from + delta, length = clip.value.length();
+        int toStart = vector3$nearer(ClipProject.snap(editorScene, start, from), TimelineWindow.getCursorTick(), start) - start;
+        int toEnd = vector3$nearer(ClipProject.snap(editorScene, start + length, from), TimelineWindow.getCursorTick(), start + length) - (start + length);
+        int nudge = Math.abs(toStart) <= Math.abs(toEnd) ? toStart : toEnd;
+        return Math.abs(nudge) <= threshold ? Math.max(-from, delta + nudge) : delta;
+    }
+
+    @Unique
+    private static int vector3$nearer(int a, int b, int tick) {
+        return Math.abs(a - tick) <= Math.abs(b - tick) ? a : b;
+    }
+
+    @Unique private static final int NO_EDGE = 2;
+    @Unique private static int vector3$hoverTrack = -1;
+    @Unique private static int vector3$hoverTick = -1;
+    @Unique private static int vector3$hoverEdge = NO_EDGE;
+    @Unique private static int vector3$trimTrack = -1;
+    @Unique private static int vector3$trimTick = -1;
+    @Unique private static int vector3$trimOriginalTick;
+    @Unique private static boolean vector3$trimLeft;
+    @Unique private static Keyframe vector3$trimOriginal;
+    @Unique private static Trimming.Range vector3$trimRange;
+    @Unique private static float vector3$trimStartX;
+
+    @Unique
+    private static boolean vector3$trimmableTrack(KeyframeTrack track) {
+        return track.keyframeType == ClipKeyframeType.INSTANCE || track.keyframeType == AudioKeyframeType.INSTANCE;
+    }
+
+    // Clips and audio, as in DaVinci: drag an edge to trim, middle-click to cut in two.
+    @Unique
+    private static void vector3$clipEdges(float x, float rowsY, float lineHeight) {
+        vector3$hoverTrack = -1;
+        vector3$hoverTick = -1;
+        vector3$hoverEdge = NO_EDGE;
+        if (vector3$trimTrack >= 0) {
+            ImGui.setMouseCursor(ImGuiMouseCursor.ResizeEW);
+            vector3$updateTrim(x);
+            return;
+        }
+        if (!vector3$isMouseInTimeline()) return;
+        for (int row = 0; row < editorScene.keyframeTracks.size() && vector3$hoverTrack < 0; row++) {
+            KeyframeTrack track = editorScene.keyframeTracks.get(row);
+            if (!vector3$trimmableTrack(track)) continue;
+            float bottom = rowsY + 2 + (row + 1) * lineHeight;
+            float top = bottom - lineHeight - (track.keyframeType == ClipKeyframeType.INSTANCE ? ClipProject.band() : 0);
+            if (mouseY < top || mouseY > bottom) continue;
+            for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+                float width = entry.getValue().getCustomWidthInTicks();
+                if (width <= 0 || !Trimming.trimmable(entry.getValue())) continue;
+                float left = x + replayTickToTimelineX(entry.getKey());
+                float right = x + replayTickToTimelineX(entry.getKey() + Math.round(width));
+                int edge = Math.abs(mouseX - left) <= 5 ? -1 : Math.abs(mouseX - right) <= 5 ? 1
+                        : mouseX > left && mouseX < right ? 0 : NO_EDGE;
+                if (edge == NO_EDGE) continue;
+                vector3$hoverTrack = row;
+                vector3$hoverTick = entry.getKey();
+                vector3$hoverEdge = edge;
+                if (edge != 0) break;
+            }
+        }
+        if (vector3$hoverEdge == -1 || vector3$hoverEdge == 1) ImGui.setMouseCursor(ImGuiMouseCursor.ResizeEW);
+        if (vector3$hoverTick >= 0 && ImGui.isMouseClicked(2)) {
+            vector3$split(vector3$hoverTrack, vector3$hoverTick, timelineXToReplayTick(mouseX - x));
+        }
+    }
+
+    @Unique
+    private static void vector3$beginTrim() {
+        if (vector3$hoverTrack < 0 || vector3$hoverTrack >= editorScene.keyframeTracks.size()) return;
+        Keyframe keyframe = editorScene.keyframeTracks.get(vector3$hoverTrack).keyframesByTick.get(vector3$hoverTick);
+        Trimming.Range range = keyframe == null ? null : Trimming.range(keyframe);
+        if (range == null) return;
+        vector3$trimTrack = vector3$hoverTrack;
+        vector3$trimTick = vector3$trimOriginalTick = vector3$hoverTick;
+        vector3$trimLeft = vector3$hoverEdge == -1;
+        vector3$trimOriginal = keyframe;
+        vector3$trimRange = range;
+        vector3$trimStartX = mouseX;
+    }
+
+    /** The start or end of another media keyframe on {@code track} nearest {@code tick}, or {@code tick} itself. */
+    @Unique
+    private static int vector3$snapOnTrack(KeyframeTrack track, int tick, int ignore) {
+        int best = track.keyframeType == ClipKeyframeType.INSTANCE ? 0 : tick;
+        for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+            float width = entry.getValue().getCustomWidthInTicks();
+            if (entry.getKey() == ignore || width <= 0) continue;
+            for (int boundary : new int[]{entry.getKey(), entry.getKey() + Math.round(width)}) {
+                if (Math.abs(boundary - tick) < Math.abs(best - tick)) best = boundary;
+            }
+        }
+        return vector3$nearer(best, TimelineWindow.getCursorTick(), tick);
+    }
+
+    @Unique
+    private static void vector3$updateTrim(float x) {
+        KeyframeTrack track = editorScene.keyframeTracks.get(vector3$trimTrack);
+        if (!ImGui.isMouseDown(0)) {
+            vector3$finishTrim(track);
+            return;
+        }
+        upgradeToSceneWrite();
+        Trimming.Range range = vector3$trimRange;
+        int delta = timelineXToReplayTick(mouseX - x) - timelineXToReplayTick(vector3$trimStartX - x);
+        int threshold = Math.max(1, timelineXToReplayTick(12) - timelineXToReplayTick(0));
+        int from = vector3$trimOriginalTick, tick = from, in = range.in(), out = range.out();
+        if (vector3$trimLeft) {
+            int edge = from + delta, snapped = vector3$snapOnTrack(track, edge, vector3$trimTick);
+            if (Math.abs(snapped - edge) <= threshold) edge = snapped;
+            in = Math.clamp(range.in() + edge - from, Math.max(0, range.in() - from), range.out() - 1);
+            tick = from + in - range.in();
+        } else {
+            int edge = from + range.length() + delta, snapped = vector3$snapOnTrack(track, edge, vector3$trimTick);
+            if (Math.abs(snapped - edge) <= threshold) edge = snapped;
+            out = Math.clamp(range.in() + edge - from, range.in() + 1, range.total());
+        }
+        if (tick != vector3$trimTick && track.keyframesByTick.containsKey(tick)) return;
+        track.keyframesByTick.remove(vector3$trimTick);
+        track.keyframesByTick.put(tick, Trimming.withRange(vector3$trimOriginal, in, out));
+        vector3$trimTick = tick;
+        editorState.markDirty();
+    }
+
+    // The live edit is put back first so the history entry does the change itself, and undo can take it back.
+    @Unique
+    private static void vector3$finishTrim(KeyframeTrack track) {
+        int row = vector3$trimTrack, from = vector3$trimOriginalTick, to = vector3$trimTick;
+        Keyframe trimmed = track.keyframesByTick.remove(to);
+        Keyframe original = vector3$trimOriginal;
+        track.keyframesByTick.put(from, original);
+        vector3$trimTrack = -1;
+        vector3$trimTick = -1;
+        if (trimmed == null || trimmed == original) return;
+        upgradeToSceneWrite();
+        List<EditorSceneHistoryAction> undo = new ArrayList<>(), redo = new ArrayList<>();
+        if (from != to) {
+            redo.add(new EditorSceneHistoryAction.RemoveKeyframe(track.keyframeType, row, from));
+            undo.add(new EditorSceneHistoryAction.RemoveKeyframe(track.keyframeType, row, to));
+        }
+        redo.add(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, to, trimmed.copy()));
+        undo.add(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, from, original.copy()));
+        editorScene.push(new EditorSceneHistoryEntry(undo, redo, I18n.get("vector3.history.trim_clip")));
+        vector3$keyframesChanged();
+    }
+
+    /** The blade: the media keyframe at {@code tick} becomes two meeting at {@code at}. */
+    @Unique
+    private static void vector3$split(int row, int tick, int at) {
+        KeyframeTrack track = editorScene.keyframeTracks.get(row);
+        Keyframe keyframe = track.keyframesByTick.get(tick);
+        Trimming.Range range = keyframe == null ? null : Trimming.range(keyframe);
+        if (range == null || at <= tick || at >= tick + range.length()) return;
+        int cut = range.in() + at - tick;
+        upgradeToSceneWrite();
+        List<EditorSceneHistoryAction> undo = List.of(
+                new EditorSceneHistoryAction.RemoveKeyframe(track.keyframeType, row, at),
+                new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, tick, keyframe.copy()));
+        List<EditorSceneHistoryAction> redo = List.of(
+                new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, tick, Trimming.withRange(keyframe, range.in(), cut)),
+                new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, at, Trimming.withRange(keyframe, cut, range.out())));
+        editorScene.push(new EditorSceneHistoryEntry(undo, redo, I18n.get("vector3.history.split_clip")));
+        selectedKeyframesList.clear();
+        vector3$keyframesChanged();
+    }
+
+    @Unique
+    private static void vector3$handleClips() {
+        // Ctrl+B cuts every clip and audio keyframe under the playhead.
+        if (!ImGui.getIO().getWantTextInput() && ImGui.getIO().getKeyCtrl() && ImGui.isKeyPressed(ImGuiKey.B, false)) {
+            int cursor = TimelineWindow.getCursorTick();
+            for (int row = 0; row < editorScene.keyframeTracks.size(); row++) {
+                KeyframeTrack track = editorScene.keyframeTracks.get(row);
+                Map.Entry<Integer, Keyframe> under = vector3$trimmableTrack(track) ? track.keyframesByTick.floorEntry(cursor) : null;
+                if (under != null) vector3$split(row, under.getKey(), cursor);
+            }
+        }
+        if (ImGui.getDragDropPayload(ClipsWindow.PAYLOAD) instanceof String path
+                && ImGui.isMouseReleased(0) && vector3$isMouseInTimeline()) {
+            upgradeToSceneWrite();
+            try {
+                ClipProject.addClip(editorScene, java.nio.file.Path.of(path), timelineXToReplayTick(mouseX - x));
+            } catch (ClipProject.IncompatibleClipException exception) {
+                net.minecraft.client.gui.components.toasts.SystemToast.add(Minecraft.getInstance().gui.toastManager(),
+                        net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                        net.minecraft.network.chat.Component.translatable("vector3.clips.incompatible"),
+                        net.minecraft.network.chat.Component.translatable("vector3.clips.incompatible_detail",
+                                exception.clipVersion, exception.projectVersion));
+            } catch (java.io.IOException exception) {
+                Vector3.LOGGER.warn("Could not add clip {}", path, exception);
+            }
+            // The Clips track may have been inserted at the top, which moves every other track down.
+            selectedKeyframesList.clear();
+            editingKeyframeTrack = -1;
+            editingKeyframeTick = -1;
+            vector3$keyframesChanged();
+        }
+        vector3$clipsDirty = ClipProject.dirty(editorScene);
+        vector3$clipsEnd = ClipProject.end(editorScene);
+        if (ClipsWindow.consumeApplyRequest() && vector3$clipsDirty) {
+            upgradeToSceneWrite();
+            try {
+                ClipProject.apply(editorState, editorScene);
+            } catch (java.io.IOException exception) {
+                Vector3.LOGGER.warn("Could not apply the clip changes", exception);
+            }
+        }
+    }
+
     @Unique
     private static void vector3$handlePrefabs() {
         if (ImGui.getDragDropPayload(PrefabBasketWindow.PAYLOAD) instanceof String id
@@ -198,6 +463,7 @@ public abstract class TimelineWindowMixin {
         String atCursor = PrefabBasketWindow.consumePlaceAtCursor();
         if (atCursor != null) PrefabBasketWindow.place(atCursor, TimelineWindow.getCursorTick());
         if (PrefabBasketWindow.consumeSaveRequest()) Vector3.PREFABS.beginSave(editorScene, selectedKeyframesList);
+        vector3$handleClips();
         Vector3.PREFABS.frame(editorScene, editorState, TimelineWindowMixin::upgradeToSceneWrite);
         vector3$groupMenu();
         vector3$selectionMenu();
@@ -496,6 +762,7 @@ public abstract class TimelineWindowMixin {
         float barHeight = lineHeight * 0.3f;
         ImDrawList drawList = ImGui.getWindowDrawList();
         vector3$dragGroup(x, y, mouseX);
+        vector3$clipEdges(x, y, lineHeight);
         vector3$drawTrackMoveTargets(drawList, x, y, lineHeight, vector3$trackMovePlan(y));
         vector3$drawTrackMoveTargets(drawList, x, y, lineHeight, vector3$groupMovePlan(y));
         for (PrefabGroups.Span span : PrefabGroups.spans(editorScene)) {
@@ -664,15 +931,30 @@ public abstract class TimelineWindowMixin {
         return original.call() && InputHelper.isCtrlDownRaw();
     }
 
-    // Alt on a track's drag handle leaves a copy of the track behind; the original is the one being dragged.
+    // Grabbing a selected track's handle drags the whole selection; Alt leaves a copy of the track behind instead,
+    // and the original is the one being dragged.
     @Inject(method = "renderKeyframeElements", at = @At(value = "FIELD", opcode = Opcodes.PUTSTATIC, shift = At.Shift.AFTER,
             target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;repositioningKeyframeTrack:I"))
     private static void vector3$copyDraggedTrack(float x, float y, int cursorTicks, int middleX, CallbackInfo ci) {
-        if (!ImGui.getIO().getKeyAlt() || repositioningKeyframeTrack < 0
-                || repositioningKeyframeTrack >= editorScene.keyframeTracks.size()) return;
+        if (repositioningKeyframeTrack < 0 || repositioningKeyframeTrack >= editorScene.keyframeTracks.size()) return;
         int index = repositioningKeyframeTrack;
-        upgradeToSceneWrite();
         KeyframeTrack original = editorScene.keyframeTracks.get(index);
+        vector3$clearKeyframeSelection();
+        if (original.keyframeType == ClipKeyframeType.INSTANCE) {
+            repositioningKeyframeTrack = -1;
+            TrackSelection.only(original);
+            return;
+        }
+        if (!ImGui.getIO().getKeyAlt() && TrackSelection.contains(original) && TrackSelection.size() > 1) {
+            repositioningKeyframeTrack = -1;
+            vector3$trackGroupDrag = true;
+            vector3$trackDragY = mouseY;
+            return;
+        }
+        TrackSelection.only(original);
+        if (!ImGui.getIO().getKeyAlt()) return;
+        if (original.keyframeType == ClipKeyframeType.INSTANCE || original.keyframeType == SkipKeyframeType.INSTANCE) return;
+        upgradeToSceneWrite();
         editorScene.push(TrackMove.copyTrack(editorScene, index));
         KeyframeTrack copy = editorScene.keyframeTracks.get(index);
         copy.enabled = original.enabled;
@@ -681,6 +963,119 @@ public abstract class TimelineWindowMixin {
         repositioningKeyframeTrack = index + 1;
         selectedKeyframesList.clear();
         vector3$keyframesChanged();
+    }
+
+    // Flashback moves a dragged track up while its index is above 0; with the Clips track on top, row 1 is the ceiling.
+    @ModifyExpressionValue(method = "renderInner", at = @At(value = "FIELD", opcode = Opcodes.GETSTATIC, ordinal = 8,
+            target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;repositioningKeyframeTrack:I"))
+    private static int vector3$clipsCeiling(int index) {
+        return vector3$belowClips(index);
+    }
+
+    @ModifyExpressionValue(method = "renderInner", at = @At(value = "FIELD", opcode = Opcodes.GETSTATIC, ordinal = 9,
+            target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;repositioningKeyframeTrack:I"))
+    private static int vector3$clipsCeilingAgain(int index) {
+        return vector3$belowClips(index);
+    }
+
+    @Unique
+    private static int vector3$belowClips(int index) {
+        List<KeyframeTrack> tracks = editorScene.keyframeTracks;
+        return !tracks.isEmpty() && tracks.getFirst().keyframeType == ClipKeyframeType.INSTANCE ? index - 1 : index;
+    }
+
+    @Unique private static float vector3$trackPressX;
+    @Unique private static float vector3$trackPressY = Float.NaN;
+    @Unique private static boolean vector3$trackBoxing;
+    @Unique private static boolean vector3$trackGroupDrag;
+    @Unique private static float vector3$trackDragY;
+
+    // The track list: click or box-select tracks, drag the selection by a handle, Delete removes it.
+    @Inject(method = "renderKeyframeElements", at = @At("TAIL"))
+    private static void vector3$selectTracks(float panelX, float panelY, int cursorTicks, int middleX, CallbackInfo ci) {
+        List<KeyframeTrack> tracks = editorScene.keyframeTracks;
+        TrackSelection.prune(editorScene);
+        if (!selectedKeyframesList.isEmpty()) TrackSelection.clear();
+        float lineHeight = ImGui.getTextLineHeightWithSpacing() + ImGui.getStyle().getItemSpacingY();
+        float top = panelY + 6 - (lineHeight - ImGui.getTextLineHeight()) / 2;
+        ImDrawList drawList = ImGui.getWindowDrawList();
+
+        if (vector3$trackGroupDrag) {
+            if (!ImGui.isMouseDown(0)) {
+                vector3$trackGroupDrag = false;
+            } else {
+                while (mouseY - vector3$trackDragY > lineHeight / 2 && vector3$moveTracks(1, lineHeight)) vector3$trackDragY += lineHeight;
+                while (mouseY - vector3$trackDragY < -lineHeight / 2 && vector3$moveTracks(-1, lineHeight)) vector3$trackDragY -= lineHeight;
+            }
+        }
+
+        boolean overPanel = ImGui.isWindowHovered() && mouseX >= panelX && mouseX < middleX && mouseY >= panelY;
+        if (ImGui.isMouseClicked(0) && overPanel && !ImGui.isAnyItemHovered() && repositioningKeyframeTrack < 0 && !vector3$trackGroupDrag) {
+            vector3$trackPressX = mouseX;
+            vector3$trackPressY = mouseY;
+            vector3$trackBoxing = false;
+        }
+        if (!Float.isNaN(vector3$trackPressY)) {
+            boolean ctrl = ImGui.getIO().getKeyCtrl(), shift = ImGui.getIO().getKeyShift();
+            if (ImGui.isMouseDown(0)) {
+                if (!vector3$trackBoxing && (Math.abs(mouseY - vector3$trackPressY) > 4 || Math.abs(mouseX - vector3$trackPressX) > 4)) {
+                    vector3$trackBoxing = true;
+                    TrackSelection.beginBox(ctrl || shift);
+                }
+                if (vector3$trackBoxing) {
+                    float minY = Math.min(mouseY, vector3$trackPressY), maxY = Math.max(mouseY, vector3$trackPressY);
+                    float minX = Math.min(mouseX, vector3$trackPressX), maxX = Math.max(mouseX, vector3$trackPressX);
+                    drawList.addRectFilled(minX, minY, maxX, maxY, 0x30E0A040);
+                    drawList.addRect(minX, minY, maxX, maxY, 0xA0E0A040);
+                    int first = Math.max(0, (int) Math.floor((minY - top) / lineHeight));
+                    int last = Math.min(tracks.size() - 1, (int) Math.floor((maxY - top) / lineHeight));
+                    TrackSelection.box(first <= last ? tracks.subList(first, last + 1) : List.of());
+                    vector3$clearKeyframeSelection();
+                }
+            } else {
+                if (!vector3$trackBoxing) {
+                    int row = (int) Math.floor((vector3$trackPressY - top) / lineHeight);
+                    KeyframeTrack hit = row >= 0 && row < tracks.size() ? tracks.get(row) : null;
+                    TrackSelection.click(tracks, hit, ctrl, shift);
+                    if (hit != null) vector3$clearKeyframeSelection();
+                }
+                vector3$trackPressY = Float.NaN;
+                vector3$trackBoxing = false;
+            }
+        }
+
+        for (int row = 0; row < tracks.size(); row++) {
+            KeyframeTrack track = tracks.get(row);
+            if (!TrackSelection.contains(track)) continue;
+            float rowTop = top + row * lineHeight + (repositioningKeyframeTrack == row ? mouseY - dragStartMouseY : track.animatedOffsetInUi);
+            drawList.addRectFilled(panelX, rowTop, middleX, rowTop + lineHeight, 0x38E0A040);
+        }
+
+        if (!TrackSelection.isEmpty() && !ImGui.getIO().getWantTextInput() && ImGui.isKeyPressed(ImGuiKey.Delete, false)
+                && (vector3$isMouseInTimeline() || ImGui.isWindowFocused(ImGuiFocusedFlags.RootAndChildWindows))) {
+            upgradeToSceneWrite();
+            EditorSceneHistoryEntry removal = TrackSelection.delete(editorScene);
+            if (removal == null) return;
+            editorScene.push(removal);
+            vector3$clearKeyframeSelection();
+            vector3$keyframesChanged();
+        }
+    }
+
+    @Unique
+    private static boolean vector3$moveTracks(int direction, float lineHeight) {
+        upgradeToSceneWrite();
+        if (!TrackSelection.move(editorScene, direction, lineHeight)) return false;
+        vector3$clearKeyframeSelection();
+        editorState.markDirty();
+        return true;
+    }
+
+    @Unique
+    private static void vector3$clearKeyframeSelection() {
+        selectedKeyframesList.clear();
+        editingKeyframeTrack = -1;
+        editingKeyframeTick = -1;
     }
 
     @Unique
@@ -790,6 +1185,8 @@ public abstract class TimelineWindowMixin {
         Eyedropper.endFrame();
         ShapeManagerWindow.render();
         PrefabBasketWindow.render(!selectedKeyframesList.isEmpty());
+        ClipsWindow.render(vector3$clipsDirty);
+        ClipsWindow.renderProgress();
         Vector3.PREFABS.renderPanel();
         if (ShapeTimelineSelection.consumeRefresh()) vector3$refreshKeyframes = true;
         if (editorState == null) return;
@@ -880,7 +1277,12 @@ public abstract class TimelineWindowMixin {
             target = "Limgui/moulberry90/ImGui;isMouseClicked(I)Z"))
     private static boolean vector3$keepViewportClicksOutOfTimeline(int button) {
         boolean clicked = vector3$isMouseInTimeline() && ImGui.isMouseClicked(button);
-        if (vector3$draggedGroup != null) return false;
+        if (vector3$draggedGroup != null || vector3$trimTrack >= 0) return false;
+        // A clip's edge trims it instead of moving it.
+        if (clicked && button == 0 && (vector3$hoverEdge == -1 || vector3$hoverEdge == 1)) {
+            vector3$beginTrim();
+            return false;
+        }
         String group = clicked && button <= 1 ? vector3$groupAt(mouseX, mouseY) : null;
         if (group == null) return clicked;
         // Clicks on a group never reach Flashback: left drags the group, right opens its menu.
