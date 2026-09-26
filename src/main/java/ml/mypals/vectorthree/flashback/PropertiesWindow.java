@@ -45,7 +45,6 @@ public final class PropertiesWindow {
         boolean visible = ImGui.begin(WINDOW.title(I18n.get("vector3.properties.title")), WINDOW.open());
         docked = ImGui.isWindowDocked();
         if (visible && hasKeyframe) {
-            // The speed curve page only exists for keyframes set to the custom interpolation.
             if (hasCurve && ImGui.beginTabBar("##vector3_properties_tabs")) {
                 if (ImGui.beginTabItem(I18n.get("vector3.properties.tab.keyframe"))) ImGui.endTabItem();
                 if (ImGui.beginTabItem(I18n.get("vector3.curve.tab"))) {

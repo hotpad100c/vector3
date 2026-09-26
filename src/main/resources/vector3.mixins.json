@@ -49,6 +49,7 @@
 		"flashback.KeyframeCopyGroupMixin",
 		"flashback.KeyframeCurveMixin",
 		"flashback.KeyframeTrackCurveMixin",
+		"flashback.KeyframeSubtypeAdapterMixin",
 		"flashback.KeyframeGroupMixin",
 		"flashback.KeyframeTrackGroupMixin",
 		"flashback.KeyframeTrackShakeMixin",
@@ -66,6 +67,7 @@
 		"iris.BuilderManagerIrisBypassMixin",
 		"iris.HelpersIrisBypassMixin",
 		"iris.LevelRendererIrisBypassMixin",
+		"iris.pack.VanillaChunkFadeMixin",
 		"iris.skyOverride.HorizonRendererMixin",
 		"iris.skyOverride.IrisRenderingPipelineMixin",
 		"iris.skyOverride.PropertiesMixin"

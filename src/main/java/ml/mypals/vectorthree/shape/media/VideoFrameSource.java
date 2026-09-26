@@ -5,10 +5,14 @@ import ml.mypals.vectorthree.Vector3;
 import net.minecraft.client.Minecraft;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
-import org.bytedeco.javacv.Java2DFrameConverter;
+import org.bytedeco.ffmpeg.global.avutil;
+import org.lwjgl.system.MemoryUtil;
 
-import java.awt.image.BufferedImage;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -71,6 +75,11 @@ final class VideoFrameSource {
         if (version == consumedVersion) return false;
         int[] pixels = latestFrame.get();
         if (pixels == null) return false;
+        if (target.getWidth() == width && target.getHeight() == height) {
+            MemoryUtil.memIntBuffer(target.getPointer(), width * height).put(0, pixels);
+            consumedVersion = version;
+            return true;
+        }
         int copyWidth = Math.min(width, target.getWidth());
         int copyHeight = Math.min(height, target.getHeight());
         for (int y = 0; y < copyHeight; y++) {
@@ -88,6 +97,8 @@ final class VideoFrameSource {
             if (!path.isAbsolute()) path = Minecraft.getInstance().gameDirectory.toPath().resolve(path);
             path = path.toAbsolutePath().normalize();
             grabber = new FFmpegFrameGrabber(path.toFile());
+            // RGBA bytes read as little-endian ints are already the ABGR NativeImage wants.
+            grabber.setPixelFormat(avutil.AV_PIX_FMT_RGBA);
             grabber.start();
         } catch (Exception exception) {
             Vector3.LOGGER.warn("Could not open video file {}", file, exception);
@@ -115,11 +126,13 @@ final class VideoFrameSource {
     }
 
     // Decoders only run forwards, so going backwards decodes a window before the target once and then
-    // serves the following backward steps from this cache. Decode thread only.
+    // serves the following backward steps from this cache. A cached frame at t shows for requests in
+    // (t - interval, t], the same "first frame at or after" rule forward decoding uses. Decode thread only.
     private final TreeMap<Double, int[]> cache = new TreeMap<>();
+    private final ArrayDeque<int[]> spare = new ArrayDeque<>();
+    private int[] previousPublished;
 
     private void decodeUntilClosed(FFmpegFrameGrabber grabber, String file) throws InterruptedException {
-        Java2DFrameConverter converter = new Java2DFrameConverter();
         double interval = grabber.getFrameRate() > 0 ? 1 / grabber.getFrameRate() : 1 / 30.0;
         int maxFrames = (int) Math.clamp(CACHE_BYTES / (4L * width * height), 4, 120);
         double reverseWindow = Math.min(REVERSE_WINDOW_SECONDS, (maxFrames - 2) * interval);
@@ -136,8 +149,8 @@ final class VideoFrameSource {
             lastRequested = seconds;
             if (serveCached(seconds, interval)) continue;
 
-            // A single bad seek/grab/convert must not kill this thread, or the shape would freeze on its
-            // last frame forever. Each request is isolated so a failure only skips that frame.
+            // A single bad seek/grab must not kill this thread, or the shape would freeze on its last
+            // frame forever. Each request is isolated so a failure only skips that frame.
             try {
                 boolean backward = lastDecodedSeconds >= 0 && seconds < lastDecodedSeconds;
                 boolean farJump = lastDecodedSeconds < 0 || backward
@@ -152,17 +165,21 @@ final class VideoFrameSource {
                     continue;
                 }
 
+                int[] target = null;
                 Frame frame;
                 while ((frame = grabber.grab()) != null) {
                     if (frame.image == null) continue;
                     lastDecodedSeconds = frame.timestamp / 1_000_000.0;
-                    boolean keep = backward ? lastDecodedSeconds >= windowStart - interval : lastDecodedSeconds >= seconds - interval;
-                    if (keep) cache.put(lastDecodedSeconds, toAbgrPixels(converter.getBufferedImage(frame)));
-                    if (lastDecodedSeconds >= seconds) break;
+                    boolean reached = lastDecodedSeconds >= seconds - 1.0e-4;
+                    if (reached || backward && lastDecodedSeconds > windowStart - interval) {
+                        int[] pixels = copyPixels(frame);
+                        cache.put(lastDecodedSeconds, pixels);
+                        if (reached) target = pixels;
+                    }
+                    if (reached) break;
                 }
-                Map.Entry<Double, int[]> shown = cache.floorEntry(seconds + 1.0e-4);
-                if (shown == null) shown = cache.ceilingEntry(seconds);
-                if (shown != null) publish(shown.getValue());
+                if (target == null && !cache.isEmpty()) target = cache.lastEntry().getValue();
+                if (target != null) publish(target);
                 trimCache(seconds, maxFrames);
             } catch (Exception exception) {
                 Vector3.LOGGER.warn("Video seek/decode failed for {} at {}s, skipping", file, seconds, exception);
@@ -174,35 +191,42 @@ final class VideoFrameSource {
     }
 
     private boolean serveCached(double seconds, double interval) {
-        Map.Entry<Double, int[]> entry = cache.floorEntry(seconds + 1.0e-4);
-        if (entry == null || seconds - entry.getKey() >= interval) return false;
+        Map.Entry<Double, int[]> entry = cache.ceilingEntry(seconds - 1.0e-4);
+        if (entry == null || entry.getKey() - seconds >= interval) return false;
         publish(entry.getValue());
         return true;
     }
 
     private void publish(int[] pixels) {
-        if (latestFrame.getAndSet(pixels) != pixels) frameVersion.incrementAndGet();
+        int[] current = latestFrame.getAndSet(pixels);
+        if (current == pixels) return;
+        previousPublished = current;
+        frameVersion.incrementAndGet();
     }
 
     private void trimCache(double seconds, int maxFrames) {
         while (cache.size() > maxFrames) {
-            if (seconds - cache.firstKey() > cache.lastKey() - seconds) cache.pollFirstEntry();
-            else cache.pollLastEntry();
+            int[] evicted = seconds - cache.firstKey() > cache.lastKey() - seconds
+                    ? cache.pollFirstEntry().getValue() : cache.pollLastEntry().getValue();
+            // The render thread may still be copying the shown or just-replaced frame.
+            if (evicted != latestFrame.get() && evicted != previousPublished && spare.size() < 4) spare.push(evicted);
         }
     }
 
-    private int[] toAbgrPixels(BufferedImage image) {
-        int copyWidth = Math.min(width, image.getWidth());
-        int copyHeight = Math.min(height, image.getHeight());
-        int[] pixels = new int[width * height];
-        int[] row = new int[copyWidth];
+    private int[] copyPixels(Frame frame) {
+        int[] pixels = spare.isEmpty() ? new int[width * height] : spare.pop();
+        ByteBuffer bytes = ((ByteBuffer) frame.image[0]).duplicate().order(ByteOrder.LITTLE_ENDIAN);
+        int copyWidth = Math.min(width, frame.imageWidth), copyHeight = Math.min(height, frame.imageHeight);
+        int stride = frame.imageStride;
+        if (stride == width * 4 && copyWidth == width) {
+            bytes.position(0);
+            bytes.asIntBuffer().get(pixels, 0, width * copyHeight);
+            return pixels;
+        }
         for (int y = 0; y < copyHeight; y++) {
-            image.getRGB(0, y, copyWidth, 1, row, 0, copyWidth);
-            int base = y * width;
-            for (int x = 0; x < copyWidth; x++) {
-                int argb = row[x];
-                pixels[base + x] = (argb & 0xFF00FF00) | ((argb & 0xFF) << 16) | ((argb >> 16) & 0xFF);
-            }
+            bytes.position(y * stride);
+            IntBuffer row = bytes.asIntBuffer();
+            row.get(pixels, y * width, copyWidth);
         }
         return pixels;
     }

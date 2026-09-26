@@ -27,6 +27,7 @@ import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.state.KeyframeTrack;
 import imgui.moulberry90.ImGui;
+import imgui.moulberry90.flag.ImGuiHoveredFlags;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
@@ -324,6 +325,12 @@ public abstract class TimelineWindowMixin {
                     target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;renderKeyframeOptionsPopup(I)V")))
     private static void vector3$endProperties() {
         PropertiesWindow.end();
+    }
+
+    // Flashback only tests the mouse position, so clicks on a floating window over the timeline fell through.
+    @WrapOperation(method = {"renderInner", "handleClick"}, at = @At(value = "INVOKE", target = "Limgui/moulberry90/ImGui;isMouseClicked(I)Z"))
+    private static boolean vector3$clickOnTimelineOnly(int button, Operation<Boolean> original) {
+        return original.call(button) && ImGui.isWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
     }
 
     @WrapOperation(method = "handleClick", at = @At(value = "INVOKE", target = "Limgui/moulberry90/ImGui;openPopup(Ljava/lang/String;)V"))

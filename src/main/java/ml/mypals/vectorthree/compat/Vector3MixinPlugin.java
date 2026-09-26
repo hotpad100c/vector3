@@ -17,6 +17,7 @@ public final class Vector3MixinPlugin implements IMixinConfigPlugin {
         String name = mixinClassName.startsWith(PACKAGE) ? mixinClassName.substring(PACKAGE.length()) : mixinClassName;
         if (name.startsWith("area.sodium.")) return FabricLoader.getInstance().isModLoaded("sodium");
         if (name.startsWith("iris.skyOverride.")) return FabricLoader.getInstance().isModLoaded("iris");
+        if (name.startsWith("iris.pack.")) return FabricLoader.getInstance().isModLoaded("iris");
         return true;
     }
 
