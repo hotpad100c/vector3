@@ -1,5 +1,7 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import com.moulberry.flashback.state.EditorSceneHistory;
+import ml.mypals.vectorthree.clips.ClipProject;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.EditorSceneHistoryEntry;
@@ -21,10 +23,16 @@ import java.util.List;
 import java.util.function.Consumer;
 
 @Mixin(EditorScene.class)
-public class EditorSceneMixin implements PrefabGroupHolder.Scene {
+public class EditorSceneMixin implements PrefabGroupHolder.Scene, ClipProject.ClearableHistory {
     @Final
     @Shadow public List<KeyframeTrack> keyframeTracks;
     @Unique private PrefabGroupStore vector3$prefabGroups;
+    @Shadow @Final private EditorSceneHistory history;
+
+    @Override
+    public void vector3$clearHistory() {
+        ((ClipProject.ResettableHistory) history).vector3$reset();
+    }
 
     @Override
     public PrefabGroupStore vector3$prefabGroups() {

@@ -1,5 +1,7 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import ml.mypals.vectorthree.clips.ClipsWindow;
+import ml.mypals.vectorthree.clips.ClipProject;
 import com.moulberry.flashback.utils.InputHelper;
 import ml.mypals.vectorthree.prefab.PrefabGroup;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
@@ -190,6 +192,36 @@ public abstract class TimelineWindowMixin {
     }
 
     @Unique
+    private static boolean vector3$clipsDirty;
+
+    @Unique
+    private static void vector3$handleClips() {
+        if (ImGui.getDragDropPayload(ClipsWindow.PAYLOAD) instanceof String path
+                && ImGui.isMouseReleased(0) && vector3$isMouseInTimeline()) {
+            upgradeToSceneWrite();
+            try {
+                ClipProject.addClip(editorScene, java.nio.file.Path.of(path), timelineXToReplayTick(mouseX - x));
+            } catch (java.io.IOException exception) {
+                Vector3.LOGGER.warn("Could not add clip {}", path, exception);
+            }
+            // The Clips track may have been inserted at the top, which moves every other track down.
+            selectedKeyframesList.clear();
+            editingKeyframeTrack = -1;
+            editingKeyframeTick = -1;
+            vector3$keyframesChanged();
+        }
+        vector3$clipsDirty = ClipProject.dirty(editorScene);
+        if (ClipsWindow.consumeApplyRequest() && vector3$clipsDirty) {
+            upgradeToSceneWrite();
+            try {
+                ClipProject.apply(editorState, editorScene);
+            } catch (java.io.IOException exception) {
+                Vector3.LOGGER.warn("Could not apply the clip changes", exception);
+            }
+        }
+    }
+
+    @Unique
     private static void vector3$handlePrefabs() {
         if (ImGui.getDragDropPayload(PrefabBasketWindow.PAYLOAD) instanceof String id
                 && ImGui.isMouseReleased(0) && vector3$isMouseInTimeline()) {
@@ -198,6 +230,7 @@ public abstract class TimelineWindowMixin {
         String atCursor = PrefabBasketWindow.consumePlaceAtCursor();
         if (atCursor != null) PrefabBasketWindow.place(atCursor, TimelineWindow.getCursorTick());
         if (PrefabBasketWindow.consumeSaveRequest()) Vector3.PREFABS.beginSave(editorScene, selectedKeyframesList);
+        vector3$handleClips();
         Vector3.PREFABS.frame(editorScene, editorState, TimelineWindowMixin::upgradeToSceneWrite);
         vector3$groupMenu();
         vector3$selectionMenu();
@@ -790,6 +823,7 @@ public abstract class TimelineWindowMixin {
         Eyedropper.endFrame();
         ShapeManagerWindow.render();
         PrefabBasketWindow.render(!selectedKeyframesList.isEmpty());
+        ClipsWindow.render(vector3$clipsDirty);
         Vector3.PREFABS.renderPanel();
         if (ShapeTimelineSelection.consumeRefresh()) vector3$refreshKeyframes = true;
         if (editorState == null) return;

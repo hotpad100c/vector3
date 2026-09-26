@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree;
 
+import ml.mypals.vectorthree.clips.ClipKeyframeType;
 import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
@@ -47,6 +48,7 @@ public class Vector3 implements ClientModInitializer {
 		CustomKeyframes.register(LookToKeyframeType.INSTANCE);
 		CustomKeyframes.register(SkipKeyframeType.INSTANCE);
 		CustomKeyframes.register(DollyZoomKeyframeType.INSTANCE);
+		CustomKeyframes.register(ClipKeyframeType.INSTANCE);
 		ShapeKeyframe.setEditor(GIZMO_EDITOR);
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			GIZMO_EDITOR.clear();

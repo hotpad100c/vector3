@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import ml.mypals.vectorthree.clips.ClipProject;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.EditorSceneHistory;
 import com.moulberry.flashback.state.EditorSceneHistoryEntry;
@@ -17,10 +18,16 @@ import java.util.function.Consumer;
 
 // Undo steps position back then applies entries[position]; redo applies entries[position] then steps forward.
 @Mixin(value = EditorSceneHistory.class, remap = false)
-public class EditorSceneHistoryMixin {
+public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory {
     @Shadow @Final private List<EditorSceneHistoryEntry> entries;
     @Shadow private int position;
     @Unique private int vector3$positionBefore;
+
+    @Override
+    public void vector3$reset() {
+        entries.clear();
+        position = 0;
+    }
 
     @Inject(method = {"undo", "redo"}, at = @At("HEAD"))
     private void vector3$rememberPosition(EditorScene scene, Consumer<String> description, CallbackInfo ci) {

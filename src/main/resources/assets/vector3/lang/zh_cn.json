@@ -229,5 +229,14 @@
   "vector3.history.duplicate_shapes": "复制 %s 个图形",
   "vector3.shape.copy_name": "%s 副本",
   "vector3.history.copy_keyframes": "复制 %s 个关键帧",
-  "vector3.history.copy_track": "复制轨道"
+  "vector3.history.copy_track": "复制轨道",
+  "vector3.keyframe_type.clips": "片段",
+  "vector3.clips.title": "片段",
+  "vector3.clips.apply": "应用片段更改",
+  "vector3.clips.pending": "有未应用的更改",
+  "vector3.clips.drag_hint": "把回放拖到时间轴上即可添加为片段。在片段轨上拖动片段调整顺序，然后点击应用。",
+  "vector3.clips.composing": "正在合成片段……",
+  "vector3.clips.compose_failed": "片段合成失败",
+  "vector3.clips.range": "入点 / 出点",
+  "vector3.clips.range_hint": "源回放的 tick，范围 0 到 %s。应用后生效。"
 }

@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import ml.mypals.vectorthree.clips.ClipsWindow;
 import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.editor.ui.windows.MainMenuBar;
 import com.moulberry.flashback.editor.ui.windows.WindowType;
@@ -32,6 +33,7 @@ public class MainMenuBarMixin {
         PropertiesWindow.renderMenuItem();
         ShapeManagerWindow.renderMenuItem();
         PrefabBasketWindow.renderMenuItem();
+        ClipsWindow.renderMenuItem();
         ImGui.endMenu();
     }
 
