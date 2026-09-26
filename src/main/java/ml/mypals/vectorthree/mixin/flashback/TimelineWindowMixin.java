@@ -1,5 +1,9 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import com.moulberry.flashback.keyframe.impl.CameraKeyframe;
+import ml.mypals.vectorthree.multiedit.MultiSelection;
+import ml.mypals.vectorthree.multiedit.MultiPropertiesPage;
+import ml.mypals.vectorthree.multiedit.GroupTransform;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import ml.mypals.vectorthree.flashback.curve.SpeedCurves;
 import ml.mypals.vectorthree.flashback.curve.SpeedCurveEditor;
@@ -135,6 +139,7 @@ public abstract class TimelineWindowMixin {
         // Gizmos draw with the see-through managers even when no shape was ever applied.
         ShapeTrackRegistry.fixSeeThroughPipelines();
         Vector3.ORBIT_GIZMO.frame();
+        Vector3.CAMERA_GIZMO.frame();
         Vector3.GIZMO_EDITOR.frame();
         vector3$handlePrefabs();
         if (ShapeManagerWindow.isEditorMode()) Vector3.EDITOR_CAMERA.frame();
@@ -216,9 +221,18 @@ public abstract class TimelineWindowMixin {
             editingKeyframeTrack = -1;
             editingKeyframeTick = -1;
         }
+        int selected = MultiSelection.count(selectedKeyframesList);
+        if (selected > 1) return PropertiesWindow.begin(true, Long.MIN_VALUE + 1 + selectedKeyframesList.hashCode(), false);
         return PropertiesWindow.begin(editingKeyframeTrack >= 0 && editingKeyframeTick >= 0,
                 ((long) editingKeyframeTrack << 32) | (editingKeyframeTick & 0xFFFFFFFFL),
                 editing != null && SpeedCurves.of(editing) != null);
+    }
+
+    @Unique
+    private static MultiPropertiesPage.Host vector3$multiHost() {
+        return new MultiPropertiesPage.Host(() -> editorScene, () -> upgradeToSceneWrite(),
+                () -> vector3$keyframesChanged(), () -> vector3$setCurves(SpeedCurve.preset(SpeedCurve.Preset.EASE_IN_OUT)),
+                () -> Vector3.GIZMO_EDITOR.controls());
     }
 
     private static Keyframe vector3$editingKeyframe() {
@@ -232,7 +246,9 @@ public abstract class TimelineWindowMixin {
             target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;renderKeyframeOptionsPopup(I)V"))
     private static void vector3$propertiesPage(int totalTicks, Operation<Void> original) {
         if (PropertiesWindow.isCurveTab()) vector3$renderCurvePage();
-        else original.call(totalTicks);
+        else if (MultiSelection.count(selectedKeyframesList) > 1) {
+            MultiPropertiesPage.render(selectedKeyframesList, editingKeyframeTrack, editingKeyframeTick, vector3$multiHost());
+        } else original.call(totalTicks);
     }
 
     // "Custom" joins the interpolation types: choosing it gives the selected keyframes a speed curve.
@@ -784,7 +800,7 @@ public abstract class TimelineWindowMixin {
     @Redirect(method = "renderInner", at = @At(value = "INVOKE",
             target = "Limgui/moulberry90/ImGui;isMouseDragging(I)Z"))
     private static boolean vector3$keepViewportDragOutOfTimeline(int button) {
-        if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging() || Vector3.PREFABS.isDragging()
+        if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging() || Vector3.CAMERA_GIZMO.isDragging() || Vector3.PREFABS.isDragging()
                 || vector3$draggedGroup != null) {
             return false;
         }
@@ -856,8 +872,38 @@ public abstract class TimelineWindowMixin {
         PropertiesWindow.requestFocus();
     }
 
+    @Unique
+    private static void vector3$selectShapeGroup() {
+        List<GroupTransform.Member> members = new ArrayList<>();
+        for (MultiSelection.Entry entry : MultiSelection.gather(editorScene, selectedKeyframesList,
+                editingKeyframeTrack, editingKeyframeTick)) {
+            if (entry.original instanceof ShapeKeyframe shape) members.add(new GroupTransform.Member(shape, entry.track, entry.tick));
+        }
+        if (members.isEmpty()) {
+            Vector3.GIZMO_EDITOR.clearSelection();
+            return;
+        }
+        Vector3.GIZMO_EDITOR.selectGroup(members, states -> {
+            upgradeToSceneWrite();
+            List<EditorSceneHistoryAction> undo = new ArrayList<>(), redo = new ArrayList<>();
+            for (Map.Entry<GroupTransform.Member, ShapeState> changed : states.entrySet()) {
+                GroupTransform.Member member = changed.getKey();
+                if (changed.getValue().equals(member.keyframe().value)) continue;
+                ShapeKeyframe replacement = (ShapeKeyframe) member.keyframe().copy();
+                replacement.value = changed.getValue();
+                undo.add(new EditorSceneHistoryAction.SetKeyframe(ShapeKeyframeType.INSTANCE, member.track(), member.tick(),
+                        member.keyframe().copy()));
+                redo.add(new EditorSceneHistoryAction.SetKeyframe(ShapeKeyframeType.INSTANCE, member.track(), member.tick(),
+                        replacement));
+            }
+            if (redo.isEmpty()) return;
+            editorScene.push(new EditorSceneHistoryEntry(undo, redo, I18n.get("vector3.history.multi_edit", redo.size())));
+            vector3$keyframesChanged();
+        });
+    }
+
     private static void vector3$syncGizmoSelection() {
-        if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging() || Vector3.PREFABS.isDragging()) {
+        if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging() || Vector3.CAMERA_GIZMO.isDragging() || Vector3.PREFABS.isDragging()) {
             return;
         }
         if (vector3$autoKeyframe != null) {
@@ -866,10 +912,17 @@ public abstract class TimelineWindowMixin {
             if (!cancelled && selectedKeyframesList.isEmpty()) return;
             vector3$autoKeyframe = null;
         }
+        if (MultiSelection.count(selectedKeyframesList) > 1) {
+            Vector3.ORBIT_GIZMO.clearSelection();
+            Vector3.CAMERA_GIZMO.clearSelection();
+            vector3$selectShapeGroup();
+            return;
+        }
         if (selectedKeyframesList.size() != 1
                 || selectedKeyframesList.getFirst().keyframeTicks().size() != 1) {
             Vector3.GIZMO_EDITOR.clearSelection();
             Vector3.ORBIT_GIZMO.clearSelection();
+            Vector3.CAMERA_GIZMO.clearSelection();
             return;
         }
         SelectedKeyframes selected = selectedKeyframesList.getFirst();
@@ -877,12 +930,14 @@ public abstract class TimelineWindowMixin {
         if (trackIndex < 0 || trackIndex >= editorScene.keyframeTracks.size()) {
             Vector3.GIZMO_EDITOR.clearSelection();
             Vector3.ORBIT_GIZMO.clearSelection();
+            Vector3.CAMERA_GIZMO.clearSelection();
             return;
         }
         int tick = selected.keyframeTicks().iterator().nextInt();
         Keyframe keyframe = editorScene.keyframeTracks.get(trackIndex).keyframesByTick.get(tick);
         if (keyframe instanceof CameraOrbitKeyframe orbitKeyframe) {
             Vector3.GIZMO_EDITOR.clearSelection();
+            Vector3.CAMERA_GIZMO.clearSelection();
             Vector3.ORBIT_GIZMO.select(orbitKeyframe, orbit -> {
                 CameraOrbitKeyframe replacement = new CameraOrbitKeyframe(new Vector3d(orbit.center()),
                         (float) orbit.distance(), (float) orbit.yaw(), (float) orbit.pitch(),
@@ -895,6 +950,21 @@ public abstract class TimelineWindowMixin {
             return;
         }
         Vector3.ORBIT_GIZMO.clearSelection();
+        if (keyframe instanceof CameraKeyframe cameraKeyframe) {
+            Vector3.GIZMO_EDITOR.clearSelection();
+            Vector3.CAMERA_GIZMO.select(cameraKeyframe, pose -> {
+                CameraKeyframe replacement = (CameraKeyframe) cameraKeyframe.copy();
+                replacement.position.set(pose.position());
+                replacement.yaw = pose.yaw();
+                replacement.pitch = pose.pitch();
+                replacement.roll = pose.roll();
+                upgradeToSceneWrite();
+                editorScene.setKeyframe(trackIndex, tick, replacement);
+                EditorStateManager.getCurrent().markDirty();
+            });
+            return;
+        }
+        Vector3.CAMERA_GIZMO.clearSelection();
         if (selected.type() != ShapeKeyframeType.INSTANCE || !(keyframe instanceof ShapeKeyframe shape)) {
             Vector3.GIZMO_EDITOR.clearSelection();
             return;

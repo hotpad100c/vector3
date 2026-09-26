@@ -2,6 +2,7 @@ package ml.mypals.vectorthree.shape;
 
 import ml.mypals.vectorthree.compat.IrisCompat;
 import com.mojang.renderpearl.api.pipeline.*;
+import ml.mypals.ryansrenderingkit.RyansRenderingKit;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManager;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManagers;
 import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
@@ -722,50 +723,24 @@ public final class ShapeTrackRegistry {
         return false;
     }
 
+    // RRK registers its own line and triangle pipelines but leaves them unmapped for Iris.
     public static void fixSeeThroughPipelines() {
         if (fixedSeeThroughPipelines || BuilderManagers.LINES_BUILDER_MANAGER == null
                 || BuilderManagers.LINE_STRIP_BUILDER_MANAGER == null
                 || BuilderManagers.TRIANGLES_BUILDER_MANAGER == null) return;
-        replacePipelines(BuilderManagers.LINES_BUILDER_MANAGER, "lines_translucent", RenderPipelines.LINES_SNIPPET);
-        replacePipelines(BuilderManagers.LINE_STRIP_BUILDER_MANAGER, "line_strip_translucent", RenderPipelines.LINES_SNIPPET);
-        replacePipelines(BuilderManagers.TRIANGLES_BUILDER_MANAGER, "triangles_translucent", RenderPipelines.DEBUG_FILLED_SNIPPET);
-        fixedSeeThroughPipelines = true;
-    }
-
-    private static void replacePipelines(BuilderManager manager, String name, RenderPipeline.Snippet snippet) {
-        RenderMethod old = manager.renderMethod;
-        RenderPipeline normalPipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
-                .withLocation(Identifier.fromNamespaceAndPath("vector3", name))
-                .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
-                .withDepthStencilState(DepthStencilState.DEFAULT)
-                .withCull(old.cullFace())
-                .withVertexBinding(0, old.format())
-                .withPrimitiveTopology(old.mode())
-                .build());
-        RenderPipeline seeThroughPipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
-                .withLocation(Identifier.fromNamespaceAndPath("vector3", name + "_see_through"))
-                .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
-
-                .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, true))
-                .withCull(old.cullFace())
-                .withVertexBinding(0, old.format())
-                .withPrimitiveTopology(old.mode())
-                .build());
-        IrisCompat.Program irisProgram = old.mode() == PrimitiveTopology.TRIANGLES
-                ? IrisCompat.Program.PARTICLES_TRANSLUCENT : IrisCompat.Program.LINES;
-        IrisCompat.assignPipeline(normalPipeline, irisProgram);
-        IrisCompat.assignPipeline(seeThroughPipeline, irisProgram);
-
-        RenderSetup.RenderSetupBuilder normalSetup = RenderSetup.builder(normalPipeline);
-        RenderSetup.RenderSetupBuilder seeThroughSetup = RenderSetup.builder(seeThroughPipeline);
-        if (old.mode() == com.mojang.renderpearl.api.pipeline.PrimitiveTopology.TRIANGLES) {
-            normalSetup.sortOnUpload();
-            seeThroughSetup.sortOnUpload();
+        for (BuilderManager manager : new BuilderManager[]{BuilderManagers.LINES_BUILDER_MANAGER,
+                BuilderManagers.LINE_STRIP_BUILDER_MANAGER, BuilderManagers.TRIANGLES_BUILDER_MANAGER}) {
+            RenderMethod method = manager.renderMethod;
+            IrisCompat.Program program = method.mode() == PrimitiveTopology.TRIANGLES
+                    ? IrisCompat.Program.PARTICLES_TRANSLUCENT : IrisCompat.Program.LINES;
+            for (RenderType type : new RenderType[]{method.seeThroughType(), method.normalRenderType()}) {
+                RenderPipeline pipeline = type.pipeline();
+                if (pipeline.getLocation().getNamespace().equals(RyansRenderingKit.MOD_ID)) {
+                    IrisCompat.assignPipeline(pipeline, program);
+                }
+            }
         }
-        RenderType normal = RenderType.create(name, normalSetup.createRenderSetup());
-        RenderType seeThrough = RenderType.create(name + "_see_through", seeThroughSetup.createRenderSetup());
-        manager.renderMethod = new RenderMethod(seeThrough, normal,
-                old.mode(), old.format(), old.cullFace());
+        fixedSeeThroughPipelines = true;
     }
 
     private static RenderPipeline imagePipeline;

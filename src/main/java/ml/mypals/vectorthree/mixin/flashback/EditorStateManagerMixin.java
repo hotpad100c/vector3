@@ -14,6 +14,7 @@ public class EditorStateManagerMixin {
     private static void vector3$clearOnReplayClosed(CallbackInfo ci) {
         Vector3.GIZMO_EDITOR.clear();
         Vector3.ORBIT_GIZMO.clear();
+        Vector3.CAMERA_GIZMO.clear();
         Vector3.PREFABS.clear();
         Vector3.EDITOR_CAMERA.reset();
         ShapeTrackRegistry.clear();

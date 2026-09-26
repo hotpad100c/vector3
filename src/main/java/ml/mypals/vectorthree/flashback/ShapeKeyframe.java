@@ -3,6 +3,7 @@ package ml.mypals.vectorthree.flashback;
 import java.util.UUID;
 import com.moulberry.flashback.editor.ui.ImGuiHelper;
 import com.moulberry.flashback.combo_options.TrackingBodyPart;
+import ml.mypals.vectorthree.multiedit.MultiEditSession;
 import ml.mypals.vectorthree.shape.ShapeMount;
 import ml.mypals.vectorthree.shape.ShapeReparent;
 import com.moulberry.flashback.keyframe.Keyframe;
@@ -54,7 +55,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
     public void renderEditKeyframe(Consumer<Consumer<Keyframe>> update) {
         super.renderEditKeyframe(update);
         ShapeTrackEditor current = editor;
-        if (current != null) {
+        if (current != null && !MultiEditSession.active()) {
             current.edit(this, typed -> update.accept(keyframe -> typed.accept((ShapeKeyframe) keyframe)));
         }
     }
@@ -65,8 +66,10 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         String[] selectedId = {state.shapeId()};
         ShapeTrackRegistry.Definition selectedDefinition = ShapeTrackRegistry.definition(selectedType[0]);
         boolean changed = false;
+        // Several keyframes share one editor: who they are and their geometry points stay per keyframe.
+        boolean multi = MultiEditSession.active();
         ImGui.setNextItemWidth(240);
-        if (selectedDefinition != null && ImGui.beginCombo(I18n.get("vector3.keyframe.shape"), VectorIcons.withShapeIcon(selectedDefinition.id(), I18n.get(selectedDefinition.name())))) {
+        if (!multi && selectedDefinition != null && ImGui.beginCombo(I18n.get("vector3.keyframe.shape"), VectorIcons.withShapeIcon(selectedDefinition.id(), I18n.get(selectedDefinition.name())))) {
             for (ShapeTrackRegistry.Definition definition : ShapeTrackRegistry.definitions()) {
                 if (ImGui.selectable(VectorIcons.withShapeIcon(definition.id(), I18n.get(definition.name())), definition.id().equals(selectedType[0]))) {
                     selectedType[0] = definition.id();
@@ -78,7 +81,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
 
         ShapeTrackRegistry.previewHighlight(null);
         ImGui.setNextItemWidth(360);
-        if (ImGui.beginCombo(I18n.get("vector3.keyframe.shape_uuid"), ShapeTrackRegistry.displayName(selectedId[0]))) {
+        if (!multi && ImGui.beginCombo(I18n.get("vector3.keyframe.shape_uuid"), ShapeTrackRegistry.displayName(selectedId[0]))) {
             for (String shapeId : ShapeTrackRegistry.shapeIds()) {
                 if (ImGui.selectable(ShapeTrackRegistry.displayName(shapeId), shapeId.equals(selectedId[0]))) {
                     selectedId[0] = shapeId;
@@ -92,7 +95,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         }
 
         ImString nameField = new ImString(state.name() == null ? "" : state.name(), 256);
-        changed |= ImGui.inputText(I18n.get("vector3.keyframe.name"), nameField);
+        if (!multi) changed |= ImGui.inputText(I18n.get("vector3.keyframe.name"), nameField);
 
         float[] position = {(float) state.x(), (float) state.y(), (float) state.z()};
         float[] rotation = {state.pitch(), state.yaw(), state.roll()};
@@ -101,7 +104,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         String[] parentId = {state.parentShapeId() == null ? "" : state.parentShapeId()};
         ShapeMount[] mount = {state.mount()};
         ImGui.setNextItemWidth(360);
-        if (ImGui.beginCombo(I18n.get("vector3.keyframe.parent_shape_uuid"),
+        if (!multi && ImGui.beginCombo(I18n.get("vector3.keyframe.parent_shape_uuid"),
                 parentId[0].isEmpty() ? I18n.get("vector3.keyframe.none") : ShapeTrackRegistry.displayName(parentId[0]))) {
             if (ImGui.selectable(I18n.get("vector3.keyframe.none"), parentId[0].isEmpty())) {
                 ShapeTrackRegistry.convertToNewParent(state, "", position, rotation, scale);
@@ -121,7 +124,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
             }
             ImGui.endCombo();
         }
-        String droppedParent = Eyedropper.shape("parent");
+        String droppedParent = multi ? null : Eyedropper.shape("parent");
         if (droppedParent != null && !droppedParent.equals(parentId[0])
                 && ShapeReparent.canParent(selectedId[0], droppedParent)) {
             ShapeTrackRegistry.convertToNewParent(state, droppedParent, position, rotation, scale);
@@ -133,13 +136,13 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         // A shape either has a parent shape or rides an entity; picking one clears the other.
         ImGui.setNextItemWidth(360);
         UUID mountEntity = mount[0] == null ? null : mount[0].entity();
-        UUID pickedMount = EntityPicker.combo(I18n.get("vector3.keyframe.mount_entity"), mountEntity);
+        UUID pickedMount = multi ? null : EntityPicker.combo(I18n.get("vector3.keyframe.mount_entity"), mountEntity);
         ShapeMount nextMount = mount[0];
         if (pickedMount != null && !pickedMount.equals(mountEntity)) {
             nextMount = mount[0] == null ? new ShapeMount(pickedMount, TrackingBodyPart.ROOT, true)
                     : new ShapeMount(pickedMount, mount[0].part(), mount[0].followRotation());
         }
-        if (mount[0] != null) {
+        if (mount[0] != null && !multi) {
             TrackingBodyPart part = ImGuiHelper.enumCombo(I18n.get("flashback.body_part"), mount[0].part());
             if (part != mount[0].part()) nextMount = nextMount.withPart(part);
             ImBoolean followRotation = new ImBoolean(mount[0].followRotation());
@@ -266,15 +269,17 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
             }
             case "line", "arrow" -> {
                 while (points.size() < 2) points.add(new ShapePoint(0, 0, 0));
-                changed |= editPoint(I18n.get("vector3.keyframe.start"), points, 0);
-                changed |= editPoint(I18n.get("vector3.keyframe.end"), points, 1);
+                if (!multi) {
+                    changed |= editPoint(I18n.get("vector3.keyframe.start"), points, 0);
+                    changed |= editPoint(I18n.get("vector3.keyframe.end"), points, 1);
+                }
                 changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.line_width"), width, 0.01f, 0.001f, 100.0f);
                 if (selectedType[0].equals("arrow"))
                     changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.head_size"), size, 0.01f, 0.01f, 100.0f);
             }
             case "line_strip" -> {
                 while (points.size() < 2) points.add(new ShapePoint(points.size(), points.size(), points.size()));
-                for (int i = 0; i < points.size(); i++) {
+                for (int i = 0; !multi && i < points.size(); i++) {
                     changed |= editPoint(I18n.get("vector3.keyframe.point", i + 1), points, i);
                     ImGui.sameLine();
                     if (ImGui.button(I18n.get("vector3.keyframe.remove") + "##point" + i) && points.size() > 2) {
@@ -282,7 +287,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                         changed = true;
                     }
                 }
-                if (ImGui.button(I18n.get("vector3.keyframe.add_point"))) {
+                if (!multi && ImGui.button(I18n.get("vector3.keyframe.add_point"))) {
                     points.add(points.isEmpty() ? new ShapePoint(0, 0, 0) : points.getLast());
                     changed = true;
                 }
@@ -356,9 +361,11 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 while (points.size() < 2) {
                     points.add(new ShapePoint(Math.round(state.x() - 0.5), Math.round(state.y() - 0.5), Math.round(state.z() - 0.5)));
                 }
-                changed |= editAreaPoint(I18n.get("vector3.keyframe.corner_1"), points, 0);
-                changed |= editAreaPoint(I18n.get("vector3.keyframe.corner_2"), points, 1);
-                if (ImGui.button(I18n.get("vector3.keyframe.center"))) {
+                if (!multi) {
+                    changed |= editAreaPoint(I18n.get("vector3.keyframe.corner_1"), points, 0);
+                    changed |= editAreaPoint(I18n.get("vector3.keyframe.corner_2"), points, 1);
+                }
+                if (!multi && ImGui.button(I18n.get("vector3.keyframe.center"))) {
                     ShapePoint corner1 = points.get(0), corner2 = points.get(1);
                     position[0] = (float) ((corner1.x() + corner2.x()) / 2.0);
                     position[1] = (float) ((corner1.y() + corner2.y()) / 2.0);
@@ -366,8 +373,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                     changed = true;
                 }
                 if (ShapeTrackRegistry.shape(state.shapeId()) instanceof AreaShape area) {
-                    ImGui.text(I18n.get("vector3.keyframe.baked_blocks", area.blockCount()));
-                } else {
+                    if (!multi) ImGui.text(I18n.get("vector3.keyframe.baked_blocks", area.blockCount()));
+                } else if (!multi) {
                     ImGui.text(I18n.get("vector3.keyframe.baked_blocks_pending"));
                 }
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), outline);

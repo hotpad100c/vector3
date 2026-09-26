@@ -62,6 +62,7 @@
 		"flashback.TimelineWindowMixin",
 		"flashback.TrackEntityPickerMixin",
 		"flashback.TrackEntityPopupPickerMixin",
+		"multiedit.ImGuiMultiEditMixin",
 		"iris.BufferedVertexBuilderIrisBypassMixin",
 		"iris.BuiltInShapeIrisBypassMixin",
 		"iris.BuilderManagerIrisBypassMixin",

@@ -23,12 +23,14 @@ import net.minecraft.resources.Identifier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ml.mypals.vectorthree.camera.CameraGizmoEditor;
 import org.spongepowered.asm.mixin.Unique;
 
 public class Vector3 implements ClientModInitializer {
 	public static final String MOD_ID = "vector3";
 	public static final ShapeGizmoEditor GIZMO_EDITOR = new ShapeGizmoEditor();
 	public static final OrbitGizmoEditor ORBIT_GIZMO = new OrbitGizmoEditor();
+	public static final CameraGizmoEditor CAMERA_GIZMO = new CameraGizmoEditor();
 	public static final PrefabPlacement PREFABS = new PrefabPlacement();
 	public static final EditorCameraController EDITOR_CAMERA = new EditorCameraController();
 
@@ -49,6 +51,7 @@ public class Vector3 implements ClientModInitializer {
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			GIZMO_EDITOR.clear();
 			ORBIT_GIZMO.clear();
+			CAMERA_GIZMO.clear();
 			PREFABS.clear();
 			EDITOR_CAMERA.reset();
 			ShapeTrackRegistry.clear();

@@ -214,5 +214,9 @@
   "vector3.shake.preset.impact": "Impact",
   "vector3.file.browse": "Browse...",
   "vector3.file.image_filter": "Images",
-  "vector3.file.video_filter": "Videos"
+  "vector3.file.video_filter": "Videos",
+  "vector3.multi.locked": "Values differ. Hold Ctrl to unlock and set them all.",
+  "vector3.multi.selected": "%s keyframes selected",
+  "vector3.multi.shapes": "Shapes",
+  "vector3.history.multi_edit": "Edit %s keyframes"
 }

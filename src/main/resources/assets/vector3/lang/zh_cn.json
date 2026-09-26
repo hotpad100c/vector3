@@ -214,5 +214,9 @@
   "vector3.shake.preset.impact": "冲击",
   "vector3.file.browse": "浏览…",
   "vector3.file.image_filter": "图片",
-  "vector3.file.video_filter": "视频"
+  "vector3.file.video_filter": "视频",
+  "vector3.multi.locked": "各项的值不同。按住 Ctrl 解锁，即可统一修改。",
+  "vector3.multi.selected": "已选中 %s 个关键帧",
+  "vector3.multi.shapes": "图形",
+  "vector3.history.multi_edit": "修改 %s 个关键帧"
 }

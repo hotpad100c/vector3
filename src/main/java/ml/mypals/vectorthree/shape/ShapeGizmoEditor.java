@@ -1,5 +1,11 @@
 package ml.mypals.vectorthree.shape;
 
+import java.util.function.UnaryOperator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
+import ml.mypals.vectorthree.multiedit.GroupTransform;
 import ml.mypals.vectorthree.camera.ViewportPick;
 import ml.mypals.vectorthree.mixin.flashback.ReplayUIAccessor;
 import com.moulberry.flashback.editor.ui.ReplayUI;
@@ -80,11 +86,19 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private BoxWireframeShape aabbBox;
     private ObjModelShape centerPoint;
     private BoxWireframeShape areaSelectionBox;
+    private List<GroupTransform.Member> group = List.of();
+    private Consumer<Map<GroupTransform.Member, ShapeState>> groupCommit = states -> {};
+    private Map<GroupTransform.Member, ShapeState> groupStart;
+    private Map<GroupTransform.Member, ShapeState> groupPreview;
+    private final List<BoxWireframeShape> groupMarkers = new ArrayList<>();
 
     @Override
     public void edit(ShapeKeyframe keyframe, Consumer<Consumer<ShapeKeyframe>> update) {
         select(keyframe, replacement -> update.accept(changed -> changed.value = replacement));
+        controls();
+    }
 
+    public void controls() {
         ImGui.text(I18n.get("vector3.gizmo.viewport_gizmo"));
         setModeButton(I18n.get("vector3.gizmo.move"), Mode.MOVE); ImGui.sameLine();
         setModeButton(I18n.get("vector3.gizmo.rotate"), Mode.ROTATE); ImGui.sameLine();
@@ -105,7 +119,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         }
 
         if (dragging != null && !ImGui.isMouseDown(1)) {
-            if (previewState != null) commit.accept(previewState);
+            if (groupPreview != null) groupCommit.accept(groupPreview);
+            else if (previewState != null) commit.accept(previewState);
+            groupPreview = null;
             previewState = null;
             dragging = null;
             updateColors();
@@ -127,6 +143,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             updateHandles(state);
             updateAabbMarker(state);
             updateAreaSelectionMarker(state);
+            updateGroupMarkers();
         }
 
         if (dragging == null) {
@@ -134,7 +151,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             if (ImGui.isMouseClicked(1) && hovered != null) {
                 ReplayUI.imguiWindower.ungrab();
                 beginDrag(hovered, state, ray, camera);
-            } else if (ImGui.isMouseClicked(1) && inViewport && !Vector3.ORBIT_GIZMO.isHovering() && !Vector3.PREFABS.isHovering()) {
+            } else if (ImGui.isMouseClicked(1) && inViewport && !Vector3.ORBIT_GIZMO.isHovering()
+                    && !Vector3.CAMERA_GIZMO.isHovering() && !Vector3.PREFABS.isHovering()) {
                 String shapeId = ShapeTrackRegistry.pickShape(ray);
                 if (shapeId != null) ShapeTimelineSelection.request(shapeId);
             }
@@ -142,7 +160,13 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
         if (dragging == null && keyframe != null && inViewport && ImGui.isMouseClicked(2)) {
             Vec3 target = placementTarget(ray);
-            if (target != null) {
+            if (target != null && grouped()) {
+                Vec3 delta = target.subtract(groupPivot());
+                Map<GroupTransform.Member, ShapeState> placed = transformGroup(currentGroupStates(),
+                        start -> GroupTransform.move(start, delta));
+                previewGroup(placed);
+                groupCommit.accept(placed);
+            } else if (target != null) {
                 ShapeState moved = withPosition(state, target);
                 ShapeTrackRegistry.apply(moved);
                 commit.accept(moved);
@@ -152,7 +176,20 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             }
         }
 
-        if (dragging != null && ImGui.isMouseDown(1)) {
+        if (dragging != null && ImGui.isMouseDown(1) && grouped() && mode != Mode.GEOMETRY) {
+            Map<GroupTransform.Member, ShapeState> replacement = dragGroup(ray);
+            if (replacement != null) {
+                groupPreview = replacement;
+                previewState = replacement.get(group.getFirst());
+                previewGroup(replacement);
+                if (previewState != null) {
+                    updateHandles(previewState);
+                    updateAabbMarker(previewState);
+                    updateAreaSelectionMarker(previewState);
+                }
+                updateGroupMarkers();
+            }
+        } else if (dragging != null && ImGui.isMouseDown(1)) {
             ShapeState replacement = drag(ray, camera);
             if (replacement != null) {
                 previewState = replacement;
@@ -179,6 +216,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     public void select(ShapeKeyframe keyframe, Consumer<ShapeState> commit) {
         this.commit = commit;
+        if (!group.isEmpty() && !isDragging()) setGroup(List.of());
         if (this.keyframe == keyframe) return;
         this.keyframe = keyframe;
         previewState = null;
@@ -187,6 +225,157 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         updateHandles(keyframe.value);
         updateAabbMarker(keyframe.value);
         updateAreaSelectionMarker(keyframe.value);
+    }
+
+    /** Several shape keyframes edited together; the first member is the one the handles belong to. */
+    public void selectGroup(List<GroupTransform.Member> members, Consumer<Map<GroupTransform.Member, ShapeState>> commit) {
+        if (isDragging() || members.isEmpty()) return;
+        groupCommit = commit;
+        ShapeKeyframe primary = members.getFirst().keyframe();
+        if (keyframe != primary) {
+            this.commit = state -> {};
+            keyframe = primary;
+            previewState = null;
+            rebuild(primary.value);
+        }
+        if (!sameMembers(members)) setGroup(members);
+        updateHandles(primary.value);
+        updateAabbMarker(primary.value);
+        updateAreaSelectionMarker(primary.value);
+    }
+
+    private boolean sameMembers(List<GroupTransform.Member> members) {
+        if (members.size() != group.size()) return false;
+        for (int i = 0; i < members.size(); i++) {
+            if (members.get(i).keyframe() != group.get(i).keyframe()) return false;
+        }
+        return true;
+    }
+
+    private void setGroup(List<GroupTransform.Member> members) {
+        group = List.copyOf(members);
+        groupPreview = null;
+        removeGroupMarkers();
+    }
+
+    private boolean grouped() {
+        return group.size() > 1;
+    }
+
+    private Map<GroupTransform.Member, ShapeState> currentGroupStates() {
+        Map<GroupTransform.Member, ShapeState> states = new LinkedHashMap<>();
+        for (GroupTransform.Member member : group) {
+            ShapeState preview = groupPreview == null ? null : groupPreview.get(member);
+            states.put(member, preview == null ? member.keyframe().value : preview);
+        }
+        return states;
+    }
+
+    private Set<String> groupShapeIds() {
+        Set<String> ids = new HashSet<>();
+        for (GroupTransform.Member member : group) ids.add(member.keyframe().value.shapeId());
+        return ids;
+    }
+
+    private Vec3 groupPivot() {
+        Map<GroupTransform.Member, ShapeState> states = currentGroupStates();
+        if (localSpace) return center(states.get(group.getFirst()));
+        Set<String> ids = groupShapeIds();
+        List<ShapeState> movers = states.values().stream().filter(state -> !GroupTransform.followsSelected(state, ids)).toList();
+        return GroupTransform.pivot(movers.isEmpty() ? states.values() : movers);
+    }
+
+    private Map<GroupTransform.Member, ShapeState> transformGroup(Map<GroupTransform.Member, ShapeState> starts,
+            UnaryOperator<ShapeState> transform) {
+        Set<String> ids = groupShapeIds();
+        Map<GroupTransform.Member, ShapeState> result = new LinkedHashMap<>();
+        for (Map.Entry<GroupTransform.Member, ShapeState> entry : starts.entrySet()) {
+            ShapeState start = entry.getValue();
+            result.put(entry.getKey(), GroupTransform.followsSelected(start, ids) ? start : transform.apply(start));
+        }
+        return result;
+    }
+
+    // One shape can be selected at several ticks; the live preview shows the keyframe nearest the playhead.
+    private void previewGroup(Map<GroupTransform.Member, ShapeState> states) {
+        int cursor = TimelineWindow.getCursorTick();
+        Map<String, GroupTransform.Member> nearest = new HashMap<>();
+        for (GroupTransform.Member member : states.keySet()) {
+            String id = member.keyframe().value.shapeId();
+            GroupTransform.Member best = nearest.get(id);
+            if (best == null || Math.abs(member.tick() - cursor) < Math.abs(best.tick() - cursor)) nearest.put(id, member);
+        }
+        for (GroupTransform.Member member : nearest.values()) ShapeTrackRegistry.apply(states.get(member));
+    }
+
+    private Map<GroupTransform.Member, ShapeState> dragGroup(RayModelIntersection.Ray ray) {
+        Map<GroupTransform.Member, ShapeState> starts = groupStart;
+        if (starts == null) return null;
+        boolean snap = InputHelper.isCtrlDownRaw();
+        int axis = index(dragging.axis());
+        switch (dragging.operation()) {
+            case MOVE_FREE -> {
+                Vec3 current = intersectPlane(ray, dragOrigin, dragPlaneNormal);
+                if (current == null || dragPlaneStart == null) return null;
+                Vec3 delta = current.subtract(dragPlaneStart);
+                Vec3 moved = snap ? new Vec3(Math.round(delta.x / GRID_STEP) * GRID_STEP,
+                        Math.round(delta.y / GRID_STEP) * GRID_STEP, Math.round(delta.z / GRID_STEP) * GRID_STEP) : delta;
+                return transformGroup(starts, start -> GroupTransform.move(start, moved));
+            }
+            case MOVE_AXIS -> {
+                double delta = axisParameter(ray, dragOrigin, dragAxis) - dragParameter;
+                double distance = snap ? Math.round(delta / GRID_STEP) * GRID_STEP : delta;
+                return transformGroup(starts, start -> GroupTransform.move(start, dragAxis.scale(distance)));
+            }
+            case ROTATE -> {
+                Vec3 point = intersectPlane(ray, dragOrigin, dragAxis);
+                if (point == null) return null;
+                double degrees = Math.toDegrees(wrapAngle(angleOnPlane(point.subtract(dragOrigin), dragAxis) - dragAngle));
+                double turned = snap ? Math.round(degrees / ANGLE_STEP) * ANGLE_STEP : degrees;
+                return transformGroup(starts, start -> GroupTransform.rotate(start, dragOrigin, dragAxis, axis, turned, localSpace));
+            }
+            case SCALE_AXIS, SCALE_UNIFORM -> {
+                double delta = axisParameter(ray, dragOrigin, dragAxis) - dragParameter;
+                double factor = Math.max(0.001, 1 + delta / Math.max(0.05, gizmoScale(dragOrigin) * 3));
+                double scaled = snap ? Math.max(0.1, Math.round(factor * 10) / 10.0) : factor;
+                Vec3 worldAxis = dragging.operation() == Operation.SCALE_AXIS ? dragAxis : null;
+                return transformGroup(starts, start -> GroupTransform.scale(start, dragOrigin, worldAxis, axis, scaled, localSpace));
+            }
+            default -> {
+                return null;
+            }
+        }
+    }
+
+    private void updateGroupMarkers() {
+        if (!grouped()) {
+            removeGroupMarkers();
+            return;
+        }
+        Map<GroupTransform.Member, ShapeState> states = currentGroupStates();
+        int index = 0;
+        for (GroupTransform.Member member : group) {
+            if (member == group.getFirst()) continue;
+            if (groupMarkers.size() <= index) {
+                BoxWireframeShape marker = ShapeGenerator.generateBoxWireframe()
+                        .aabb(Vec3.ZERO, new Vec3(1, 1, 1))
+                        .edgeWidth(AABB_EDGE_WIDTH)
+                        .color(AABB_COLOR)
+                        .seeThrough(true)
+                        .build(Shape.RenderingType.BATCH);
+                ShapeManagers.addShape(Vector3.id("gizmo_group/" + session + "/" + index), marker);
+                groupMarkers.add(marker);
+            }
+            placeAabb(groupMarkers.get(index++), states.get(member));
+        }
+    }
+
+    private void removeGroupMarkers() {
+        for (int i = 0; i < groupMarkers.size(); i++) {
+            groupMarkers.get(i).discard();
+            ShapeManagers.removeShapes(Vector3.id("gizmo_group/" + session + "/" + i));
+        }
+        groupMarkers.clear();
     }
 
     public void clearSelection() {
@@ -200,6 +389,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         ShapeManagers.removeShapes(Vector3.id("gizmo/" + session));
         removeAabbMarker();
         removeAreaSelectionMarker();
+        removeGroupMarkers();
+        group = List.of();
+        groupPreview = null;
+        groupStart = null;
         keyframe = null;
         hovered = null;
         dragging = null;
@@ -325,7 +518,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private void updateHandles(ShapeState state) {
-        Vec3 center = center(state);
+        Vec3 center = grouped() && mode != Mode.GEOMETRY ? groupPivot() : center(state);
         double scale = gizmoScale(center);
         for (Handle handle : handles) {
             Vec3 position = handlePosition(state, handle);
@@ -342,6 +535,14 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private void updateAabbMarker(ShapeState state) {
+        ensureAabbMarker();
+        Vec3 markerCenter = placeAabb(aabbBox, state);
+        double scale = gizmoScale(markerCenter) * CENTER_POINT_GIZMO_SCALE;
+        centerPoint.forceSetWorldPosition(markerCenter);
+        centerPoint.forceSetWorldScale(new Vec3(scale, scale, scale));
+    }
+
+    private Vec3 placeAabb(BoxWireframeShape box, ShapeState state) {
         Shape target = ShapeTrackRegistry.shape(state.shapeId());
         List<Vec3> vertices = target == null ? null : target.getModel(false);
         Vec3 origin = center(state);
@@ -363,14 +564,11 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         Vec3 markerCenter = origin.add(worldOffset.x, worldOffset.y, worldOffset.z);
         Vec3 halfSize = new Vec3(new Vector3f(max).sub(min).mul(0.5f));
 
-        ensureAabbMarker();
-        aabbBox.forceSetCorners(markerCenter.subtract(halfSize), markerCenter.add(halfSize));
+        box.forceSetCorners(markerCenter.subtract(halfSize), markerCenter.add(halfSize));
         Vector3f euler = orientation.getEulerAnglesXYZ(new Vector3f());
-        aabbBox.forceSetWorldRotation(new Vector3f((float) Math.toDegrees(euler.x),
+        box.forceSetWorldRotation(new Vector3f((float) Math.toDegrees(euler.x),
                 (float) Math.toDegrees(euler.y), (float) Math.toDegrees(euler.z)));
-        double scale = gizmoScale(markerCenter) * CENTER_POINT_GIZMO_SCALE;
-        centerPoint.forceSetWorldPosition(markerCenter);
-        centerPoint.forceSetWorldScale(new Vec3(scale, scale, scale));
+        return markerCenter;
     }
 
     private void ensureAabbMarker() {
@@ -450,7 +648,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             Axis radial = handle.axis();
             return center.add(localAxis(state, radial).scale(state.sizeX() * scale(state, radial) / 2));
         }
-        return center;
+        return grouped() && mode != Mode.GEOMETRY ? groupPivot() : center;
     }
 
     private Vector3f handleRotation(ShapeState state, Handle handle) {
@@ -507,7 +705,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private void beginDrag(Handle handle, ShapeState state, RayModelIntersection.Ray ray, Camera camera) {
         dragging = handle;
         dragStart = state;
-        dragOrigin = handle.operation() == Operation.POINT ? handlePosition(state, handle) : center(state);
+        groupStart = grouped() ? currentGroupStates() : null;
+        dragOrigin = handle.operation() == Operation.POINT ? handlePosition(state, handle)
+                : grouped() && mode != Mode.GEOMETRY ? groupPivot() : center(state);
         dragAxis = handle.operation() == Operation.SCALE_UNIFORM
                 ? new Vec3(camera.leftVector()).scale(-1)
                 : handle.axis() == Axis.NONE ? Vec3.ZERO
@@ -617,7 +817,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     /** The shape's pitch/yaw/roll after turning it {@code degrees} about a world-space axis. */
-    private static float[] rotatedAbout(ShapeState state, Vec3 worldAxis, double degrees) {
+    public static float[] rotatedAbout(ShapeState state, Vec3 worldAxis, double degrees) {
         Quaternionf parent = parentWorldTransform(state).getNormalizedRotation(new Quaternionf());
         Quaternionf turned = new Quaternionf().rotateAxis((float) Math.toRadians(degrees),
                 worldAxis.toVector3f().normalize()).mul(rotation(state));
@@ -679,7 +879,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     /** {@code worldPosition} is where the shape should appear; converted to parent-local before storing. */
-    private static ShapeState withPosition(ShapeState state, Vec3 worldPosition) {
+    public static ShapeState withPosition(ShapeState state, Vec3 worldPosition) {
         Vector3f local = parentWorldTransform(state).invert().transformPosition(worldPosition.toVector3f());
         return with(state, new float[]{local.x, local.y, local.z}, null, null, null, null);
     }
@@ -703,7 +903,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         return ShapeTrackRegistry.parentTransform(state);
     }
 
-    private static Vec3 center(ShapeState state) {
+    public static Vec3 center(ShapeState state) {
         Vector3f world = parentWorldTransform(state)
                 .transformPosition(new Vector3f((float) state.x(), (float) state.y(), (float) state.z()));
         return new Vec3(world.x, world.y, world.z);
@@ -729,6 +929,18 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         Quaternionf own = new Quaternionf().rotateXYZ((float) Math.toRadians(state.pitch()),
                 (float) Math.toRadians(state.yaw()), (float) Math.toRadians(state.roll()));
         return parentWorldTransform(state).getNormalizedRotation(new Quaternionf()).mul(own);
+    }
+
+    public static ShapeState withRotation(ShapeState state, float[] rotation) {
+        return with(state, null, rotation, null, null, null);
+    }
+
+    public static ShapeState withScale(ShapeState state, float[] scale) {
+        return with(state, null, null, scale, null, null);
+    }
+
+    public static Vec3 localAxis(ShapeState state, int axis) {
+        return localAxis(state, Axis.values()[axis]);
     }
 
     private static Vec3 localAxis(ShapeState state, Axis axis) {
