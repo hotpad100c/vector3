@@ -41,14 +41,14 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 
 
-public final class AreaShape extends Shape implements EmptyMesh {
-    private final AreaGpuMesh solidMesh = new AreaGpuMesh();
-    private final AreaGpuMesh cutoutMesh = new AreaGpuMesh();
-    private final AreaTranslucentGpuMesh translucentMesh = new AreaTranslucentGpuMesh();
+public class AreaShape extends Shape implements EmptyMesh {
+    protected final AreaGpuMesh solidMesh = new AreaGpuMesh();
+    protected final AreaGpuMesh cutoutMesh = new AreaGpuMesh();
+    protected final AreaTranslucentGpuMesh translucentMesh = new AreaTranslucentGpuMesh();
     // CPU-side, not a GPU mesh — see AreaBaker.Result's javadoc for why.
     private List<AreaBaker.OutlineVertex> outlineVertices = List.of();
-    private final String shapeId;
-    private int blockCount;
+    protected final String shapeId;
+    protected int blockCount;
     private boolean outlineEnabled;
     private Vector4f outlineColor = new Vector4f(1, 1, 1, 1);
     private Vec3 localMin = new Vec3(-0.5, -0.5, -0.5);
@@ -101,6 +101,20 @@ public final class AreaShape extends Shape implements EmptyMesh {
         publishProjection();
     }
 
+    protected Vec3 sourceCenter() {
+        return sourceCenter;
+    }
+
+    /** Source-region world coordinates to destination world coordinates. */
+    protected Matrix4d destTransform() {
+        return new Matrix4d(destTransform);
+    }
+
+    /** What the meshes' coordinates are relative to, in source-region world coordinates. */
+    protected Matrix4d meshToSource() {
+        return new Matrix4d();
+    }
+
     private void updateDestTransform() {
         destTransform.set(parentTransform).mul(localTransform).translate(-sourceCenter.x, -sourceCenter.y, -sourceCenter.z);
     }
@@ -139,7 +153,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
     private Boolean bakedExtended;
 
-    private static boolean irisExtendsNow() {
+    protected static boolean irisExtendsNow() {
         return IrisCompat.isPackInUse() && IrisCompat.isRenderingLevel() && !IrisCompat.skipExtension();
     }
 
@@ -149,18 +163,32 @@ public final class AreaShape extends Shape implements EmptyMesh {
         bakedExtended = irisExtendsNow();
         drawFailed = false;
         blockEntityDrawFailed = false;
-        AreaBaker.Result result = new AreaBaker().bake(level, bakedMin, bakedMax);
+        bakeContent(level, bakedMin, bakedMax);
+        AreaSuppression.set(shapeId, bakedMin, bakedMax);
+    }
+
+    protected void bakeContent(ClientLevel level, BlockPos min, BlockPos max) {
+        AreaBaker.Result result = new AreaBaker().bake(level, min, max);
         solidMesh.upload(result.solidMesh());
         cutoutMesh.upload(result.cutoutMesh());
         translucentMesh.upload(result.translucentMesh());
         outlineVertices = result.outlineVertices();
         blockCount = result.blockCount();
         blockEntities = result.blockEntities();
-        AreaSuppression.set(shapeId, bakedMin, bakedMax);
+    }
+
+    /** Once per level frame, drawn or not: a subclass keeps its editor overlays up to date here. */
+    protected void editorFrame() {}
+
+    /** Runs before each draw is prepared; a subclass may rebuild its meshes here. */
+    protected void beforePrepare() {}
+
+    protected boolean forceTranslucent() {
+        return false;
     }
 
     private Matrix4f destinationModel(Vec3 cameraPos) {
-        return new Matrix4f(new Matrix4d().translation(-cameraPos.x, -cameraPos.y, -cameraPos.z).mul(destTransform));
+        return new Matrix4f(new Matrix4d().translation(-cameraPos.x, -cameraPos.y, -cameraPos.z).mul(destTransform).mul(meshToSource()));
     }
 
     @Override
@@ -195,11 +223,12 @@ public final class AreaShape extends Shape implements EmptyMesh {
             rebakeRegion();
         }
         if (baseColor.getAlpha() == 0) return;
-        Matrix4f model = ScreenLayer.origin().mul(new Matrix4f(destTransform));
+        beforePrepare();
+        Matrix4f model = ScreenLayer.origin().mul(new Matrix4f(new Matrix4d(destTransform).mul(meshToSource())));
         if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
             drawSafely(() -> {
                 // No fog on the UI layer: a zero fog transform puts every vertex at distance 0.
-                prepareMesh(model, new Matrix4f().zero(), true);
+                prepareMesh(model, new Matrix4f().zero(), !IrisCompat.isPackInUse());
                 RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
                 try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                         () -> "vector3_area_screen", target.getColorTextureView(), Optional.empty(),
@@ -228,11 +257,13 @@ public final class AreaShape extends Shape implements EmptyMesh {
     }
 
     public void submitFrame(SubmitNodeCollector collector, CameraRenderState camera) {
+        editorFrame();
         if (!enabled() || screen) return;
         if (AreaSuppression.consumeDirty(shapeId) || (bakedExtended != null && bakedExtended != irisExtendsNow())) {
             rebakeRegion();
         }
         if (baseColor.getAlpha() == 0) return;
+        beforePrepare();
         Matrix4f model = destinationModel(camera.pos);
         if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
             try {
@@ -274,15 +305,16 @@ public final class AreaShape extends Shape implements EmptyMesh {
         });
     }
 
+    // Only core/area_block reads fogModel from TextureMat; every other program (Iris's too) takes it as the UV transform.
     private void prepareMesh(Matrix4f model, Matrix4f fogModel, boolean ownShader) {
         Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrixCopy()).mul(model);
         Vector4f colorModulator = colorToVector4f(baseColor);
-        frameTranslucent = colorModulator.w() < 1.0f;
+        frameTranslucent = colorModulator.w() < 1.0f || forceTranslucent();
         if (!translucentMesh.isEmpty()) {
             translucentMesh.resort(new Matrix4f(model).invert().transformPosition(new Vector3f()));
         }
         GpuBufferSlice transform = RenderSystem.getDynamicUniforms().writeTransform(
-                modelView, colorModulator, new Vector3f(), fogModel);
+                modelView, colorModulator, new Vector3f(), ownShader ? fogModel : new Matrix4f());
         RenderType translucent = AreaRenderType.get(ownShader);
         frameSolid = solidMesh.isEmpty() ? null
                 : withTransform(frameTranslucent ? translucent : AreaRenderType.getSolid(ownShader), transform);

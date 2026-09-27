@@ -109,7 +109,7 @@ public final class ShapeKeyframeType extends CustomKeyframeType<ShapeState> {
                 state.videoStartTick(), state.playAudio(),
                 state.manualPlayback(), state.noLoop(), state.playbackSeconds(), state.name(), state.wireframe(),
                 state.areaOptions(), state.bypassShaders(), state.mount() == null ? null : state.mount().sanitized(),
-                state.particle(), state.screen());
+                state.particle(), state.screen(), state.blast());
     }
 
     /** Picks the shape type first; the full editor is only shown once the shape exists. */
@@ -148,7 +148,7 @@ public final class ShapeKeyframeType extends CustomKeyframeType<ShapeState> {
         double x = cameraPosition.x + forward.x();
         double y = cameraPosition.y + forward.y();
         double z = cameraPosition.z + forward.z();
-        if (shapeType.equals("area")) {
+        if (shapeType.equals("area") || shapeType.equals("blast")) {
             x = Math.floor(x) + 0.5;
             y = Math.floor(y) + 0.5;
             z = Math.floor(z) + 0.5;

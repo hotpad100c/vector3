@@ -16,6 +16,9 @@ import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.flashback.pose.ModelPartCombo;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.shape.particle.ParticleEditor;
+import ml.mypals.vectorthree.shape.area.BlastShape;
+import ml.mypals.vectorthree.shape.blast.BlastEditor;
+import ml.mypals.vectorthree.shape.blast.BlastSettings;
 import ml.mypals.vectorthree.shape.entity.ShapeEntities;
 import ml.mypals.vectorthree.shape.particle.ParticleSettings;
 import ml.mypals.vectorthree.text.SdfFont;
@@ -199,6 +202,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         float[] width = {state.lineWidth()};
         boolean[] projectWorld = {state.shapeType().equals("entity") && ShapeEntities.projectsWorldEntity(state)};
         UUID[] projectedEntity = {state.shapeType().equals("entity") ? ShapeEntities.source(state) : null};
+        BlastSettings[] blast = {state.shapeType().equals("blast")
+                ? BlastSettings.orDefault(state.blast()) : BlastSettings.DEFAULT};
         ParticleSettings[] particle = {state.shapeType().equals("particle")
                 ? ParticleSettings.orDefault(state.particle()) : ParticleSettings.DEFAULT};
         float[] color = {
@@ -415,7 +420,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.play_audio"), playAudio);
             }
             case "particle" -> changed |= ParticleEditor.edit(content, particle, width, size);
-            case "area" -> {
+            case "area", "blast" -> {
                 while (points.size() < 2) {
                     points.add(new ShapePoint(Math.round(state.x() - 0.5), Math.round(state.y() - 0.5), Math.round(state.z() - 0.5)));
                 }
@@ -435,10 +440,16 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 } else if (!multi) {
                     ImGui.text(I18n.get("vector3.keyframe.baked_blocks_pending"));
                 }
-                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), outline);
-                if (outline.get()) changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.outline_color"), outlineColor);
-                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.project_entities"), projectEntities);
-                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.project_particles"), projectParticles);
+                if (selectedType[0].equals("blast")) {
+                    while (points.size() < BlastShape.FIRST_PATH_POINT) points.add(new ShapePoint(0, 0, 0));
+                    boolean truncated = ShapeTrackRegistry.shape(state.shapeId()) instanceof BlastShape blastShape && blastShape.truncated();
+                    changed |= BlastEditor.edit(blast, points, multi, truncated);
+                } else {
+                    changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), outline);
+                    if (outline.get()) changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.outline_color"), outlineColor);
+                    changed |= ImGui.checkbox(I18n.get("vector3.keyframe.project_entities"), projectEntities);
+                    changed |= ImGui.checkbox(I18n.get("vector3.keyframe.project_particles"), projectParticles);
+                }
             }
             case "block" -> {
                 ImGui.setNextItemWidth(360);
@@ -582,6 +593,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                                     TexturedObjShape.TEXTURE, objTexture.get()) : state.blockProperties())
                     .withParticle(selectedType[0].equals("particle") ? particle[0] : state.particle())
                     .withScreen(screen[0] && layerCapable)
+                    .withBlast(selectedType[0].equals("blast") ? blast[0] : state.blast())
                     .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick())
                     .withName(nameField.get().isBlank() ? null : nameField.get());
             ShapeTrackRegistry.apply(replacement);

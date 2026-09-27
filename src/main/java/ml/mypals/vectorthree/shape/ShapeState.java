@@ -5,6 +5,7 @@ import com.moulberry.flashback.spline.CatmullRom;
 import com.moulberry.flashback.spline.Hermite;
 import ml.mypals.vectorthree.shape.area.AreaOptions;
 import ml.mypals.vectorthree.shape.particle.ParticleSettings;
+import ml.mypals.vectorthree.shape.blast.BlastSettings;
 import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.text.TextSettings;
 
@@ -37,13 +38,16 @@ public record ShapeState(
         boolean bypassShaders,
         ShapeMount mount,
         ParticleSettings particle,
-        boolean screen
+        boolean screen,
+        BlastSettings blast
 ) {
     public static ShapeState create(String type, String id, double x, double y, double z) {
         List<ShapePoint> points = switch (type) {
             case "line", "line_strip" -> List.of(new ShapePoint(0, 0, 0), new ShapePoint(1, 1, 1));
             case "arrow" -> List.of(new ShapePoint(0, 0, 0), new ShapePoint(0, 1, 0));
             case "area" -> List.of(new ShapePoint(x - 0.5, y - 0.5, z - 0.5), new ShapePoint(x + 0.5, y + 0.5, z + 0.5));
+            case "blast" -> List.of(new ShapePoint(x - 0.5, y - 0.5, z - 0.5), new ShapePoint(x + 0.5, y + 0.5, z + 0.5),
+                    new ShapePoint(0, 0, 0), new ShapePoint(0, 0, 0), new ShapePoint(0, 4, 0), new ShapePoint(0, 0, 0));
             default -> List.of();
         };
         return new ShapeState(type, id, x, y, z, 0, 0, 0,
@@ -57,7 +61,8 @@ public record ShapeState(
                     case "particle" -> "minecraft:flame";
                     default -> "";
                 }, Map.of(), "", type.equals("particle"), true, false, 0xFFFFFFFF, 0, false, false, false, 0, null, null, null, false, null,
-                type.equals("particle") ? ParticleSettings.DEFAULT : null, false);
+                type.equals("particle") ? ParticleSettings.DEFAULT : null, false,
+                type.equals("blast") ? BlastSettings.DEFAULT : null);
     }
 
     public ShapeState interpolate(ShapeState target, double amount) {
@@ -92,7 +97,8 @@ public record ShapeState(
                 amount < 0.5 ? bypassShaders : target.bypassShaders,
                 amount >= 1.0 ? target.mount : mount,
                 ParticleSettings.transition(particle, target.particle, amount),
-                amount < 0.5 ? screen : target.screen);
+                amount < 0.5 ? screen : target.screen,
+                BlastSettings.transition(blast, target.blast, amount));
     }
 
     public static ShapeState smooth(ShapeState p0, ShapeState p1, ShapeState p2, ShapeState p3,
@@ -136,7 +142,8 @@ public record ShapeState(
                 amount < 0.5f ? p1.bypassShaders : p2.bypassShaders,
                 amount >= 1.0f ? p2.mount : p1.mount,
                 ParticleSettings.transition(p1.particle, p2.particle, amount),
-                amount < 0.5f ? p1.screen : p2.screen);
+                amount < 0.5f ? p1.screen : p2.screen,
+                BlastSettings.transition(p1.blast, p2.blast, amount));
     }
 
     public static ShapeState hermite(Map<Float, ShapeState> states, float amount) {
@@ -168,7 +175,8 @@ public record ShapeState(
                 base.manualPlayback, base.noLoop,
                 hermite(states, amount, s -> s.playbackSeconds),
                 base.name, hermiteWireframe(sorted, amount, base), base.areaOptions, base.bypassShaders, base.mount,
-                hermiteParticle(sorted, amount, base), base.screen);
+                hermiteParticle(sorted, amount, base), base.screen,
+                hermiteBlast(sorted, amount, base));
     }
 
     public ShapeState with(float[] position, float[] rotation, float[] scale, float[] size,
@@ -182,7 +190,7 @@ public record ShapeState(
                 segments, lineWidth, color, List.copyOf(points), text, model,
                 blockProperties == null ? Map.of() : Map.copyOf(blockProperties),
                 parentShapeId, seeThrough, visible, outline, outlineColor, videoStartTick, playAudio,
-                manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withIdentity(String shapeType, String shapeId) {
@@ -190,14 +198,14 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points == null ? List.of() : points, text, model, blockProperties,
                 parentShapeId, seeThrough, visible, outline, outlineColor, videoStartTick, playAudio,
-                manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withModel(String model) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
-                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withBlockProperties(Map<String, String> properties) {
@@ -205,28 +213,28 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, properties == null ? Map.of() : Map.copyOf(properties),
                 parentShapeId, seeThrough, visible, outline, outlineColor, videoStartTick, playAudio,
-                manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withVideoStartTick(int videoStartTick) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
-                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withName(String name) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
-                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withWireframe(WireframeSettings wireframe) {
         return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
-                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name, wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withAreaOptions(AreaOptions areaOptions) {
@@ -234,7 +242,7 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
                 outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
-                wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withTransform(double x, double y, double z, float pitch, float yaw, float roll,
@@ -243,7 +251,7 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
                 outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
-                wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withParent(String parentShapeId) {
@@ -251,7 +259,7 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
                 outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
-                wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withMount(ShapeMount mount) {
@@ -259,7 +267,7 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
                 outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
-                wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withBypassShaders(boolean bypassShaders) {
@@ -267,7 +275,7 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
                 outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
-                wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withParticle(ParticleSettings particle) {
@@ -275,7 +283,7 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
                 outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
-                wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     public ShapeState withScreen(boolean screen) {
@@ -283,7 +291,15 @@ public record ShapeState(
                 scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
                 color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
                 outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
-                wireframe, areaOptions, bypassShaders, mount, particle, screen);
+                wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
+    }
+
+    public ShapeState withBlast(BlastSettings blast) {
+        return new ShapeState(shapeType, shapeId, x, y, z, pitch, yaw, roll,
+                scaleX, scaleY, scaleZ, sizeX, sizeY, sizeZ, segments, lineWidth,
+                color, points, text, model, blockProperties, parentShapeId, seeThrough, visible,
+                outline, outlineColor, videoStartTick, playAudio, manualPlayback, noLoop, playbackSeconds, name,
+                wireframe, areaOptions, bypassShaders, mount, particle, screen, blast);
     }
 
     private List<ShapePoint> interpolatePoints(ShapeState target, double amount) {
@@ -389,6 +405,16 @@ public record ShapeState(
         float span = ceil.getKey() - floorKey;
         double local = span == 0 ? 1 : (amount - floorKey) / span;
         return ParticleSettings.transition(base.particle, ceil.getValue().particle, local);
+    }
+
+    private static BlastSettings hermiteBlast(TreeMap<Float, ShapeState> states, float amount, ShapeState base) {
+        Map.Entry<Float, ShapeState> ceil = states.ceilingEntry(amount);
+        if (ceil == null) return base.blast;
+        Float floorKey = states.floorKey(amount);
+        if (floorKey == null) floorKey = states.firstKey();
+        float span = ceil.getKey() - floorKey;
+        double local = span == 0 ? 1 : (amount - floorKey) / span;
+        return BlastSettings.transition(base.blast, ceil.getValue().blast, local);
     }
 
     private static boolean samePointCount(ShapeState... states) {

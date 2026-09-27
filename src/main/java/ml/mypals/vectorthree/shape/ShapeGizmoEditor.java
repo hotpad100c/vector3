@@ -456,6 +456,13 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     /** The selected shape is on the UI layer: rays, handles and sizes work in its orthographic space. */
+    public @org.jetbrains.annotations.Nullable String selectedShapeId() {
+        ShapeKeyframe selected = keyframe;
+        if (selected == null) return null;
+        ShapeState state = previewState != null ? previewState : selected.value;
+        return state == null ? null : state.shapeId();
+    }
+
     public boolean isScreenSpace() {
         ShapeKeyframe selected = keyframe;
         if (selected == null) return false;
@@ -537,7 +544,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             }
             case "face_circle" -> add(Operation.RADIUS, Axis.Y, -1, SCALE_MODEL, PROPERTY_COLOR);
             case "sphere" -> add(Operation.RADIUS, Axis.X, -1, SCALE_MODEL, PROPERTY_COLOR);
-            case "line", "line_strip", "arrow", "area" -> {
+            case "line", "line_strip", "arrow", "area", "blast" -> {
                 int count = state.points() == null ? 0 : state.points().size();
                 for (int i = 0; i < count; i++) {
                     add(Operation.POINT, Axis.X, i, MOVE_MODEL, X_COLOR);
@@ -639,7 +646,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private void updateAreaSelectionMarker(ShapeState state) {
-        if (!state.shapeType().equals("area") || state.points() == null || state.points().size() < 2) {
+        if (!usesAbsolutePoints(state) || state.points() == null || state.points().size() < 2) {
             removeAreaSelectionMarker();
             return;
         }
@@ -670,15 +677,21 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         areaSelectionBox = null;
     }
 
+    // Area-like shapes: their first two points are the source region's corners, in world coordinates.
     private static boolean usesAbsolutePoints(ShapeState state) {
-        return state.shapeType().equals("area");
+        return state.shapeType().equals("area") || state.shapeType().equals("blast");
+    }
+
+    // A blast's later points are its path, in the shape's local space.
+    private static boolean absolutePoint(ShapeState state, int index) {
+        return state.shapeType().equals("area") || state.shapeType().equals("blast") && index < 2;
     }
 
     private Vec3 handlePosition(ShapeState state, Handle handle) {
         Vec3 center = center(state);
         if (handle.operation() == Operation.POINT) {
             ShapePoint point = state.points().get(handle.point());
-            return usesAbsolutePoints(state) ? point.vec3() : localToWorld(state, point);
+            return absolutePoint(state, handle.point()) ? point.vec3() : localToWorld(state, point);
         }
         if (handle.operation() == Operation.DIMENSION) {
             return center.add(localAxis(state, handle.axis()).scale(size(state, handle.axis()) * scale(state, handle.axis()) / 2));
@@ -814,9 +827,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             Vec3 delta = current.subtract(dragPlaneStart);
             if (dragging.operation() == Operation.MOVE_FREE) return withPosition(dragStart, center(dragStart).add(delta));
             List<ShapePoint> points = new ArrayList<>(dragStart.points());
-            Vec3 pointDelta = usesAbsolutePoints(dragStart) ? delta : worldDeltaToLocal(dragStart, delta);
+            Vec3 pointDelta = absolutePoint(dragStart, dragging.point()) ? delta : worldDeltaToLocal(dragStart, delta);
             ShapePoint point = points.get(dragging.point());
-            points.set(dragging.point(), movedPoint(dragStart, point, pointDelta));
+            points.set(dragging.point(), movedPoint(dragStart, dragging.point(), point, pointDelta));
             return with(dragStart, null, null, null, null, points);
         }
         if (dragging.operation() == Operation.ROTATE) {
@@ -890,15 +903,15 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private static ShapeState withPointDelta(ShapeState state, int pointIndex, Vec3 worldDelta) {
         List<ShapePoint> points = new ArrayList<>(state.points());
-        Vec3 pointDelta = usesAbsolutePoints(state) ? worldDelta : worldDeltaToLocal(state, worldDelta);
+        Vec3 pointDelta = absolutePoint(state, pointIndex) ? worldDelta : worldDeltaToLocal(state, worldDelta);
         ShapePoint point = points.get(pointIndex);
-        points.set(pointIndex, movedPoint(state, point, pointDelta));
+        points.set(pointIndex, movedPoint(state, pointIndex, point, pointDelta));
         return with(state, null, null, null, null, points);
     }
 
-    private static ShapePoint movedPoint(ShapeState state, ShapePoint point, Vec3 delta) {
+    private static ShapePoint movedPoint(ShapeState state, int index, ShapePoint point, Vec3 delta) {
         double x = point.x() + delta.x, y = point.y() + delta.y, z = point.z() + delta.z;
-        return usesAbsolutePoints(state)
+        return absolutePoint(state, index)
                 ? new ShapePoint(Math.round(x), Math.round(y), Math.round(z))
                 : new ShapePoint(x, y, z);
     }

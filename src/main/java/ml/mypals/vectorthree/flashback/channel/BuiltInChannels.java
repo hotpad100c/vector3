@@ -174,7 +174,7 @@ public final class BuiltInChannels {
     private static final class ShapeChannels extends ValueChannels<ShapeState> {
         ShapeChannels() {
             super(ShapeKeyframeType.INSTANCE, List.of("position", "rotation", "scale", "size", "line_width", "color",
-                    "outline", "points", "text", "wireframe", "visible", "video", "particle"));
+                    "outline", "points", "text", "wireframe", "visible", "video", "particle", "blast"));
         }
 
         private static final Map<String, String> LABELS = Map.ofEntries(
@@ -198,7 +198,14 @@ public final class BuiltInChannels {
                 Map.entry("vector3.particle.random_direction", "particle"), Map.entry("vector3.particle.rate_over_distance", "particle"),
                 Map.entry("vector3.particle.force", "particle"), Map.entry("vector3.particle.noise", "particle"),
                 Map.entry("vector3.particle.end_color", "particle"), Map.entry("vector3.particle.end_size", "particle"),
-                Map.entry("vector3.particle.gravity", "particle"), Map.entry("vector3.particle.drag", "particle"));
+                Map.entry("vector3.particle.gravity", "particle"), Map.entry("vector3.particle.drag", "particle"),
+                Map.entry("vector3.blast.progress", "blast"), Map.entry("vector3.blast.start_tick", "blast"),
+                Map.entry("vector3.blast.duration", "blast"), Map.entry("vector3.blast.arc_height", "blast"),
+                Map.entry("vector3.blast.burst", "blast"), Map.entry("vector3.blast.scatter_center", "points"),
+                Map.entry("vector3.blast.scatter_radius", "blast"), Map.entry("vector3.blast.flatten", "blast"),
+                Map.entry("vector3.blast.stagger", "blast"), Map.entry("vector3.blast.spin", "blast"),
+                Map.entry("vector3.blast.clump", "blast"), Map.entry("vector3.blast.alpha", "blast"),
+                Map.entry("vector3.blast.scale", "blast"));
 
         @Override
         public Map<String, String> labels() {
@@ -213,7 +220,7 @@ public final class BuiltInChannels {
                     outline = byChannel.getOrDefault("outline", b), points = byChannel.getOrDefault("points", b),
                     text = byChannel.getOrDefault("text", b), wireframe = byChannel.getOrDefault("wireframe", b),
                     visible = byChannel.getOrDefault("visible", b), video = byChannel.getOrDefault("video", b),
-                    particle = byChannel.getOrDefault("particle", b);
+                    particle = byChannel.getOrDefault("particle", b), blast = byChannel.getOrDefault("blast", b);
             return new ShapeState(b.shapeType(), b.shapeId(),
                     position.x(), position.y(), position.z(),
                     rotation.pitch(), rotation.yaw(), rotation.roll(),
@@ -223,7 +230,7 @@ public final class BuiltInChannels {
                     b.model(), b.blockProperties(), b.parentShapeId(), b.seeThrough(), visible.visible(),
                     outline.outline(), outline.outlineColor(),
                     video.videoStartTick(), video.playAudio(), video.manualPlayback(), video.noLoop(), video.playbackSeconds(),
-                    b.name(), wireframe.wireframe(), b.areaOptions(), b.bypassShaders(), b.mount(), particle.particle(), b.screen());
+                    b.name(), wireframe.wireframe(), b.areaOptions(), b.bypassShaders(), b.mount(), particle.particle(), b.screen(), blast.blast());
         }
 
         @Override
@@ -242,6 +249,7 @@ public final class BuiltInChannels {
                 case "wireframe" -> Objects.equals(a.wireframe(), b.wireframe());
                 case "visible" -> a.visible() == b.visible();
                 case "particle" -> Objects.equals(a.particle(), b.particle());
+                case "blast" -> Objects.equals(a.blast(), b.blast());
                 default -> a.videoStartTick() == b.videoStartTick() && a.playAudio() == b.playAudio()
                         && a.manualPlayback() == b.manualPlayback() && a.noLoop() == b.noLoop()
                         && a.playbackSeconds() == b.playbackSeconds();

@@ -16,6 +16,7 @@ import ml.mypals.ryansrenderingkit.shape.box.BoxShape;
 import ml.mypals.ryansrenderingkit.shape.line.LineShape;
 import ml.mypals.ryansrenderingkit.shape.line.StripLineShape;
 import ml.mypals.vectorthree.shape.particle.ParticleEmitters;
+import ml.mypals.vectorthree.shape.area.BlastShape;
 import ml.mypals.vectorthree.shape.entity.ProjectedEntityShape;
 import ml.mypals.vectorthree.shape.entity.ShapeEntities;
 import ml.mypals.vectorthree.render.ScreenLayer;
@@ -139,6 +140,8 @@ public final class ShapeTrackRegistry {
         register("video", "vector3.shape.video", state -> new VideoShape(state.model(),
                 new Color(state.color(), true), state.seeThrough()));
         register("area", "vector3.shape.area", state -> new AreaShape(state,
+                new Color(state.color(), true), state.seeThrough()));
+        register("blast", "vector3.shape.blast", state -> new BlastShape(state,
                 new Color(state.color(), true), state.seeThrough()));
         register("particle", "vector3.shape.particle", state -> ShapeGenerator.generateStripLine()
                 .vertexes(ParticleEmitters.gizmoPath(state)).lineWidth(2f).color(ParticleEmitters.GIZMO_COLOR)
@@ -309,7 +312,7 @@ public final class ShapeTrackRegistry {
                         || state.shapeType().equals("video"))
                 && (!java.util.Objects.equals(previous.model(), state.model())
                         || !java.util.Objects.equals(previous.blockProperties(), state.blockProperties()));
-        boolean areaBoundsChanged = previous != null && state.shapeType().equals("area")
+        boolean areaBoundsChanged = previous != null && (state.shapeType().equals("area") || state.shapeType().equals("blast"))
                 && !java.util.Objects.equals(previous.points(), state.points());
         if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId()))
                 || modelChanged || areaBoundsChanged)) {
@@ -636,6 +639,8 @@ public final class ShapeTrackRegistry {
             VertexBuilderGetter.registerEmptyShapeBuilder(ImageShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof VideoShape)
             VertexBuilderGetter.registerEmptyShapeBuilder(VideoShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        else if (shape instanceof BlastShape)
+            VertexBuilderGetter.registerEmptyShapeBuilder(BlastShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof AreaShape)
             VertexBuilderGetter.registerEmptyShapeBuilder(AreaShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof TexturedObjShape)
