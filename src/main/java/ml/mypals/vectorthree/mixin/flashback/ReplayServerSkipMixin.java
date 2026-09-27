@@ -3,6 +3,7 @@ package ml.mypals.vectorthree.mixin.flashback;
 import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.playback.ReplayServer;
 import com.moulberry.flashback.state.EditorState;
+import ml.mypals.vectorthree.flashback.PlaybackRange;
 import ml.mypals.vectorthree.flashback.loop.LoopKeyframeType;
 import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,6 +27,7 @@ public abstract class ReplayServerSkipMixin {
         EditorState editorState = ((ReplayServer) (Object) this).getEditorState();
         targetTick = LoopKeyframeType.resolve(LoopKeyframeType.scopes(editorState), currentTick, targetTick, replayPaused);
         if (replayPaused) return;
+        targetTick = PlaybackRange.resolve(editorState, currentTick, targetTick);
         targetTick = SkipKeyframeType.resolve(SkipKeyframeType.scopes(editorState), targetTick);
     }
 }

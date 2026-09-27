@@ -46,6 +46,9 @@ import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
 import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
 import ml.mypals.vectorthree.flashback.loop.LoopKeyframeType;
 import ml.mypals.vectorthree.flashback.loop.TrackRepeat;
+import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
+import ml.mypals.vectorthree.flashback.pose.EntityPose;
+import ml.mypals.vectorthree.flashback.pose.EntityPoseKeyframeType;
 import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
 import com.moulberry.flashback.playback.ReplayServer;
 import com.moulberry.flashback.state.EditorScene;
@@ -167,6 +170,7 @@ public abstract class TimelineWindowMixin {
         ShapeTrackRegistry.fixSeeThroughPipelines();
         Vector3.ORBIT_GIZMO.frame();
         Vector3.CAMERA_GIZMO.frame();
+        Vector3.POSE_GIZMO.frame();
         vector3$shapeShortcuts();
         Vector3.GIZMO_EDITOR.frame();
         vector3$handlePrefabs();
@@ -1521,7 +1525,8 @@ public abstract class TimelineWindowMixin {
     }
 
     private static void vector3$syncGizmoSelection() {
-        if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging() || Vector3.CAMERA_GIZMO.isDragging() || Vector3.PREFABS.isDragging()) {
+        if (Vector3.GIZMO_EDITOR.isDragging() || Vector3.ORBIT_GIZMO.isDragging() || Vector3.CAMERA_GIZMO.isDragging()
+                || Vector3.POSE_GIZMO.isDragging() || Vector3.PREFABS.isDragging()) {
             return;
         }
         if (vector3$autoKeyframe != null) {
@@ -1533,6 +1538,7 @@ public abstract class TimelineWindowMixin {
         if (MultiSelection.count(selectedKeyframesList) > 1) {
             Vector3.ORBIT_GIZMO.clearSelection();
             Vector3.CAMERA_GIZMO.clearSelection();
+            Vector3.POSE_GIZMO.clearSelection();
             vector3$selectShapeGroup();
             return;
         }
@@ -1541,6 +1547,7 @@ public abstract class TimelineWindowMixin {
             Vector3.GIZMO_EDITOR.clearSelection();
             Vector3.ORBIT_GIZMO.clearSelection();
             Vector3.CAMERA_GIZMO.clearSelection();
+            Vector3.POSE_GIZMO.clearSelection();
             return;
         }
         SelectedKeyframes selected = selectedKeyframesList.getFirst();
@@ -1549,6 +1556,7 @@ public abstract class TimelineWindowMixin {
             Vector3.GIZMO_EDITOR.clearSelection();
             Vector3.ORBIT_GIZMO.clearSelection();
             Vector3.CAMERA_GIZMO.clearSelection();
+            Vector3.POSE_GIZMO.clearSelection();
             return;
         }
         int tick = selected.keyframeTicks().iterator().nextInt();
@@ -1556,6 +1564,7 @@ public abstract class TimelineWindowMixin {
         if (keyframe instanceof CameraOrbitKeyframe orbitKeyframe) {
             Vector3.GIZMO_EDITOR.clearSelection();
             Vector3.CAMERA_GIZMO.clearSelection();
+            Vector3.POSE_GIZMO.clearSelection();
             Vector3.ORBIT_GIZMO.select(orbitKeyframe, orbit -> {
                 CameraOrbitKeyframe replacement = new CameraOrbitKeyframe(new Vector3d(orbit.center()),
                         (float) orbit.distance(), (float) orbit.yaw(), (float) orbit.pitch(),
@@ -1583,6 +1592,20 @@ public abstract class TimelineWindowMixin {
             return;
         }
         Vector3.CAMERA_GIZMO.clearSelection();
+        if (keyframe instanceof CustomKeyframe<?> custom && custom.type() == EntityPoseKeyframeType.INSTANCE) {
+            Vector3.GIZMO_EDITOR.clearSelection();
+            @SuppressWarnings("unchecked") CustomKeyframe<EntityPose> pose = (CustomKeyframe<EntityPose>) custom;
+            Vector3.POSE_GIZMO.select(pose, replacement -> {
+                CustomKeyframe<EntityPose> copy = (CustomKeyframe<EntityPose>) pose.copy();
+                copy.value = replacement;
+                upgradeToSceneWrite();
+                editorScene.setKeyframe(trackIndex, tick, copy);
+                EditorStateManager.getCurrent().markDirty();
+                ((MinecraftExt) Minecraft.getInstance()).flashback$applyKeyframes();
+            });
+            return;
+        }
+        Vector3.POSE_GIZMO.clearSelection();
         if (selected.type() != ShapeKeyframeType.INSTANCE || !(keyframe instanceof ShapeKeyframe shape)) {
             Vector3.GIZMO_EDITOR.clearSelection();
             return;

@@ -152,7 +152,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 ReplayUI.imguiWindower.ungrab();
                 beginDrag(hovered, state, ray, camera);
             } else if (ImGui.isMouseClicked(1) && inViewport && !Vector3.ORBIT_GIZMO.isHovering()
-                    && !Vector3.CAMERA_GIZMO.isHovering() && !Vector3.PREFABS.isHovering()) {
+                    && !Vector3.CAMERA_GIZMO.isHovering() && !Vector3.POSE_GIZMO.isHovering() && !Vector3.PREFABS.isHovering()) {
                 String shapeId = ShapeTrackRegistry.pickShape(ray);
                 if (shapeId != null) ShapeTimelineSelection.request(shapeId);
             }
@@ -208,6 +208,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         if (hit.entity() != null) return hit.entity().getBoundingBox().getCenter();
         if (InputHelper.isCtrlDownRaw()) return Vec3.atCenterOf(hit.block().getBlockPos().relative(hit.block().getDirection()));
         return hit.location();
+    }
+
+    public boolean isHovering() {
+        return hovered != null || dragging != null;
     }
 
     public boolean isDragging() {

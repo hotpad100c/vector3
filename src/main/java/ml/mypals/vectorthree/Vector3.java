@@ -37,6 +37,7 @@ public class Vector3 implements ClientModInitializer {
 	public static final CameraGizmoEditor CAMERA_GIZMO = new CameraGizmoEditor();
 	public static final PrefabPlacement PREFABS = new PrefabPlacement();
 	public static final EditorCameraController EDITOR_CAMERA = new EditorCameraController();
+	public static final ml.mypals.vectorthree.flashback.pose.PoseGizmoEditor POSE_GIZMO = new ml.mypals.vectorthree.flashback.pose.PoseGizmoEditor();
 
 	// This logger is used to write text to the console and the log file.
 	// It is considered best practice to use your mod id as the logger's name.
@@ -53,6 +54,7 @@ public class Vector3 implements ClientModInitializer {
 		CustomKeyframes.register(SkipKeyframeType.INSTANCE);
 		CustomKeyframes.register(LoopKeyframeType.INSTANCE);
 		CustomKeyframes.register(FadeKeyframeType.INSTANCE);
+		CustomKeyframes.register(ml.mypals.vectorthree.flashback.pose.EntityPoseKeyframeType.INSTANCE);
 		CustomKeyframes.register(DollyZoomKeyframeType.INSTANCE);
 		CustomKeyframes.register(ClipKeyframeType.INSTANCE);
 		net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(ml.mypals.vectorthree.clips.EmptyProject::tick);
@@ -61,10 +63,12 @@ public class Vector3 implements ClientModInitializer {
 			GIZMO_EDITOR.clear();
 			ORBIT_GIZMO.clear();
 			CAMERA_GIZMO.clear();
+			POSE_GIZMO.clear();
 			PREFABS.clear();
 			EDITOR_CAMERA.reset();
 			ShapeTrackRegistry.clear();
 			FadeOverlay.clear();
+			ml.mypals.vectorthree.flashback.pose.EntityPoses.clear();
 		});
 		LOGGER.info("Registered RyansRenderingKit shape tracks with Flashback");
 	}

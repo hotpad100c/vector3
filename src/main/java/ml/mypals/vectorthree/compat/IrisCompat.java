@@ -18,6 +18,11 @@ public final class IrisCompat {
         if (LOADED) IrisHooks.registerObjPbr();
     }
 
+    /** Iris renders the world again from the sun; entities there are posed relative to the shadow camera. */
+    public static boolean isRenderingShadowPass() {
+        return LOADED && IrisHooks.isRenderingShadowPass();
+    }
+
     public static boolean isPackInUse() {
         return LOADED && IrisHooks.isPackInUse();
     }

@@ -21,6 +21,10 @@ final class IrisHooks {
                 });
     }
 
+    static boolean isRenderingShadowPass() {
+        return IrisApi.getInstance().isRenderingShadowPass();
+    }
+
     static boolean isPackInUse() {
         return Iris.isPackInUseQuick();
     }

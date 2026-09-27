@@ -62,7 +62,10 @@ public class CustomKeyframe<T> extends Keyframe {
     @Override
     public void renderEditKeyframe(Consumer<Consumer<Keyframe>> update) {
         T edited = type.edit(value);
-        if (edited != value) update.accept(keyframe -> ((CustomKeyframe<T>) keyframe).value = edited);
+        if (edited == value) return;
+        update.accept(keyframe -> ((CustomKeyframe<T>) keyframe).value = edited);
+        // Keyframes are otherwise only re-applied when the playhead moves.
+        ((com.moulberry.flashback.ext.MinecraftExt) net.minecraft.client.Minecraft.getInstance()).flashback$applyKeyframes();
     }
 
     @Override
