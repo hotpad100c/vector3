@@ -23,6 +23,8 @@ import org.lwjgl.system.MemoryStack;
 import java.nio.ByteBuffer;
 import java.util.Optional;
 
+import static ml.mypals.vectorthree.camera.CameraPreview.detachesMainView;
+
 /** Draws the Fade track's current colour over the level once it is fully rendered (post effects included). */
 public final class FadeOverlay {
     private static @Nullable Fade pending;
@@ -51,7 +53,7 @@ public final class FadeOverlay {
 
     public static void render() {
         Fade fade = current;
-        if (fade == null || fade.opacity() <= 0.001f) return;
+        if (detachesMainView() || fade == null || fade.opacity() <= 0.001f) return;
         ensurePipeline();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             ByteBuffer data = Std140Builder.onStack(stack, 16).putVec4(fade.red(), fade.green(), fade.blue(),

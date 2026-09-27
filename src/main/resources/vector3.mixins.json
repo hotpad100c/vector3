@@ -56,6 +56,7 @@
 		"flashback.FlashbackGsonMixin",
 		"flashback.FlashbackOpenReplayMixin",
 		"flashback.GrabMovementInfoAccessor",
+		"flashback.ImGuiEmptyClipMixin",
 		"flashback.ImGuiHelperPopupMixin",
 		"flashback.KeybindAccessor",
 		"flashback.KeybindsAccessor",

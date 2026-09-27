@@ -113,6 +113,8 @@ public final class CameraPreview {
         LocalPlayer player = minecraft.player;
         EditorState editorState = EditorStateManager.getCurrent();
         if (editorState == null || player == null || minecraft.level == null || minecraft.getCameraEntity() != player) return;
+        RenderTarget main = renderer.mainRenderTarget();
+        if (main.width <= 0 || main.height <= 0) return;
         if (IrisCompat.isPackInUse() && !withShaders.get()) {
             problem = "vector3.camera_preview.iris";
             return;
@@ -148,7 +150,6 @@ public final class CameraPreview {
             renderer.update(deltaTracker);
             renderer.extract(deltaTracker, true);
             renderer.render();
-            RenderTarget main = renderer.mainRenderTarget();
             if (image == null || image.width != main.width || image.height != main.height) {
                 if (image != null) image.destroyBuffers();
                 image = new TextureTarget("vector3_camera_preview", main.width, main.height, GpuFormat.RGBA8_UNORM, null);
