@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import imgui.moulberry90.flag.ImGuiFocusedFlags;
 import ml.mypals.vectorthree.flashback.TrackSelection;
 import ml.mypals.vectorthree.flashback.Ripple;
+import ml.mypals.vectorthree.flashback.Distribute;
 import com.moulberry.flashback.keyframe.types.AudioKeyframeType;
 import ml.mypals.vectorthree.clips.Trimming;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -684,6 +685,37 @@ public abstract class TimelineWindowMixin {
     @Inject(method = "renderKeyframeElements", at = @At(value = "CONSTANT", args = "stringValue=flashback.create_keyframe_at_n"))
     private static void vector3$createKeyframePopupItems(float x, float y, int cursorTicks, int middleX, CallbackInfo ci) {
         if (!selectedKeyframesList.isEmpty()) vector3$createGroupItem(-1);
+        vector3$distributeItem();
+    }
+
+    @Unique private static final imgui.moulberry90.type.ImInt vector3$distributeSpan = new imgui.moulberry90.type.ImInt();
+
+    // Spreads the selected keyframes evenly over a number of ticks from the first one (see Distribute).
+    @Unique
+    private static void vector3$distributeItem() {
+        java.util.TreeSet<Integer> ticks = Distribute.ticks(editorScene, selectedKeyframesList);
+        if (ticks.size() < 2 || !ImGui.beginMenu(I18n.get("vector3.distribute"))) return;
+        if (ImGui.isWindowAppearing()) vector3$distributeSpan.set(ticks.last() - ticks.first());
+        ImGui.setNextItemWidth(ImGui.calcTextSizeX("0000000") + ImGui.getFrameHeight() * 2);
+        ImGui.inputInt(I18n.get("vector3.distribute.span"), vector3$distributeSpan);
+        vector3$distributeSpan.set(Math.max(ticks.size() - 1, vector3$distributeSpan.get()));
+        ImGui.textDisabled(I18n.get("vector3.distribute.hint", ticks.size(), ticks.first(),
+                ticks.first() + vector3$distributeSpan.get()));
+        if (ImGui.button(I18n.get("vector3.distribute.apply")) || ImGui.isKeyPressed(ImGuiKey.Enter, false)) {
+            upgradeToSceneWrite();
+            Distribute.Result result = Distribute.apply(editorScene, selectedKeyframesList, vector3$distributeSpan.get());
+            if (result.entry() == null) {
+                if (result.problem() != null) ReplayUI.setInfoOverlayShort(I18n.get(result.problem()));
+            } else {
+                editorScene.push(result.entry());
+                selectedKeyframesList.clear();
+                selectedKeyframesList.addAll(result.selection());
+                if (editingKeyframeTrack >= 0) editingKeyframeTick = result.moved().getOrDefault(editingKeyframeTick, editingKeyframeTick);
+                vector3$keyframesChanged();
+            }
+            ImGui.closeCurrentPopup();
+        }
+        ImGui.endMenu();
     }
 
     @Unique
@@ -694,7 +726,10 @@ public abstract class TimelineWindowMixin {
         }
         if (!ImGui.beginPopup("##vector3SelectionPopup")) return;
         if (selectedKeyframesList.isEmpty()) ImGui.closeCurrentPopup();
-        else vector3$createGroupItem(-1);
+        else {
+            vector3$createGroupItem(-1);
+            vector3$distributeItem();
+        }
         ImGui.endPopup();
     }
 

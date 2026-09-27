@@ -372,5 +372,13 @@
   "vector3.entity_pose.part.left_leg": "Left leg",
   "vector3.entity_pose.gizmo_part": "Edit this part with the viewport gizmo (or right-click its marker there)",
   "vector3.entity_pose.rotate.tooltip": "Drive this part's rotation from this track. Leave it off to let another track (or the animation) drive it.",
-  "vector3.entity_pose.move.tooltip": "Drive this part's offset from this track. Leave it off to let another track (or the animation) drive it."
+  "vector3.entity_pose.move.tooltip": "Drive this part's offset from this track. Leave it off to let another track (or the animation) drive it.",
+  "vector3.distribute": "Distribute evenly",
+  "vector3.distribute.span": "Over ticks",
+  "vector3.distribute.hint": "%s keyframe ticks, from tick %s to %s",
+  "vector3.distribute.apply": "Apply",
+  "vector3.distribute.too_few": "Distribute: select keyframes on at least two ticks",
+  "vector3.distribute.too_short": "Distribute: not enough ticks for every keyframe",
+  "vector3.distribute.overlap": "Distribute: keyframes would land on unselected ones",
+  "vector3.history.distribute": "Distribute %s keyframes over %s ticks"
 }

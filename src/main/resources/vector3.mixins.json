@@ -45,6 +45,7 @@
 		"flashback.CameraShakeChangeMixin",
 		"flashback.CameraShakeKeyframeMixin",
 		"flashback.CameraShakeTypeAdapterMixin",
+		"flashback.CameraPathGuardMixin",
 		"flashback.CameraOrbitKeyframeMixin",
 		"flashback.CameraOrbitTypeAdapterMixin",
 		"flashback.EditorSceneMixin",

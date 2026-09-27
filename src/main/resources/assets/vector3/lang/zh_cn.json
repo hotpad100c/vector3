@@ -372,5 +372,13 @@
   "vector3.entity_pose.part.left_leg": "左腿",
   "vector3.entity_pose.gizmo_part": "用视口 gizmo 编辑这个部位（也可在视口里右键点它的标记）",
   "vector3.entity_pose.rotate.tooltip": "由这条轨道控制该部位的旋转。不勾选则交给其他轨道（或原动画）。",
-  "vector3.entity_pose.move.tooltip": "由这条轨道控制该部位的位移。不勾选则交给其他轨道（或原动画）。"
+  "vector3.entity_pose.move.tooltip": "由这条轨道控制该部位的位移。不勾选则交给其他轨道（或原动画）。",
+  "vector3.distribute": "均匀分布",
+  "vector3.distribute.span": "总时长（tick）",
+  "vector3.distribute.hint": "%s 个关键帧时刻，从第 %s tick 到第 %s tick",
+  "vector3.distribute.apply": "应用",
+  "vector3.distribute.too_few": "均匀分布：至少选中两个不同时刻的关键帧",
+  "vector3.distribute.too_short": "均匀分布：总时长不足以放下所有关键帧",
+  "vector3.distribute.overlap": "均匀分布：关键帧会与未选中的关键帧重叠",
+  "vector3.history.distribute": "均匀分布 %s 个关键帧（%s tick）"
 }
