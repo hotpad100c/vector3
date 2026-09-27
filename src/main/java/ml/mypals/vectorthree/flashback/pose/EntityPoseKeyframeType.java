@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.flashback.pose;
 
+import ml.mypals.vectorthree.shape.entity.ShapeEntities;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImInt;
@@ -40,7 +41,7 @@ public final class EntityPoseKeyframeType extends CustomKeyframeType<EntityPose>
     @Override
     protected EntityPose edit(EntityPose value) {
         EntityPose edited = value;
-        UUID picked = EntityPicker.combo(I18n.get("vector3.entity_pose.entity"), edited.entity());
+        UUID picked = EntityPicker.combo(I18n.get("vector3.entity_pose.entity"), edited.entity(), true);
         if (!Objects.equals(picked, edited.entity())) edited = edited.withEntity(picked);
 
         String[] modes = {I18n.get("vector3.entity_pose.mode.absolute"), I18n.get("vector3.entity_pose.mode.additive")};
@@ -50,7 +51,7 @@ public final class EntityPoseKeyframeType extends CustomKeyframeType<EntityPose>
         if (edited.entity() == null) return edited;
 
         Minecraft minecraft = Minecraft.getInstance();
-        Entity entity = minecraft.level == null ? null : minecraft.level.getEntity(edited.entity());
+        Entity entity = ShapeEntities.resolve(edited.entity());
         Map<String, EntityPose.Limb> rest = EntityPoses.restPose(entity);
 
         Map<String, EntityPose.Limb> snapshot = EntityPoses.takeSnapshot(edited.entity());

@@ -16,6 +16,9 @@ import ml.mypals.ryansrenderingkit.shape.box.BoxShape;
 import ml.mypals.ryansrenderingkit.shape.line.LineShape;
 import ml.mypals.ryansrenderingkit.shape.line.StripLineShape;
 import ml.mypals.vectorthree.shape.particle.ParticleEmitters;
+import ml.mypals.vectorthree.shape.entity.ProjectedEntityShape;
+import ml.mypals.vectorthree.shape.entity.ShapeEntities;
+import ml.mypals.vectorthree.render.ScreenLayer;
 import ml.mypals.ryansrenderingkit.shape.round.SphereShape;
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
 import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
@@ -123,8 +126,9 @@ public final class ShapeTrackRegistry {
                 .block(blockState(state.model(), state.blockProperties())).build());
         register("item", "vector3.shape.item", state -> ShapeGenerator.generateItem()
                 .itemStack(new ItemStack(item(state))).build());
-        register("entity", "vector3.shape.entity", state -> ShapeGenerator.generateEntity()
-                .entity(entity(state)).light(0xF000F0).build(Shape.RenderingType.BATCH));
+        register("entity", "vector3.shape.entity", state -> ShapeEntities.projectsWorldEntity(state)
+                ? new ProjectedEntityShape(state.shapeId(), ShapeEntities.source(state), entity(state))
+                : ShapeGenerator.generateEntity().entity(entity(state)).light(0xF000F0).build(Shape.RenderingType.BATCH));
         register("obj", "vector3.shape.obj", state -> new TexturedObjShape(state.model(),
                 TexturedObjShape.mode(state), TexturedObjShape.texturePath(state), new Color(state.color(), true),
                 state.seeThrough()));
@@ -167,13 +171,20 @@ public final class ShapeTrackRegistry {
         return id.length() > 8 ? id.substring(0, 8) : id;
     }
 
+    /** UI-layer shapes under the mouse win over the world ones behind them. */
     public static String pickShape(RayModelIntersection.Ray ray) {
+        RayModelIntersection.Ray screenRay = hasScreenShapes() ? ScreenLayer.mouseRay() : null;
+        String onScreen = screenRay == null ? null : pickShape(screenRay, true);
+        return onScreen != null ? onScreen : pickShape(ray, false);
+    }
+
+    private static String pickShape(RayModelIntersection.Ray ray, boolean screen) {
         String closestId = null;
         double closestDistance = Double.POSITIVE_INFINITY;
         for (Map.Entry<String, Shape> entry : SHAPES.entrySet()) {
             Shape shape = entry.getValue();
             ShapeState state = LAST_STATES.get(entry.getKey());
-            if (state == null || !state.visible()) continue;
+            if (state == null || !state.visible() || state.screen() != screen) continue;
             double distance = hitDistance(ray, shape, state);
             if (distance >= 0 && distance < closestDistance) {
                 closestId = entry.getKey();
@@ -269,7 +280,25 @@ public final class ShapeTrackRegistry {
         refreshAreaParents();
     }
 
+    public static boolean hasScreenShapes() {
+        for (ShapeState state : LAST_STATES.values()) if (state.screen() && state.visible()) return true;
+        return false;
+    }
+
+    /** Whether an RRK shape id is a UI-layer shape or one of its wireframe parts. */
+    public static boolean onScreenLayer(Identifier id) {
+        ShapeState state = LAST_STATES.get(id.toString());
+        if (state == null && id.getPath().startsWith("wireframe/")) {
+            String path = id.getPath().substring("wireframe/".length());
+            state = LAST_STATES.get(id.getNamespace() + ":" + path);
+            int slash = path.lastIndexOf('/');
+            if (state == null && slash > 0) state = LAST_STATES.get(id.getNamespace() + ":" + path.substring(0, slash));
+        }
+        return state != null && state.screen();
+    }
+
     public static void apply(ShapeState state) {
+        if (state.screen() && state.mount() != null) state = state.withMount(null);
         fixSeeThroughPipelines();
         Shape shape = SHAPES.get(state.shapeId());
         ShapeState previous = LAST_STATES.get(state.shapeId());
@@ -315,7 +344,8 @@ public final class ShapeTrackRegistry {
             textShape.colors.add(new Color(state.color(), true));
             textShape.shadow = settings.shadow();
             textShape.outline = settings.outline();
-            textShape.setBillboardMode(TextShape.BillBoardMode.valueOf(settings.billboard()));
+            textShape.setBillboardMode(state.screen() ? TextShape.BillBoardMode.FIXED
+                    : TextShape.BillBoardMode.valueOf(settings.billboard()));
             if (textShape instanceof FontTextShape fontShape) {
                 fontShape.font = settings.fontOrDefault();
                 fontShape.outlineColor = state.outlineColor();
@@ -346,6 +376,7 @@ public final class ShapeTrackRegistry {
             textShape.colors.add(color);
         }
         if (usesBypassOption(state.shapeType())) shape.customData.put(IrisBypassTarget.SHAPE_FLAG, state.bypassShaders());
+        shape.customData.put(ScreenLayer.SHAPE_FLAG, state.screen());
         if (state.visible() && !WireframeSettings.orDefault(state.wireframe()).hideFaces() && !editorOnlyHidden(state)) shape.enable();
         else shape.disable();
         syncWireframe(shape, state, previous);
@@ -609,6 +640,8 @@ public final class ShapeTrackRegistry {
             VertexBuilderGetter.registerEmptyShapeBuilder(AreaShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof TexturedObjShape)
             VertexBuilderGetter.registerEmptyShapeBuilder(TexturedObjShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        else if (shape instanceof ProjectedEntityShape)
+            VertexBuilderGetter.registerEmptyShapeBuilder(ProjectedEntityShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof ArrowShape)
             VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
     }
@@ -663,7 +696,10 @@ public final class ShapeTrackRegistry {
         EntityType<?> type = id == null ? fallback : BuiltInRegistries.ENTITY_TYPE.getValue(id);
         Entity entity = level == null ? null : type.create(level, EntitySpawnReason.COMMAND);
         if (entity == null && level != null) entity = fallback.create(level, EntitySpawnReason.COMMAND);
-        if (entity != null) entity.setId(nextEntityId--);
+        if (entity != null) {
+            entity.setId(nextEntityId--);
+            entity.setUUID(ShapeEntities.uuidOf(state.shapeId()));
+        }
         return entity;
     }
 

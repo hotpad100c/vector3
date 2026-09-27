@@ -7,6 +7,7 @@ import java.util.Map;
 import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
 import ml.mypals.vectorthree.multiedit.GroupTransform;
 import ml.mypals.vectorthree.camera.ViewportPick;
+import ml.mypals.vectorthree.render.ScreenLayer;
 import ml.mypals.vectorthree.mixin.flashback.ReplayUIAccessor;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.utils.InputHelper;
@@ -56,6 +57,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private static final float AABB_EDGE_WIDTH = 1F;
     private static final double CENTER_POINT_GIZMO_SCALE = 0.25;
     public static final double GRID_STEP = 0.5;
+    private static final double SCREEN_GRID_STEP = 10;
     public static final double ANGLE_STEP = 15;
 
     private enum Axis { X, Y, Z, NONE }
@@ -126,11 +128,17 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         }
 
         boolean inViewport = mouseInViewport();
-        Vec3 direction = ReplayUI.getMouseLookVector();
-        if (direction == null && dragging != null) direction = unboundedMouseLookVector();
-        if (direction == null) return;
         Camera camera = minecraft.gameRenderer.mainCamera();
-        RayModelIntersection.Ray ray = new RayModelIntersection.Ray(camera.position(), direction);
+        RayModelIntersection.Ray ray;
+        if (isScreenSpace()) {
+            ray = ScreenLayer.mouseRay();
+            if (ray == null) return;
+        } else {
+            Vec3 direction = ReplayUI.getMouseLookVector();
+            if (direction == null && dragging != null) direction = unboundedMouseLookVector();
+            if (direction == null) return;
+            ray = new RayModelIntersection.Ray(camera.position(), direction);
+        }
 
         ShapeState state = null;
         if (keyframe != null) {
@@ -156,7 +164,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         }
 
         if (dragging == null && keyframe != null && inViewport && ImGui.isMouseClicked(2)) {
-            Vec3 target = placementTarget(ray);
+            Vec3 target = isScreenSpace() ? new Vec3(ray.origin.x, ray.origin.y, state.z()) : placementTarget(ray);
             if (target != null && grouped()) {
                 Vec3 delta = target.subtract(groupPivot());
                 Map<GroupTransform.Member, ShapeState> placed = transformGroup(currentGroupStates(),
@@ -337,7 +345,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             }
             case SCALE_AXIS, SCALE_UNIFORM -> {
                 double delta = axisParameter(ray, dragOrigin, dragAxis) - dragParameter;
-                double factor = Math.max(0.001, 1 + delta / Math.max(0.05, gizmoScale(dragOrigin) * 3));
+                double factor = Math.max(0.001, 1 + delta / Math.max(0.05, scaleAt(dragOrigin) * 3));
                 double scaled = snap ? Math.max(0.1, Math.round(factor * 10) / 10.0) : factor;
                 Vec3 worldAxis = dragging.operation() == Operation.SCALE_AXIS ? dragAxis : null;
                 return transformGroup(starts, start -> GroupTransform.scale(start, dragOrigin, worldAxis, axis, scaled, localSpace));
@@ -444,7 +452,49 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private String layoutKey(ShapeState state) {
         int points = state.points() == null ? 0 : state.points().size();
-        return mode + ":" + state.shapeType() + ":" + points;
+        return mode + ":" + state.shapeType() + ":" + points + ":" + state.screen();
+    }
+
+    /** The selected shape is on the UI layer: rays, handles and sizes work in its orthographic space. */
+    public boolean isScreenSpace() {
+        ShapeKeyframe selected = keyframe;
+        if (selected == null) return false;
+        ShapeState state = previewState != null ? previewState : selected.value;
+        // An area's corners (geometry mode) pick its source region, which stays in the world.
+        return state != null && state.screen() && !(usesAbsolutePoints(state) && mode == GizmoMode.GEOMETRY);
+    }
+
+    private boolean screenState() {
+        ShapeKeyframe selected = keyframe;
+        if (selected == null) return false;
+        ShapeState state = previewState != null ? previewState : selected.value;
+        return state != null && state.screen();
+    }
+
+    // The handles follow the gizmo's space; the bounding box marks the shape itself, so it stays on the UI layer,
+    // while an area's source selection is in the world.
+    public boolean ownsScreenOverlay(Identifier id) {
+        if (!screenState() || !id.getNamespace().equals(Vector3.MOD_ID) || !id.getPath().contains(session)) return false;
+        String path = id.getPath();
+        if (path.startsWith("gizmo_area_selection")) return false;
+        if (path.startsWith("gizmo/")) return isScreenSpace();
+        return path.startsWith("gizmo");
+    }
+
+    private double scaleAt(Vec3 position) {
+        return isScreenSpace() ? ScreenLayer.gizmoScale() : gizmoScale(position);
+    }
+
+    private Vec3 viewForward(Camera camera) {
+        return isScreenSpace() ? new Vec3(0, 0, -1) : new Vec3(camera.forwardVector());
+    }
+
+    private Vec3 viewLeft(Camera camera) {
+        return isScreenSpace() ? new Vec3(-1, 0, 0) : new Vec3(camera.leftVector());
+    }
+
+    private double gridStep() {
+        return isScreenSpace() ? SCREEN_GRID_STEP : GRID_STEP;
     }
 
     private void rebuild(ShapeState state) {
@@ -500,6 +550,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private void add(Operation operation, Axis axis, int point, Identifier model, Color color) {
+        // On the UI layer only the in-plane handles make sense: no depth axis, and only the ring about it.
+        if (isScreenSpace() && (operation == Operation.ROTATE ? axis != Axis.Z : axis == Axis.Z)) return;
         ObjModelShape shape = new ObjModelShape(Shape.RenderingType.BATCH, transformer -> {},
                 model, Vec3.ZERO, color, true);
         Identifier id = Vector3.id("gizmo/" + session + "/" + handles.size());
@@ -509,10 +561,11 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private void updateHandles(ShapeState state) {
         Vec3 center = grouped() && mode != GizmoMode.GEOMETRY ? groupPivot() : center(state);
-        double scale = gizmoScale(center);
+        double scale = scaleAt(center);
         for (Handle handle : handles) {
             Vec3 position = handlePosition(state, handle);
-            double handleScale = scale;
+            // An area's corners sit at its source region, far from its center; each gets its own size.
+            double handleScale = mode == GizmoMode.GEOMETRY && usesAbsolutePoints(state) ? scaleAt(position) : scale;
             if (handle.operation() == Operation.POINT && state.shapeType().equals("arrow"))
                 handleScale *= ARROW_POINT_GIZMO_SCALE;
             if (handle.operation() == Operation.POINT && handle.axis() == Axis.NONE
@@ -527,7 +580,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private void updateAabbMarker(ShapeState state) {
         ensureAabbMarker();
         Vec3 markerCenter = placeAabb(aabbBox, state);
-        double scale = gizmoScale(markerCenter) * CENTER_POINT_GIZMO_SCALE;
+        double scale = (screenState() ? ScreenLayer.gizmoScale() : gizmoScale(markerCenter)) * CENTER_POINT_GIZMO_SCALE;
         centerPoint.forceSetWorldPosition(markerCenter);
         centerPoint.forceSetWorldScale(new Vec3(scale, scale, scale));
     }
@@ -699,10 +752,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         dragOrigin = handle.operation() == Operation.POINT ? handlePosition(state, handle)
                 : grouped() && mode != GizmoMode.GEOMETRY ? groupPivot() : center(state);
         dragAxis = handle.operation() == Operation.SCALE_UNIFORM
-                ? new Vec3(camera.leftVector()).scale(-1)
+                ? viewLeft(camera).scale(-1)
                 : handle.axis() == Axis.NONE ? Vec3.ZERO
                 : gizmoAxis(state, handle.axis());
-        dragPlaneNormal = new Vec3(camera.forwardVector());
+        dragPlaneNormal = viewForward(camera);
         if (handle.operation() == Operation.MOVE_FREE
                 || handle.operation() == Operation.POINT && handle.axis() == Axis.NONE) {
             dragPlaneStart = intersectPlane(ray, dragOrigin, dragPlaneNormal);
@@ -722,13 +775,14 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private ShapeState snapChanged(ShapeState state) {
-        float[] position = {(float) snap(state.x(), dragStart.x(), GRID_STEP, false),
-                (float) snap(state.y(), dragStart.y(), GRID_STEP, false),
-                (float) snap(state.z(), dragStart.z(), GRID_STEP, false)};
+        double step = gridStep();
+        float[] position = {(float) snap(state.x(), dragStart.x(), step, false),
+                (float) snap(state.y(), dragStart.y(), step, false),
+                (float) snap(state.z(), dragStart.z(), step, false)};
         float[] rotation = {state.pitch(), state.yaw(), state.roll()};
-        float[] scale = {(float) snap(state.scaleX(), dragStart.scaleX(), GRID_STEP, true),
-                (float) snap(state.scaleY(), dragStart.scaleY(), GRID_STEP, true),
-                (float) snap(state.scaleZ(), dragStart.scaleZ(), GRID_STEP, true)};
+        float[] scale = {(float) snap(state.scaleX(), dragStart.scaleX(), step, true),
+                (float) snap(state.scaleY(), dragStart.scaleY(), step, true),
+                (float) snap(state.scaleZ(), dragStart.scaleZ(), step, true)};
         float[] size = {(float) snap(state.sizeX(), dragStart.sizeX(), GRID_STEP, true),
                 (float) snap(state.sizeY(), dragStart.sizeY(), GRID_STEP, true),
                 (float) snap(state.sizeZ(), dragStart.sizeZ(), GRID_STEP, true)};
@@ -737,8 +791,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             List<ShapePoint> snapped = new ArrayList<>(points.size());
             for (int i = 0; i < points.size(); i++) {
                 ShapePoint now = points.get(i), before = dragStart.points().get(i);
-                snapped.add(new ShapePoint(snap(now.x(), before.x(), GRID_STEP, false),
-                        snap(now.y(), before.y(), GRID_STEP, false), snap(now.z(), before.z(), GRID_STEP, false)));
+                snapped.add(new ShapePoint(snap(now.x(), before.x(), step, false),
+                        snap(now.y(), before.y(), step, false), snap(now.z(), before.z(), step, false)));
             }
             points = snapped;
         }
@@ -793,7 +847,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             }
             case SCALE_UNIFORM -> {
                 float factor = (float) Math.max(0.001,
-                        1 + delta / Math.max(0.05, gizmoScale(dragOrigin) * 3));
+                        1 + delta / Math.max(0.05, scaleAt(dragOrigin) * 3));
                 float[] scale = {(float) dragStart.scaleX() * factor,
                         (float) dragStart.scaleY() * factor, (float) dragStart.scaleZ() * factor};
                 yield with(dragStart, null, null, scale, null, null);

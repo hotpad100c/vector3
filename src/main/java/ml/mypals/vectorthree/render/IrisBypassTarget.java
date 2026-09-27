@@ -43,8 +43,9 @@ public final class IrisBypassTarget {
 
     private IrisBypassTarget() {}
 
+    // The UI layer is drawn after the level, where the shader pack no longer applies.
     public static boolean isActive() {
-        return IrisCompat.isPackInUse();
+        return IrisCompat.isPackInUse() && !ScreenLayer.isRendering();
     }
 
     public static void beginIrisBypass() {

@@ -10,6 +10,8 @@ import ml.mypals.ryansrenderingkit.builders.vertexBuilders.VertexBuilder;
 import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.render.ScreenLayer;
+import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeState;
 import net.minecraft.client.Minecraft;
@@ -62,6 +64,8 @@ public final class AreaShape extends Shape implements EmptyMesh {
     private boolean projectionShown;
     private float projectionAlpha = 1.0f;
     private AreaProjection.Projection projection;
+    // On the UI layer only the baked copy is drawn, flat on the screen; the source region stays in the world.
+    private boolean screen;
 
     public AreaShape(ShapeState state, Color color, boolean seeThrough) {
         super(RenderingType.BATCH, transformer -> {}, color, Vec3.ZERO, seeThrough);
@@ -83,6 +87,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         outlineEnabled = state.outline();
         outlineColor = colorToVector4f(new Color(state.outlineColor(), true));
         options = AreaOptions.orDefault(state.areaOptions());
+        screen = state.screen();
         projectionShown = state.visible() && ((state.color() >>> 24) & 0xFF) > 0;
         projectionAlpha = ((state.color() >>> 24) & 0xFF) / 255.0f;
         publishProjection();
@@ -102,7 +107,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
     /** Tells the entity/particle mixins where this area carries its source region's contents. */
     private void publishProjection() {
-        boolean wanted = sourceBounds != null && projectionShown
+        boolean wanted = !screen && sourceBounds != null && projectionShown
                 && (options.projectEntities() || options.projectParticles());
         projection = wanted ? new AreaProjection.Projection(sourceBounds, new Matrix4d(destTransform),
                 options.projectEntities(), options.projectParticles(), shapeId, projectionAlpha) : null;
@@ -181,14 +186,49 @@ public final class AreaShape extends Shape implements EmptyMesh {
     private PreparedRenderType frameTranslucentMesh;
 
     @Override
-    protected void drawInternal(VertexBuilder builder) {}
+    protected void drawInternal(VertexBuilder builder) {
+        if (screen && ScreenLayer.isRendering()) drawOnScreen();
+    }
+
+    private void drawOnScreen() {
+        if (AreaSuppression.consumeDirty(shapeId) || (bakedExtended != null && bakedExtended != irisExtendsNow())) {
+            rebakeRegion();
+        }
+        if (baseColor.getAlpha() == 0) return;
+        Matrix4f model = ScreenLayer.origin().mul(new Matrix4f(destTransform));
+        if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
+            drawSafely(() -> {
+                // No fog on the UI layer: a zero fog transform puts every vertex at distance 0.
+                prepareMesh(model, new Matrix4f().zero(), true);
+                RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+                try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                        () -> "vector3_area_screen", target.getColorTextureView(), Optional.empty(),
+                        target.hasDepth() ? target.getDepthTextureView() : null, OptionalDouble.empty())) {
+                    RenderSystem.bindDefaultUniforms(pass);
+                    drawOpaqueMeshes(pass);
+                    drawTranslucentMesh(pass);
+                }
+            });
+        }
+        if (!blockEntities.isEmpty() && !blockEntityDrawFailed) {
+            try {
+                Minecraft minecraft = Minecraft.getInstance();
+                SubmitNodeStorage storage = new SubmitNodeStorage();
+                submitBlockEntities(storage, minecraft.gameRenderer.gameRenderState().levelRenderState.cameraRenderState, model);
+                Helpers.renderFeatures(minecraft, storage);
+            } catch (Exception exception) {
+                blockEntityDrawFailed = true;
+                Vector3.LOGGER.warn("AreaShape block entity draw failed, pausing them until the next rebake", exception);
+            }
+        }
+    }
 
     public static void beginFrame() {
         PREPARED.clear();
     }
 
     public void submitFrame(SubmitNodeCollector collector, CameraRenderState camera) {
-        if (!enabled()) return;
+        if (!enabled() || screen) return;
         if (AreaSuppression.consumeDirty(shapeId) || (bakedExtended != null && bakedExtended != irisExtendsNow())) {
             rebakeRegion();
         }
@@ -196,7 +236,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         Matrix4f model = destinationModel(camera.pos);
         if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
             try {
-                prepareMesh(model);
+                prepareMesh(model, model, !IrisCompat.isPackInUse());
                 PREPARED.add(this);
             } catch (Exception exception) {
                 drawFailed = true;
@@ -234,7 +274,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         });
     }
 
-    private void prepareMesh(Matrix4f model) {
+    private void prepareMesh(Matrix4f model, Matrix4f fogModel, boolean ownShader) {
         Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrixCopy()).mul(model);
         Vector4f colorModulator = colorToVector4f(baseColor);
         frameTranslucent = colorModulator.w() < 1.0f;
@@ -242,12 +282,13 @@ public final class AreaShape extends Shape implements EmptyMesh {
             translucentMesh.resort(new Matrix4f(model).invert().transformPosition(new Vector3f()));
         }
         GpuBufferSlice transform = RenderSystem.getDynamicUniforms().writeTransform(
-                modelView, colorModulator, new Vector3f(), new Matrix4f());
+                modelView, colorModulator, new Vector3f(), fogModel);
+        RenderType translucent = AreaRenderType.get(ownShader);
         frameSolid = solidMesh.isEmpty() ? null
-                : withTransform(frameTranslucent ? AreaRenderType.get() : AreaRenderType.getSolid(), transform);
+                : withTransform(frameTranslucent ? translucent : AreaRenderType.getSolid(ownShader), transform);
         frameCutout = cutoutMesh.isEmpty() ? null
-                : withTransform(frameTranslucent ? AreaRenderType.get() : AreaRenderType.getCutout(), transform);
-        frameTranslucentMesh = translucentMesh.isEmpty() ? null : withTransform(AreaRenderType.get(), transform);
+                : withTransform(frameTranslucent ? translucent : AreaRenderType.getCutout(ownShader), transform);
+        frameTranslucentMesh = translucentMesh.isEmpty() ? null : withTransform(translucent, transform);
         reserveSequentialIndices(solidMesh);
         reserveSequentialIndices(cutoutMesh);
     }
@@ -275,12 +316,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
         for (AreaShape area : PREPARED) {
             area.drawSafely(() -> {
                 if (area.frameTranslucent) area.drawOpaqueMeshes(pass);
-                if (area.frameTranslucentMesh != null) {
-                    area.frameTranslucentMesh.drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(
-                            area.translucentMesh.vertexBuffer(), area.translucentMesh.indexBuffer(),
-                            area.translucentMesh.indexType(), 0, 0, area.translucentMesh.indexCount(),
-                            area.translucentMesh.topology()), pass);
-                }
+                area.drawTranslucentMesh(pass);
             });
         }
         PREPARED.clear();
@@ -307,6 +343,13 @@ public final class AreaShape extends Shape implements EmptyMesh {
         }
     }
 
+    private void drawTranslucentMesh(RenderPass pass) {
+        if (frameTranslucentMesh == null) return;
+        frameTranslucentMesh.drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(translucentMesh.vertexBuffer(),
+                translucentMesh.indexBuffer(), translucentMesh.indexType(), 0, 0, translucentMesh.indexCount(),
+                translucentMesh.topology()), pass);
+    }
+
     private void drawOpaqueMeshes(RenderPass pass) {
         if (frameSolid != null) drawSequential(pass, frameSolid, solidMesh);
         if (frameCutout != null) drawSequential(pass, frameCutout, cutoutMesh);
@@ -319,7 +362,7 @@ public final class AreaShape extends Shape implements EmptyMesh {
 
     /** Whether this shape has outline content to contribute this frame; checked by AreaOutlineSubmitMixin. */
     public boolean hasOutline() {
-        return outlineEnabled && !outlineVertices.isEmpty();
+        return !screen && outlineEnabled && !outlineVertices.isEmpty();
     }
 
     /**

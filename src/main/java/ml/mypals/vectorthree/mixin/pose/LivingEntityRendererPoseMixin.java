@@ -12,6 +12,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.camera.CameraPreview;
 import ml.mypals.vectorthree.compat.IrisCompat;
+import ml.mypals.vectorthree.render.ScreenLayer;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -30,7 +31,8 @@ public class LivingEntityRendererPoseMixin {
     @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V",
             at = @At("RETURN"))
     private void vector3$attachPose(LivingEntity entity, LivingEntityRenderState state, float partialTick, CallbackInfo ci) {
-        ((EntityPoses.Holder) state).vector3$setPoses(entity.getUUID(), EntityPoses.get(entity.getUUID()));
+        UUID identity = EntityPoses.poseIdentity(entity.getUUID());
+        ((EntityPoses.Holder) state).vector3$setPoses(identity, EntityPoses.get(identity));
     }
 
     // The model's parts are only set up later, when the submit is drawn; for the gizmo's entity they are set up
@@ -43,7 +45,7 @@ public class LivingEntityRendererPoseMixin {
         UUID entity = state instanceof EntityPoses.Holder holder ? holder.vector3$poseEntity() : null;
         boolean gizmo = entity != null && entity.equals(Vector3.POSE_GIZMO.entity());
         // Not from the preview or shadow passes: their matrices aren't relative to the main camera.
-        if (entity != null && !CameraPreview.isRendering() && !IrisCompat.isRenderingShadowPass()
+        if (entity != null && !CameraPreview.isRendering() && !IrisCompat.isRenderingShadowPass() && !ScreenLayer.isRendering()
                 && (gizmo || EntityPoses.snapshotPending(entity))) {
             vector3$setupAnim(model, state);
             EntityPoses.afterSetupAnim(model, state, true);

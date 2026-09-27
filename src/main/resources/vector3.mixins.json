@@ -29,6 +29,7 @@
 		"area.ParticleAccessor",
 		"particle.ParticleEngineEmitterMixin",
 		"particle.QuadParticleAccessor",
+		"rrk.MainRenderScreenLayerMixin",
 		"area.RenderSetupAccessor",
 		"area.RenderTypeAccessor",
 		"area.TextureBindingAccessor",

@@ -88,6 +88,25 @@ public final class EntityPoses {
         snapshots.clear();
     }
 
+    private static @Nullable UUID identity;
+
+    /** Extracts under another UUID: a projected entity poses as its shape (see ProjectedEntityShape). */
+    public static <T> T asIdentity(UUID uuid, java.util.function.Supplier<T> extract) {
+        UUID previous = identity;
+        identity = uuid;
+        try {
+            return extract.get();
+        } finally {
+            identity = previous;
+        }
+    }
+
+    /** Whose poses an entity being extracted takes: the projecting shape's when it has any, else its own. */
+    public static UUID poseIdentity(UUID own) {
+        UUID override = identity;
+        return override == null || get(override).isEmpty() && !get(own).isEmpty() ? own : override;
+    }
+
     public static List<EntityPose> get(UUID entity) {
         List<EntityPose> poses = current.isEmpty() ? List.of() : current.getOrDefault(entity, List.of());
         Preview preview = previews.isEmpty() ? null : previews.get(entity);

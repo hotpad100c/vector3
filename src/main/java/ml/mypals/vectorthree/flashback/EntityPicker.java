@@ -2,6 +2,8 @@ package ml.mypals.vectorthree.flashback;
 
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImString;
+import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
+import ml.mypals.vectorthree.shape.entity.ShapeEntities;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -27,11 +29,18 @@ public final class EntityPicker {
 
     /** Returns the picked entity's UUID, or {@code current} when nothing was picked this frame. */
     public static @Nullable UUID combo(String label, @Nullable UUID current) {
+        return combo(label, current, false);
+    }
+
+    /** With {@code shapes}, entity shapes are listed first: they pose as their own UUID (see ShapeEntities). */
+    public static @Nullable UUID combo(String label, @Nullable UUID current, boolean shapes) {
         Minecraft minecraft = Minecraft.getInstance();
         ClientLevel level = minecraft.level;
         Vec3 camera = minecraft.gameRenderer.mainCamera().position();
         Entity selected = level == null || current == null ? null : level.getEntity(current);
+        String currentShape = shapes ? ShapeEntities.shapeOf(current) : null;
         String preview = selected != null ? describe(selected, camera)
+                : currentShape != null ? I18n.get("vector3.entity_picker.shape", ShapeTrackRegistry.displayName(currentShape))
                 : current != null ? current.toString() : I18n.get("vector3.entity_picker.none");
 
         UUID result = current;
@@ -47,6 +56,13 @@ public final class EntityPicker {
         UUID typed = parseUuid(filter);
         if (typed != null && ImGui.selectable(I18n.get("vector3.entity_picker.use_uuid", typed))) result = typed;
 
+        if (shapes) {
+            for (ShapeEntities.Entry entry : ShapeEntities.entries()) {
+                String text = I18n.get("vector3.entity_picker.shape", ShapeTrackRegistry.displayName(entry.shapeId()));
+                if (!filter.isEmpty() && !text.toLowerCase(Locale.ROOT).contains(filter)) continue;
+                if (ImGui.selectable(text + "###shape_" + entry.shapeId(), entry.uuid().equals(current))) result = entry.uuid();
+            }
+        }
         if (level != null) {
             List<Entity> entities = new ArrayList<>();
             // The local player is Flashback's replay camera, not a recorded entity.

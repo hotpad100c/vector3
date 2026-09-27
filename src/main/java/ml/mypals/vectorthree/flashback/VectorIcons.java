@@ -30,7 +30,7 @@ import static org.lwjgl.stb.STBTruetype.stbtt_InitFont;
  *       U+F504 Clips track, U+F505 Loop track, U+F506 Fade track,
  *       U+F507 Entity Pose track</li>
  *   <li>U+F510 onward: one per shape type, in {@link #SHAPE_TYPES} order
- *       (box F510, sphere F511, face_circle F512, ... area F51F)</li>
+ *       (box F510, sphere F511, face_circle F512, ... area F51F, particle F520)</li>
  * </ul>
  */
 public final class VectorIcons {
@@ -44,7 +44,7 @@ public final class VectorIcons {
     public static final char POSE_TRACK = '\uF507';
     private static final char FIRST_SHAPE_TYPE = '\uF510';
     private static final List<String> SHAPE_TYPES = List.of("box", "sphere", "face_circle", "cylinder", "cone",
-            "line", "line_strip", "text", "block", "item", "entity", "obj", "arrow", "image", "video", "area");
+            "line", "line_strip", "text", "block", "item", "entity", "obj", "arrow", "image", "video", "area", "particle");
     private static final char FIRST = '\uF500';
     private static final char LAST = '\uF5FF';
     private static final Identifier FONT = Vector3.id("ui/icons.ttf");

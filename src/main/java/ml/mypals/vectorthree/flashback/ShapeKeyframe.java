@@ -16,6 +16,7 @@ import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.flashback.pose.ModelPartCombo;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.shape.particle.ParticleEditor;
+import ml.mypals.vectorthree.shape.entity.ShapeEntities;
 import ml.mypals.vectorthree.shape.particle.ParticleSettings;
 import ml.mypals.vectorthree.text.SdfFont;
 import ml.mypals.vectorthree.shape.text.TextSettings;
@@ -30,6 +31,7 @@ import imgui.moulberry90.type.ImInt;
 import imgui.moulberry90.type.ImString;
 import org.jetbrains.annotations.Nullable;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 
@@ -107,6 +109,29 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
 
         String[] parentId = {state.parentShapeId() == null ? "" : state.parentShapeId()};
         ShapeMount[] mount = {state.mount()};
+
+        boolean layerCapable = !selectedType[0].equals("particle");
+        boolean[] screen = {layerCapable && state.screen()};
+        if (layerCapable) {
+            ImGui.text(I18n.get("vector3.keyframe.layer"));
+            ImGui.sameLine();
+            boolean toWorld = ImGui.radioButton(I18n.get("vector3.keyframe.layer.world"), !screen[0]) && screen[0];
+            ImGui.sameLine();
+            boolean toScreen = ImGui.radioButton(I18n.get("vector3.keyframe.layer.screen"), screen[0]) && !screen[0];
+            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.keyframe.layer.screen.tooltip"));
+            if (toWorld || toScreen) {
+                screen[0] = toScreen;
+                parentId[0] = "";
+                mount[0] = null;
+                Vec3 at = toScreen ? Vec3.ZERO : inFrontOfCamera();
+                position[0] = (float) at.x;
+                position[1] = (float) at.y;
+                position[2] = (float) at.z;
+                float factor = toScreen ? SCREEN_SCALE : 1 / SCREEN_SCALE;
+                for (int i = 0; i < 3; i++) scale[i] *= factor;
+                changed = true;
+            }
+        }
         ImGui.setNextItemWidth(360);
         if (!multi && ImGui.beginCombo(I18n.get("vector3.keyframe.parent_shape_uuid"),
                 parentId[0].isEmpty() ? I18n.get("vector3.keyframe.none") : ShapeTrackRegistry.displayName(parentId[0]))) {
@@ -118,6 +143,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
             }
             for (String shapeId : ShapeTrackRegistry.shapeIds()) {
                 if (shapeId.equals(selectedId[0])) continue;
+                ShapeState candidate = ShapeTrackRegistry.state(shapeId);
+                if (candidate != null && candidate.screen() != screen[0]) continue;
                 if (ImGui.selectable(ShapeTrackRegistry.displayName(shapeId), shapeId.equals(parentId[0]))) {
                     ShapeTrackRegistry.convertToNewParent(state, shapeId, position, rotation, scale);
                     parentId[0] = shapeId;
@@ -140,13 +167,13 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         // A shape either has a parent shape or rides an entity; picking one clears the other.
         ImGui.setNextItemWidth(360);
         UUID mountEntity = mount[0] == null ? null : mount[0].entity();
-        UUID pickedMount = multi ? null : EntityPicker.combo(I18n.get("vector3.keyframe.mount_entity"), mountEntity);
+        UUID pickedMount = multi || screen[0] ? null : EntityPicker.combo(I18n.get("vector3.keyframe.mount_entity"), mountEntity);
         ShapeMount nextMount = mount[0];
         if (pickedMount != null && !pickedMount.equals(mountEntity)) {
             nextMount = mount[0] == null ? new ShapeMount(pickedMount, TrackingBodyPart.ROOT, true)
                     : new ShapeMount(pickedMount, mount[0].part(), mount[0].followRotation());
         }
-        if (mount[0] != null && !multi) {
+        if (mount[0] != null && !multi && !screen[0]) {
             TrackingBodyPart part = ImGuiHelper.enumCombo(I18n.get("flashback.body_part"), mount[0].part());
             if (part != mount[0].part()) nextMount = nextMount.withPart(part);
             String modelPart = ModelPartCombo.render(I18n.get("vector3.mount.model_part"), mount[0].resolve(), mount[0].modelPart());
@@ -170,6 +197,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
 
         float[] size = {(float) state.sizeX(), (float) state.sizeY(), (float) state.sizeZ()};
         float[] width = {state.lineWidth()};
+        boolean[] projectWorld = {state.shapeType().equals("entity") && ShapeEntities.projectsWorldEntity(state)};
+        UUID[] projectedEntity = {state.shapeType().equals("entity") ? ShapeEntities.source(state) : null};
         ParticleSettings[] particle = {state.shapeType().equals("particle")
                 ? ParticleSettings.orDefault(state.particle()) : ParticleSettings.DEFAULT};
         float[] color = {
@@ -452,16 +481,38 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 }
             }
             case "entity" -> {
-                ImGui.setNextItemWidth(360);
-                if (ImGui.beginCombo(I18n.get("vector3.keyframe.entity"), content[0])) {
-                    for (String id : ShapeTrackRegistry.entityIds()) {
-                        if (ImGui.selectable(id, id.equals(content[0]))) {
-                            content[0] = id;
-                            changed = true;
-                        }
-                    }
-                    ImGui.endCombo();
+                ImGui.text(I18n.get("vector3.keyframe.entity_source"));
+                ImGui.sameLine();
+                if (ImGui.radioButton(I18n.get("vector3.keyframe.entity_source.new"), !projectWorld[0]) && projectWorld[0]) {
+                    projectWorld[0] = false;
+                    changed = true;
                 }
+                ImGui.sameLine();
+                if (ImGui.radioButton(I18n.get("vector3.keyframe.entity_source.world"), projectWorld[0]) && !projectWorld[0]) {
+                    projectWorld[0] = true;
+                    changed = true;
+                }
+                if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.keyframe.entity_source.world.tooltip"));
+                if (projectWorld[0]) {
+                    ImGui.setNextItemWidth(360);
+                    UUID picked = EntityPicker.combo(I18n.get("vector3.keyframe.projected_entity"), projectedEntity[0]);
+                    if (!java.util.Objects.equals(picked, projectedEntity[0])) {
+                        projectedEntity[0] = picked;
+                        changed = true;
+                    }
+                } else {
+                    ImGui.setNextItemWidth(360);
+                    if (ImGui.beginCombo(I18n.get("vector3.keyframe.entity"), content[0])) {
+                        for (String id : ShapeTrackRegistry.entityIds()) {
+                            if (ImGui.selectable(id, id.equals(content[0]))) {
+                                content[0] = id;
+                                changed = true;
+                            }
+                        }
+                        ImGui.endCombo();
+                    }
+                }
+                ImGui.textDisabled(I18n.get("vector3.keyframe.entity_pose_hint"));
             }
         }
         boolean wireframeCapable = ShapeTrackRegistry.supportsWireframe(selectedType[0]);
@@ -523,17 +574,28 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                         case "video" -> videoFile.get();
                         default -> state.model();
                     })
-                    .withBlockProperties(selectedType[0].equals("block") ? blockProperties
+                    .withBlockProperties(selectedType[0].equals("entity")
+                            ? (projectWorld[0] ? ShapeEntities.worldSource(projectedEntity[0]) : Map.of())
+                            : selectedType[0].equals("block") ? blockProperties
                             : selectedType[0].equals("obj") ? Map.of(
                                     TexturedObjShape.MODE, TexturedObjShape.Mode.values()[objMode.get()].id,
                                     TexturedObjShape.TEXTURE, objTexture.get()) : state.blockProperties())
                     .withParticle(selectedType[0].equals("particle") ? particle[0] : state.particle())
+                    .withScreen(screen[0] && layerCapable)
                     .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick())
                     .withName(nameField.get().isBlank() ? null : nameField.get());
             ShapeTrackRegistry.apply(replacement);
             return replacement;
         }
         return state;
+    }
+
+    // A shape moved onto the UI layer is scaled up so a block-sized shape becomes about a tenth of the screen.
+    private static final float SCREEN_SCALE = 100;
+
+    private static Vec3 inFrontOfCamera() {
+        net.minecraft.client.Camera camera = net.minecraft.client.Minecraft.getInstance().gameRenderer.mainCamera();
+        return camera.position().add(new Vec3(camera.forwardVector()).scale(5));
     }
 
     private static boolean editPoint(String label, List<ShapePoint> points, int index) {

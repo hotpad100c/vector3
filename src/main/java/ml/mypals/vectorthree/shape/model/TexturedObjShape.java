@@ -25,6 +25,7 @@ import ml.mypals.ryansrenderingkit.transform.shapeTransformers.DefaultTransforme
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.compat.IrisCompat;
 import ml.mypals.vectorthree.render.IrisBypassTarget;
+import ml.mypals.vectorthree.render.ScreenLayer;
 import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.shape.media.ImageDecoder;
@@ -217,6 +218,10 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     // blended onto the main target when the level finishes.
     @Override
     protected void drawInternal(VertexBuilder builder) {
+        if (ScreenLayer.isRendering()) {
+            drawOnScreen();
+            return;
+        }
         if (frameDraws.isEmpty() || inMainPass()) return;
         IrisBypassTarget.beginIrisBypass();
         boolean skip = IrisCompat.skipExtension();
@@ -243,7 +248,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     /** Called from LevelRenderer#submitFeatures, before any render pass is open. */
     public void submitFrame() {
         frameDraws.clear();
-        if (failed || gpuVertices == null || !enabled() || baseColor.getAlpha() == 0) return;
+        if (failed || gpuVertices == null || !enabled() || baseColor.getAlpha() == 0 || onScreenLayer()) return;
         try {
             // Unless the shape bypasses shaders (ShapeState#bypassShaders), a shader pack shades it.
             frameEntity = IrisBypassTarget.isActive()
@@ -255,20 +260,51 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
                 sequential.requestIndexCount(model.corners.size());
                 sequential.resizeToRequestedIndexCount();
             }
-            PoseStack poseStack = new PoseStack();
-            beforeDraw(poseStack, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(true), true);
-            Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrixCopy()).mul(poseStack.last().pose());
-            if (mode == Mode.MATERIALS) {
-                for (ObjModel.Range range : model.ranges) addDraw(modelView, range.material(), range.first(), range.count());
-            } else {
-                addDraw(modelView, mode == Mode.TEXTURE ? chosenMaterial() : ObjModel.Material.DEFAULT, 0,
-                        model.corners.size());
-            }
+            prepareDraws(new Matrix4f(RenderSystem.getModelViewMatrixCopy()));
             PREPARED.add(this);
         } catch (Exception exception) {
             failed = true;
             frameDraws.clear();
             Vector3.LOGGER.warn("OBJ draw failed, pausing it until the shape is rebuilt", exception);
+        }
+    }
+
+    private void prepareDraws(Matrix4f base) {
+        PoseStack poseStack = new PoseStack();
+        beforeDraw(poseStack, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(true), true);
+        Matrix4f modelView = base.mul(poseStack.last().pose());
+        if (mode == Mode.MATERIALS) {
+            for (ObjModel.Range range : model.ranges) addDraw(modelView, range.material(), range.first(), range.count());
+        } else {
+            addDraw(modelView, mode == Mode.TEXTURE ? chosenMaterial() : ObjModel.Material.DEFAULT, 0,
+                    model.corners.size());
+        }
+    }
+
+    private boolean onScreenLayer() {
+        return Boolean.TRUE.equals(customData.get(ScreenLayer.SHAPE_FLAG));
+    }
+
+    // On the UI layer the mesh skips the level's main pass and is drawn here, with the UI pass's ortho projection.
+    private void drawOnScreen() {
+        frameDraws.clear();
+        if (failed || gpuVertices == null || baseColor.getAlpha() == 0) return;
+        try {
+            frameEntity = false;
+            prepareDraws(ScreenLayer.basePose());
+            var target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+            try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "vector3_obj_screen",
+                    target.getColorTextureView(), Optional.empty(), target.hasDepth() ? target.getDepthTextureView() : null,
+                    OptionalDouble.empty())) {
+                RenderSystem.bindDefaultUniforms(pass);
+                draw(pass, false);
+                draw(pass, true);
+            }
+        } catch (Exception exception) {
+            failed = true;
+            Vector3.LOGGER.warn("OBJ draw failed, pausing it until the shape is rebuilt", exception);
+        } finally {
+            frameDraws.clear();
         }
     }
 
