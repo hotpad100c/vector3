@@ -53,7 +53,7 @@ public final class HelpWindow {
     }
 
     public static void render() {
-        if (ImGui.getIO().getKeyShift() && ImGui.isKeyPressed(ImGuiKey.Slash, false)) {
+        if (VectorKeybinds.pressed(VectorKeybinds.HELP)) {
             if (WINDOW.isOpen()) WINDOW.toggle();
             else open(SHORTCUTS);
         }

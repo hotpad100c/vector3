@@ -8,4 +8,5 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 public interface KeybindAccessor {
     @Accessor("description") String vector3$description();
     @Invoker("longKeyIdentifier") String vector3$keys();
+    @Invoker("isPressed") boolean vector3$isPressed(boolean repeat);
 }

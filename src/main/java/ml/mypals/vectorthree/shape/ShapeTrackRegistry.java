@@ -46,6 +46,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.core.particles.ParticleOptions;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -56,6 +57,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.Arrays;
 import java.util.function.Function;
+import java.util.concurrent.ThreadLocalRandom;
 
 public final class ShapeTrackRegistry {
     public record Definition(String id, String name, Function<ShapeState, Shape> factory) {}
@@ -69,6 +71,9 @@ public final class ShapeTrackRegistry {
     private static List<String> blockIds;
     private static List<String> itemIds;
     private static List<String> entityIds;
+    private static List<String> particleIds;
+    private static final Map<String, ParticleClock> PARTICLE_CLOCKS = new LinkedHashMap<>();
+    private record ParticleClock(long nanos, double carry) {}
     private static String previewHighlightId;
     private static boolean fixedSeeThroughPipelines;
 
@@ -132,6 +137,9 @@ public final class ShapeTrackRegistry {
                 new Color(state.color(), true), state.seeThrough()));
         register("area", "vector3.shape.area", state -> new AreaShape(state,
                 new Color(state.color(), true), state.seeThrough()));
+        register("particle", "vector3.shape.particle", state -> ShapeGenerator.generateFaceCircle()
+                .radius(0.15f).segments(16).color(new Color(state.color(), true))
+                .seeThrough(true).build(Shape.RenderingType.BATCH));
     }
 
     public static Iterable<Definition> definitions() { return TYPES.values(); }
@@ -244,6 +252,7 @@ public final class ShapeTrackRegistry {
         LAST_STATES.clear();
         previewHighlightId = null;
         ImageShape.clearTextures();
+        PARTICLE_CLOCKS.clear();
     }
 
     public static void retainOnly(java.util.Set<String> liveShapeIds) {
@@ -346,6 +355,33 @@ public final class ShapeTrackRegistry {
             shape.disable();
         }
         refreshAreaParents();
+        if (state.shapeType().equals("particle") && state.visible()) emitParticles(state);
+    }
+
+    private static void emitParticles(ShapeState state) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.isPaused()) return;
+        Object registered = BuiltInRegistries.PARTICLE_TYPE.getValue(Identifier.tryParse(state.model()));
+        if (!(registered instanceof ParticleOptions particle)) return;
+        long now = System.nanoTime();
+        ParticleClock previous = PARTICLE_CLOCKS.get(state.shapeId());
+        double elapsed = previous == null ? 0 : Math.min(0.25, (now - previous.nanos()) / 1_000_000_000.0);
+        double amount = (previous == null ? 0 : previous.carry()) + elapsed * Math.max(0, state.lineWidth());
+        int count = Math.min(100, (int) amount);
+        PARTICLE_CLOCKS.put(state.shapeId(), new ParticleClock(now, amount - count));
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        for (int i = 0; i < count; i++) {
+            double px = state.x() + (random.nextDouble() - 0.5) * state.sizeX();
+            double py = state.y() + (random.nextDouble() - 0.5) * state.sizeY();
+            double pz = state.z() + (random.nextDouble() - 0.5) * state.sizeZ();
+            minecraft.level.addParticle(particle, px, py, pz, 0, 0, 0);
+        }
+    }
+
+    public static List<String> particleIds() {
+        if (particleIds == null) particleIds = BuiltInRegistries.PARTICLE_TYPE.keySet().stream()
+                .map(Identifier::toString).sorted().toList();
+        return particleIds;
     }
 
     private static final java.util.Set<String> MOUNTED = new java.util.LinkedHashSet<>();

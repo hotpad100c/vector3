@@ -99,7 +99,7 @@ public final class TrackSelection {
     }
 
     private static boolean movable(KeyframeTrack track) {
-        return selected.contains(track) && track.keyframeType != ClipKeyframeType.INSTANCE;
+        return selected.contains(track) && track.keyframeType != ClipKeyframeType.INSTANCE && !TrackManagement.locked(track);
     }
 
     private static void swapIfSelected(List<KeyframeTrack> tracks, int index, int target, int direction, float lineHeight) {
@@ -113,7 +113,7 @@ public final class TrackSelection {
     public static @Nullable EditorSceneHistoryEntry delete(EditorScene scene) {
         List<Integer> indices = new ArrayList<>();
         for (int i = 0; i < scene.keyframeTracks.size(); i++) {
-            if (selected.contains(scene.keyframeTracks.get(i))) indices.add(i);
+            if (selected.contains(scene.keyframeTracks.get(i)) && !TrackManagement.locked(scene.keyframeTracks.get(i))) indices.add(i);
         }
         if (indices.isEmpty()) return null;
         List<EditorSceneHistoryAction> undo = new ArrayList<>(), redo = new ArrayList<>();

@@ -3,6 +3,10 @@ plugins {
 	id 'maven-publish'
 }
 
+configurations {
+	flashbackBundle
+}
+
 repositories {
 	// Add repositories to retrieve artifacts from in here.
 	// You should only use this when depending on other mods because
@@ -34,11 +38,21 @@ dependencies {
 	implementation "maven.modrinth:CdJaAf0y:fEDHtqkn"
 	//Flashback
 	implementation "maven.modrinth:4das1Fjq:${project.flashback_version}"
+	flashbackBundle "maven.modrinth:4das1Fjq:${project.flashback_version}"
+	compileOnly files(layout.buildDirectory.file("generated/flashback-libs/META-INF/jars/lattice-2.2.0.jar"))
 	//Sodium
 	implementation "maven.modrinth:AANobbMI:v4PSXean"
 	//Iris
 	implementation "maven.modrinth:YL57xq9U:bAdKrpw8"
 }
+
+tasks.register("extractFlashbackCompileLibraries", Copy) {
+	from { zipTree(configurations.flashbackBundle.singleFile) }
+	include "META-INF/jars/lattice-2.2.0.jar"
+	into layout.buildDirectory.dir("generated/flashback-libs")
+}
+
+compileJava.dependsOn extractFlashbackCompileLibraries
 
 processResources {
 	def version = project.version

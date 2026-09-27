@@ -360,6 +360,20 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 }
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.play_audio"), playAudio);
             }
+            case "particle" -> {
+                ImGui.setNextItemWidth(360);
+                if (ImGui.beginCombo(I18n.get("vector3.keyframe.particle"), content[0])) {
+                    for (String id : ShapeTrackRegistry.particleIds()) {
+                        if (ImGui.selectable(id, id.equals(content[0]))) {
+                            content[0] = id;
+                            changed = true;
+                        }
+                    }
+                    ImGui.endCombo();
+                }
+                changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.emission_rate"), width, 0.5f, 0, 1000);
+                changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.spread"), size, 0.05f, 0, 1000);
+            }
             case "area" -> {
                 while (points.size() < 2) {
                     points.add(new ShapePoint(Math.round(state.x() - 0.5), Math.round(state.y() - 0.5), Math.round(state.z() - 0.5)));
@@ -492,7 +506,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                     .withModel(switch (selectedType[0]) {
                         case "obj" -> model.get().isBlank()
                                 ? "ryansrenderingkit:models/monkey.obj" : model.get();
-                        case "block", "item", "entity" -> content[0];
+                        case "block", "item", "entity", "particle" -> content[0];
                         case "image" -> imageFile.get();
                         case "video" -> videoFile.get();
                         default -> state.model();

@@ -18,7 +18,7 @@ import java.util.function.Consumer;
 
 // Undo steps position back then applies entries[position]; redo applies entries[position] then steps forward.
 @Mixin(value = EditorSceneHistory.class, remap = false)
-public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory {
+public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory, ml.mypals.vectorthree.flashback.HistoryWindow.HistoryView {
     @Shadow @Final private List<EditorSceneHistoryEntry> entries;
     @Shadow private int position;
     @Unique private int vector3$positionBefore;
@@ -28,6 +28,9 @@ public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory {
         entries.clear();
         position = 0;
     }
+
+    @Override public List<EditorSceneHistoryEntry> vector3$entries() { return List.copyOf(entries); }
+    @Override public int vector3$position() { return position; }
 
     @Inject(method = {"undo", "redo"}, at = @At("HEAD"))
     private void vector3$rememberPosition(EditorScene scene, Consumer<String> description, CallbackInfo ci) {

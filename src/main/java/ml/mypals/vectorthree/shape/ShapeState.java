@@ -44,13 +44,14 @@ public record ShapeState(
             default -> List.of();
         };
         return new ShapeState(type, id, x, y, z, 0, 0, 0,
-                1, 1, 1, 1, 1, 1, 32, 0.05f, 0xFFFFFFFF, points,
+                1, 1, 1, 1, 1, 1, 32, type.equals("particle") ? 10f : 0.05f, 0xFFFFFFFF, points,
                 type.equals("text") ? TextSettings.defaults() : null,
                 switch (type) {
                     case "obj" -> "ryansrenderingkit:models/monkey.obj";
                     case "block" -> "minecraft:stone";
                     case "item" -> "minecraft:diamond";
                     case "entity" -> "minecraft:pig";
+                    case "particle" -> "minecraft:flame";
                     default -> "";
                 }, Map.of(), "", false, true, false, 0xFFFFFFFF, 0, false, false, false, 0, null, null, null, false, null);
     }

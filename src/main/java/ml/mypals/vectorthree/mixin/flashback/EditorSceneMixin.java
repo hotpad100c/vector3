@@ -23,16 +23,25 @@ import java.util.List;
 import java.util.function.Consumer;
 
 @Mixin(EditorScene.class)
-public class EditorSceneMixin implements PrefabGroupHolder.Scene, ClipProject.ClearableHistory {
+public class EditorSceneMixin implements PrefabGroupHolder.Scene, ClipProject.ClearableHistory,
+        ml.mypals.vectorthree.flashback.HistoryWindow.SceneHistory, ml.mypals.vectorthree.flashback.PlaybackRange.Holder {
     @Final
     @Shadow public List<KeyframeTrack> keyframeTracks;
     @Unique private PrefabGroupStore vector3$prefabGroups;
+    @Unique private int vector3$inTick = -1;
+    @Unique private int vector3$outTick = -1;
     @Shadow @Final private EditorSceneHistory history;
 
     @Override
     public void vector3$clearHistory() {
         ((ClipProject.ResettableHistory) history).vector3$reset();
     }
+
+    @Override public EditorSceneHistory vector3$history() { return history; }
+    @Override public int vector3$inTick() { return vector3$inTick; }
+    @Override public int vector3$outTick() { return vector3$outTick; }
+    @Override public void vector3$setInTick(int tick) { vector3$inTick = tick; }
+    @Override public void vector3$setOutTick(int tick) { vector3$outTick = tick; }
 
     @Override
     public PrefabGroupStore vector3$prefabGroups() {

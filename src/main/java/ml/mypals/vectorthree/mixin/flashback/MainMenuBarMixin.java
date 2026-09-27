@@ -7,6 +7,8 @@ import com.moulberry.flashback.editor.ui.windows.WindowType;
 import imgui.moulberry90.ImGui;
 import ml.mypals.vectorthree.flashback.PropertiesWindow;
 import ml.mypals.vectorthree.flashback.HelpWindow;
+import ml.mypals.vectorthree.flashback.HistoryWindow;
+import ml.mypals.vectorthree.flashback.TrackManagerWindow;
 import ml.mypals.vectorthree.camera.CameraPreview;
 import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
 import ml.mypals.vectorthree.prefab.PrefabBasketWindow;
@@ -44,6 +46,8 @@ public class MainMenuBarMixin {
         PrefabBasketWindow.renderMenuItem();
         ClipsWindow.renderMenuItem();
         CameraPreview.renderMenuItem();
+        HistoryWindow.renderMenuItem();
+        TrackManagerWindow.renderMenuItem();
         ImGui.endMenu();
     }
 

@@ -60,6 +60,9 @@ import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
 import ml.mypals.vectorthree.flashback.TrackMove;
+import ml.mypals.vectorthree.flashback.PlaybackRange;
+import ml.mypals.vectorthree.flashback.TrackManagement;
+import ml.mypals.vectorthree.flashback.VectorKeybinds;
 import ml.mypals.vectorthree.prefab.PrefabBasketWindow;
 import ml.mypals.vectorthree.prefab.PrefabGroups;
 import imgui.moulberry90.ImDrawList;
@@ -157,10 +160,38 @@ public abstract class TimelineWindowMixin {
     @Unique
     private static boolean vector3$openSelectionMenu;
 
+    @Inject(method = "handleKeyPresses", at = @At("HEAD"))
+    private static void vector3$rangeShortcuts(ReplayServer server, int currentTick, int totalTicks, CallbackInfo ci) {
+        if (ImGui.getIO().getWantTextInput() || editorScene == null) return;
+        if (VectorKeybinds.pressed(VectorKeybinds.MARK_IN)) {
+            upgradeToSceneWrite();
+            PlaybackRange.setIn(editorScene, currentTick);
+            editorState.markDirty();
+            ReplayUI.setInfoOverlayShort(I18n.get("vector3.playback.in_set", currentTick));
+        }
+        if (VectorKeybinds.pressed(VectorKeybinds.MARK_OUT)) {
+            upgradeToSceneWrite();
+            PlaybackRange.setOut(editorScene, currentTick);
+            editorState.markDirty();
+            ReplayUI.setInfoOverlayShort(I18n.get("vector3.playback.out_set", currentTick));
+        }
+        if (VectorKeybinds.pressed(VectorKeybinds.CLEAR_IN)) {
+            upgradeToSceneWrite();
+            ((PlaybackRange.Holder) editorScene).vector3$setInTick(-1);
+            editorState.markDirty();
+        }
+        if (VectorKeybinds.pressed(VectorKeybinds.CLEAR_OUT)) {
+            upgradeToSceneWrite();
+            ((PlaybackRange.Holder) editorScene).vector3$setOutTick(-1);
+            editorState.markDirty();
+        }
+    }
+
     @Inject(method = "renderInner", at = @At(value = "INVOKE",
             target = "Lcom/moulberry/flashback/editor/ui/ImGuiHelper;beginPopup(Ljava/lang/String;)Z",
             shift = At.Shift.BEFORE))
     private static void vector3$selectClickedShape(CallbackInfo ci) {
+        TrackManagement.useScene(editorScene);
         // Gizmos draw with the see-through managers even when no shape was ever applied.
         ShapeTrackRegistry.fixSeeThroughPipelines();
         Vector3.ORBIT_GIZMO.frame();
@@ -1193,6 +1224,8 @@ public abstract class TimelineWindowMixin {
         ClipsWindow.renderProgress();
         ml.mypals.vectorthree.camera.CameraPreview.render();
         ml.mypals.vectorthree.flashback.HelpWindow.render();
+        ml.mypals.vectorthree.flashback.HistoryWindow.render();
+        ml.mypals.vectorthree.flashback.TrackManagerWindow.render();
         Vector3.PREFABS.renderPanel();
         if (ShapeTimelineSelection.consumeRefresh()) vector3$refreshKeyframes = true;
         if (editorState == null) return;
@@ -1250,6 +1283,8 @@ public abstract class TimelineWindowMixin {
             editorState.markDirty();
         }
         vector3$repeatMenu(trackIndex);
+        ImGui.separator();
+        if (TrackManagement.menu(editorScene, editorScene.keyframeTracks.get(trackIndex))) vector3$keyframesChanged();
     }
 
     @Unique
@@ -1333,6 +1368,14 @@ public abstract class TimelineWindowMixin {
         editorScene.push(ripple.entry());
         vector3$clearKeyframeSelection();
         vector3$keyframesChanged();
+    }
+
+    @Inject(method = "handleKeyPresses", at = @At("HEAD"))
+    private static void vector3$protectLockedTracks(ReplayServer server, int currentTick, int totalTicks, CallbackInfo ci) {
+        if (editorScene == null) return;
+        selectedKeyframesList.removeIf(selected -> selected.trackIndex() >= 0
+                && selected.trackIndex() < editorScene.keyframeTracks.size()
+                && TrackManagement.locked(editorScene.keyframeTracks.get(selected.trackIndex())));
     }
 
     // The add-track menu's check (the first one is the per-track add button): one Skip and one Loop track at most.

@@ -99,6 +99,7 @@ public final class ShapeKeyframeType extends CustomKeyframeType<ShapeState> {
                     case "block" -> "minecraft:stone";
                     case "item" -> "minecraft:diamond";
                     case "entity" -> "minecraft:pig";
+                    case "particle" -> "minecraft:flame";
                     default -> "";
                 },
                 state.blockProperties() == null ? Map.of() : state.blockProperties(),
