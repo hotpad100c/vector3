@@ -2,6 +2,7 @@ package ml.mypals.vectorthree.mixin;
 
 import ml.mypals.vectorthree.camera.CameraPreview;
 import ml.mypals.vectorthree.flashback.fade.FadeOverlay;
+import ml.mypals.vectorthree.shape.particle.ParticleEmitters;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -12,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class GameRendererMixin {
     @Inject(method = "render", at = @At("HEAD"))
     private void vector3$cameraPreview(CallbackInfo ci) {
+        ParticleEmitters.frame();
         CameraPreview.beforeFrame((GameRenderer) (Object) this);
     }
 

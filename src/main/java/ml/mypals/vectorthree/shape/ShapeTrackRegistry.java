@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.shape;
 
+import com.moulberry.flashback.Flashback;
 import ml.mypals.vectorthree.compat.IrisCompat;
 import com.mojang.renderpearl.api.pipeline.*;
 import ml.mypals.ryansrenderingkit.RyansRenderingKit;
@@ -14,6 +15,7 @@ import ml.mypals.ryansrenderingkit.shape.box.BoxWireframeShape;
 import ml.mypals.ryansrenderingkit.shape.box.BoxShape;
 import ml.mypals.ryansrenderingkit.shape.line.LineShape;
 import ml.mypals.ryansrenderingkit.shape.line.StripLineShape;
+import ml.mypals.vectorthree.shape.particle.ParticleEmitters;
 import ml.mypals.ryansrenderingkit.shape.round.SphereShape;
 import ml.mypals.ryansrenderingkit.shape.minecraftBuiltIn.TextShape;
 import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
@@ -47,7 +49,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.core.particles.ParticleOptions;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -58,7 +59,6 @@ import java.util.Map;
 import java.util.List;
 import java.util.Arrays;
 import java.util.function.Function;
-import java.util.concurrent.ThreadLocalRandom;
 
 public final class ShapeTrackRegistry {
     public record Definition(String id, String name, Function<ShapeState, Shape> factory) {}
@@ -73,8 +73,6 @@ public final class ShapeTrackRegistry {
     private static List<String> itemIds;
     private static List<String> entityIds;
     private static List<String> particleIds;
-    private static final Map<String, ParticleClock> PARTICLE_CLOCKS = new LinkedHashMap<>();
-    private record ParticleClock(long nanos, double carry) {}
     private static String previewHighlightId;
     private static boolean fixedSeeThroughPipelines;
 
@@ -138,9 +136,9 @@ public final class ShapeTrackRegistry {
                 new Color(state.color(), true), state.seeThrough()));
         register("area", "vector3.shape.area", state -> new AreaShape(state,
                 new Color(state.color(), true), state.seeThrough()));
-        register("particle", "vector3.shape.particle", state -> ShapeGenerator.generateFaceCircle()
-                .radius(0.15f).segments(16).color(new Color(state.color(), true))
-                .seeThrough(true).build(Shape.RenderingType.BATCH));
+        register("particle", "vector3.shape.particle", state -> ShapeGenerator.generateStripLine()
+                .vertexes(ParticleEmitters.gizmoPath(state)).lineWidth(2f).color(ParticleEmitters.GIZMO_COLOR)
+                .seeThrough(state.seeThrough()).build(Shape.RenderingType.BATCH));
     }
 
     public static Iterable<Definition> definitions() { return TYPES.values(); }
@@ -193,7 +191,7 @@ public final class ShapeTrackRegistry {
             return rayToPoint(ray, new Vec3(state.x(), state.y(), state.z()));
         }
         boolean lines = switch (state.shapeType()) {
-            case "line", "line_strip" -> true;
+            case "line", "line_strip", "particle" -> true;
             default -> false;
         };
         if (lines || indices.length % 3 != 0) return rayToSegments(ray, model, indices);
@@ -254,7 +252,7 @@ public final class ShapeTrackRegistry {
         previewHighlightId = null;
         ImageShape.clearTextures();
         TexturedObjShape.clearTextures();
-        PARTICLE_CLOCKS.clear();
+        ParticleEmitters.clear();
     }
 
     public static void retainOnly(java.util.Set<String> liveShapeIds) {
@@ -267,6 +265,7 @@ public final class ShapeTrackRegistry {
             SHAPE_TYPES.remove(shapeId);
             LAST_STATES.remove(shapeId);
         }
+        ParticleEmitters.retainOnly(liveShapeIds);
         refreshAreaParents();
     }
 
@@ -338,7 +337,7 @@ public final class ShapeTrackRegistry {
         applyParent(shape, state.mount() != null ? null : state.parentShapeId());
         shape.syncLastToTarget();
         Color color = new Color(state.color(), true);
-        shape.setBaseColor(color);
+        shape.setBaseColor(state.shapeType().equals("particle") ? ParticleEmitters.GIZMO_COLOR : color);
         if (shape instanceof CylinderShape cylinder) {
             cylinder.color = color;
         }
@@ -347,7 +346,7 @@ public final class ShapeTrackRegistry {
             textShape.colors.add(color);
         }
         if (usesBypassOption(state.shapeType())) shape.customData.put(IrisBypassTarget.SHAPE_FLAG, state.bypassShaders());
-        if (state.visible() && !WireframeSettings.orDefault(state.wireframe()).hideFaces()) shape.enable();
+        if (state.visible() && !WireframeSettings.orDefault(state.wireframe()).hideFaces() && !editorOnlyHidden(state)) shape.enable();
         else shape.disable();
         syncWireframe(shape, state, previous);
         LAST_STATES.put(state.shapeId(), state);
@@ -357,27 +356,11 @@ public final class ShapeTrackRegistry {
             shape.disable();
         }
         refreshAreaParents();
-        if (state.shapeType().equals("particle") && state.visible()) emitParticles(state);
     }
 
-    private static void emitParticles(ShapeState state) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null || minecraft.isPaused()) return;
-        Object registered = BuiltInRegistries.PARTICLE_TYPE.getValue(Identifier.tryParse(state.model()));
-        if (!(registered instanceof ParticleOptions particle)) return;
-        long now = System.nanoTime();
-        ParticleClock previous = PARTICLE_CLOCKS.get(state.shapeId());
-        double elapsed = previous == null ? 0 : Math.min(0.25, (now - previous.nanos()) / 1_000_000_000.0);
-        double amount = (previous == null ? 0 : previous.carry()) + elapsed * Math.max(0, state.lineWidth());
-        int count = Math.min(100, (int) amount);
-        PARTICLE_CLOCKS.put(state.shapeId(), new ParticleClock(now, amount - count));
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        for (int i = 0; i < count; i++) {
-            double px = state.x() + (random.nextDouble() - 0.5) * state.sizeX();
-            double py = state.y() + (random.nextDouble() - 0.5) * state.sizeY();
-            double pz = state.z() + (random.nextDouble() - 0.5) * state.sizeZ();
-            minecraft.level.addParticle(particle, px, py, pz, 0, 0, 0);
-        }
+    // The particle emitter's shape is only its editor gizmo.
+    private static boolean editorOnlyHidden(ShapeState state) {
+        return state.shapeType().equals("particle") && Flashback.isExporting();
     }
 
     public static List<String> particleIds() {
@@ -403,7 +386,8 @@ public final class ShapeTrackRegistry {
         }
         for (Map.Entry<String, Shape> entry : SHAPES.entrySet()) {
             ShapeState state = LAST_STATES.get(entry.getKey());
-            if (state == null || !state.visible() || WireframeSettings.orDefault(state.wireframe()).hideFaces()) continue;
+            if (state == null || !state.visible() || WireframeSettings.orDefault(state.wireframe()).hideFaces()
+                    || editorOnlyHidden(state)) continue;
             if (hiddenByMount(entry.getKey())) entry.getValue().disable(); else entry.getValue().enable();
         }
         refreshAreaParents();
@@ -425,7 +409,7 @@ public final class ShapeTrackRegistry {
     }
 
     // Whether the shape, or the ancestor that carries the mount, rides an entity that isn't loaded.
-    private static boolean hiddenByMount(String shapeId) {
+    public static boolean hiddenByMount(String shapeId) {
         java.util.Set<String> visited = new java.util.HashSet<>();
         for (String current = shapeId; current != null && !current.isEmpty() && visited.add(current); ) {
             ShapeState state = LAST_STATES.get(current);
@@ -496,7 +480,9 @@ public final class ShapeTrackRegistry {
             line.forceSetEnd(point(state, 1));
             line.forceSetLineWidth(state.lineWidth());
         }
-        if (shape instanceof StripLineShape strip) {
+        if (shape instanceof StripLineShape strip && state.shapeType().equals("particle")) {
+            strip.setVertexes(ParticleEmitters.gizmoPath(state));
+        } else if (shape instanceof StripLineShape strip) {
             strip.setVertexes(points(state));
             strip.forceSetLineWidth(state.lineWidth());
         }

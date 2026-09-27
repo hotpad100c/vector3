@@ -5,6 +5,7 @@ import ml.mypals.ryansrenderingkit.shapeManagers.EmptyShapeManager;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManager;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ final class EditorOverlays {
     }
 
     private static boolean isOverlay(Identifier id) {
+        if ("particle".equals(ShapeTrackRegistry.typeOf(id.toString()))) return true;
         if (!id.getNamespace().equals(Vector3.MOD_ID)) return false;
         String path = id.getPath();
         for (String prefix : PREFIXES) {

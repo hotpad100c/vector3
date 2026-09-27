@@ -15,6 +15,8 @@ import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeTrackEditor;
 import ml.mypals.vectorthree.flashback.pose.ModelPartCombo;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
+import ml.mypals.vectorthree.shape.particle.ParticleEditor;
+import ml.mypals.vectorthree.shape.particle.ParticleSettings;
 import ml.mypals.vectorthree.text.SdfFont;
 import ml.mypals.vectorthree.shape.text.TextSettings;
 import ml.mypals.vectorthree.shape.media.VideoShape;
@@ -168,6 +170,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
 
         float[] size = {(float) state.sizeX(), (float) state.sizeY(), (float) state.sizeZ()};
         float[] width = {state.lineWidth()};
+        ParticleSettings[] particle = {state.shapeType().equals("particle")
+                ? ParticleSettings.orDefault(state.particle()) : ParticleSettings.DEFAULT};
         float[] color = {
                 ((state.color() >>> 16) & 255) / 255.0f,
                 ((state.color() >>> 8) & 255) / 255.0f,
@@ -381,20 +385,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 }
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.play_audio"), playAudio);
             }
-            case "particle" -> {
-                ImGui.setNextItemWidth(360);
-                if (ImGui.beginCombo(I18n.get("vector3.keyframe.particle"), content[0])) {
-                    for (String id : ShapeTrackRegistry.particleIds()) {
-                        if (ImGui.selectable(id, id.equals(content[0]))) {
-                            content[0] = id;
-                            changed = true;
-                        }
-                    }
-                    ImGui.endCombo();
-                }
-                changed |= ImGui.dragFloat(I18n.get("vector3.keyframe.emission_rate"), width, 0.5f, 0, 1000);
-                changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.spread"), size, 0.05f, 0, 1000);
-            }
+            case "particle" -> changed |= ParticleEditor.edit(content, particle, width, size);
             case "area" -> {
                 while (points.size() < 2) {
                     points.add(new ShapePoint(Math.round(state.x() - 0.5), Math.round(state.y() - 0.5), Math.round(state.z() - 0.5)));
@@ -536,6 +527,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                             : selectedType[0].equals("obj") ? Map.of(
                                     TexturedObjShape.MODE, TexturedObjShape.Mode.values()[objMode.get()].id,
                                     TexturedObjShape.TEXTURE, objTexture.get()) : state.blockProperties())
+                    .withParticle(selectedType[0].equals("particle") ? particle[0] : state.particle())
                     .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick())
                     .withName(nameField.get().isBlank() ? null : nameField.get());
             ShapeTrackRegistry.apply(replacement);

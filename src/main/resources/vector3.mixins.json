@@ -27,6 +27,8 @@
 		"area.AreaSuppressFluidMixin",
 		"area.AreaSuppressRenderSectionRegionMixin",
 		"area.ParticleAccessor",
+		"particle.ParticleEngineEmitterMixin",
+		"particle.QuadParticleAccessor",
 		"area.RenderSetupAccessor",
 		"area.RenderTypeAccessor",
 		"area.TextureBindingAccessor",
