@@ -5,6 +5,10 @@ import imgui.moulberry90.flag.ImGuiFocusedFlags;
 import ml.mypals.vectorthree.flashback.TrackSelection;
 import ml.mypals.vectorthree.flashback.Ripple;
 import ml.mypals.vectorthree.flashback.Distribute;
+import ml.mypals.vectorthree.flashback.channel.ChannelMasks;
+import ml.mypals.vectorthree.flashback.channel.ChannelRows;
+import ml.mypals.vectorthree.flashback.channel.ChannelSpec;
+import ml.mypals.vectorthree.flashback.channel.Channels;
 import com.moulberry.flashback.keyframe.types.AudioKeyframeType;
 import ml.mypals.vectorthree.clips.Trimming;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -16,6 +20,7 @@ import ml.mypals.vectorthree.clips.ClipsWindow;
 import ml.mypals.vectorthree.clips.ClipProject;
 import com.moulberry.flashback.utils.InputHelper;
 import ml.mypals.vectorthree.prefab.PrefabGroup;
+import ml.mypals.vectorthree.shape.GizmoMode;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
 import ml.mypals.vectorthree.flashback.ShapeCommands;
 import ml.mypals.vectorthree.multiedit.PropertySelection;
@@ -42,6 +47,7 @@ import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.moulberry.flashback.keyframe.Keyframe;
+import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.keyframe.KeyframeType;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
 import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
@@ -169,6 +175,8 @@ public abstract class TimelineWindowMixin {
         TrackManagement.useScene(editorScene);
         // Gizmos draw with the see-through managers even when no shape was ever applied.
         ShapeTrackRegistry.fixSeeThroughPipelines();
+        GizmoMode.pollShortcuts(Vector3.ORBIT_GIZMO.isDragging() || Vector3.CAMERA_GIZMO.isDragging()
+                || Vector3.POSE_GIZMO.isDragging() || Vector3.GIZMO_EDITOR.isDragging() || Vector3.PREFABS.isDragging());
         Vector3.ORBIT_GIZMO.frame();
         Vector3.CAMERA_GIZMO.frame();
         Vector3.POSE_GIZMO.frame();
@@ -538,7 +546,20 @@ public abstract class TimelineWindowMixin {
         if (MultiSelection.count(selectedKeyframesList) > 1) {
             MultiPropertiesPage.render(selectedKeyframesList, editingKeyframeTrack, editingKeyframeTick, vector3$multiHost());
         } else {
+            // On a track keyed per channel, the editor is narrowed so every channel's row has room for its buttons.
+            KeyframeTrack channelTrack = editingKeyframeTrack >= 0 && editingKeyframeTrack < editorScene.keyframeTracks.size()
+                    ? editorScene.keyframeTracks.get(editingKeyframeTrack) : null;
+            boolean channelButtons = channelTrack != null && Channels.enabled(channelTrack)
+                    && channelTrack.keyframesByTick.containsKey(editingKeyframeTick);
+            if (channelButtons) {
+                ChannelRows.begin();
+                ImGui.pushItemWidth(-(vector3$channelButtonsWidth() + ImGui.getFontSize() * 7));
+            }
             MultiEditSession.display("single", List.of(), key -> true, false, () -> original.call(totalTicks));
+            if (channelButtons) {
+                ImGui.popItemWidth();
+                vector3$channelButtons(channelTrack, ChannelRows.end());
+            }
         }
         List<PropertyClipboard.Clip> paste = PropertySelection.frame();
         if (paste != null) {
@@ -642,6 +663,221 @@ public abstract class TimelineWindowMixin {
                     target = "Lcom/moulberry/flashback/editor/ui/windows/TimelineWindow;renderKeyframeOptionsPopup(I)V")))
     private static void vector3$endProperties() {
         PropertiesWindow.end();
+    }
+
+    @Unique
+    private static void vector3$channelModeItem(int trackIndex) {
+        if (trackIndex < 0 || trackIndex >= editorScene.keyframeTracks.size()) return;
+        KeyframeTrack track = editorScene.keyframeTracks.get(trackIndex);
+        if (Channels.spec(track.keyframeType) == null) return;
+        boolean on = ((Channels.TrackHolder) track).vector3$perChannel();
+        if (ImGui.menuItem(I18n.get("vector3.channels.track"), "", on)) {
+            upgradeToSceneWrite();
+            Channels.setEnabled(track, !on);
+            vector3$keyframesChanged();
+        }
+        if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.channels.track.tooltip"));
+    }
+
+    // Tracks keyed per channel: translucent dark purple (ImGui colours are ABGR).
+    @Unique private static final int vector3$CHANNEL_TINT = 0x40602040;
+    // Locked tracks: translucent dark red.
+    @Unique private static final int vector3$LOCKED_TINT = 0x40101870;
+
+    @Unique private static int vector3$channelTrack = -1, vector3$channelTick = -1;
+    @Unique private static Object vector3$channelResult;
+
+    @Unique
+    private static float vector3$channelButtonsWidth() {
+        return ImGui.getFrameHeight() * 3 + ImGui.getStyle().getItemSpacingX() * 2;
+    }
+
+    // Beside each channel's first row, DaVinci-style: previous keyframe / key or unkey at the playhead / next
+    // keyframe, for that channel only. The diamond is filled when the keyframe at the playhead keys it.
+    @Unique
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void vector3$channelButtons(KeyframeTrack track, List<ChannelRows.Row> marked) {
+        int row = editingKeyframeTrack, tick = editingKeyframeTick;
+        Keyframe keyframe = track.keyframesByTick.get(tick);
+        ChannelSpec spec = Channels.spec(track.keyframeType);
+        if (keyframe == null || spec == null) return;
+        List<String> channels = spec.channels(track.keyframesByTick.values());
+
+        // Flashback's own keyframes are edited by Flashback: key whatever changed since the last frame.
+        Object result = spec.result(keyframe);
+        if (row == vector3$channelTrack && tick == vector3$channelTick && vector3$channelResult != null && result != null
+                && ChannelMasks.of(keyframe) != null) {
+            java.util.Set<String> changed = spec.changed(vector3$channelResult, result, channels);
+            if (!changed.isEmpty()) {
+                java.util.Set<String> mask = new java.util.LinkedHashSet<>(ChannelMasks.of(keyframe));
+                mask.addAll(changed);
+                ChannelMasks.set(keyframe, mask);
+            }
+        }
+        vector3$channelTrack = row;
+        vector3$channelTick = tick;
+        vector3$channelResult = result;
+
+        List<ChannelRows.Row> rows = new ArrayList<>(marked);
+        java.util.Set<String> placed = new java.util.HashSet<>();
+        for (ChannelRows.Row marker : rows) placed.add(marker.channel());
+        for (PropertySelection.RowInfo info : PropertySelection.rows()) {
+            String label = info.key().substring(0, Math.max(0, info.key().lastIndexOf('#')));
+            int hidden = label.indexOf("##");
+            if (hidden >= 0) label = label.substring(0, hidden);
+            String channel = spec.channelOfLabel(label);
+            if (channel != null && channels.contains(channel) && placed.add(channel)) {
+                rows.add(new ChannelRows.Row(channel, info.y0(), info.y1()));
+            }
+        }
+        if (rows.isEmpty()) return;
+
+        int cursor = TimelineWindow.getCursorTick();
+        Keyframe atCursor = track.keyframesByTick.get(cursor);
+        float saveX = ImGui.getCursorScreenPosX(), saveY = ImGui.getCursorScreenPosY();
+        float left = ImGui.getWindowPosX() + ImGui.getWindowContentRegionMaxX() - vector3$channelButtonsWidth();
+        for (ChannelRows.Row marker : rows) {
+            String channel = marker.channel();
+            ImGui.pushID("vector3Channel" + channel);
+            ImGui.setCursorScreenPos(left, (marker.y0() + marker.y1() - ImGui.getFrameHeight()) / 2);
+            Integer previous = vector3$channelKey(track, channel, cursor, false);
+            ImGui.beginDisabled(previous == null);
+            if (ImGui.arrowButton("##previous", imgui.moulberry90.flag.ImGuiDir.Left)) vector3$jumpToKeyframe(row, previous);
+            ImGui.endDisabled();
+            ImGui.sameLine();
+            boolean keyedHere = atCursor != null && ChannelMasks.keys(atCursor, channel);
+            boolean pressed = ImGui.button("##key", ImGui.getFrameHeight(), ImGui.getFrameHeight());
+            vector3$drawDiamond(keyedHere);
+            if (ImGui.isItemHovered()) ImGui.setTooltip(spec.label(channel) + "\n" + I18n.get(atCursor != null
+                    ? "vector3.channels.toggle_here.tooltip" : "vector3.channels.key_here.tooltip"));
+            if (pressed) {
+                if (atCursor != null) {
+                    vector3$setMask(track, row, cursor, atCursor, ChannelMasks.with(atCursor, channels, channel, !keyedHere), channels);
+                } else {
+                    vector3$keyChannelAt(track, row, cursor, channel, spec, keyframe);
+                }
+            }
+            ImGui.sameLine();
+            Integer following = vector3$channelKey(track, channel, cursor, true);
+            ImGui.beginDisabled(following == null);
+            if (ImGui.arrowButton("##next", imgui.moulberry90.flag.ImGuiDir.Right)) vector3$jumpToKeyframe(row, following);
+            ImGui.endDisabled();
+            ImGui.popID();
+        }
+        ImGui.setCursorScreenPos(saveX, saveY);
+        if (ImGui.smallButton(I18n.get("vector3.channels.all")) && ChannelMasks.of(keyframe) != null) {
+            vector3$setMask(track, row, tick, keyframe, null, channels);
+        }
+        if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.channels.all.tooltip"));
+    }
+
+    @Unique
+    private static void vector3$setMask(KeyframeTrack track, int row, int tick, Keyframe keyframe,
+            @org.jetbrains.annotations.Nullable java.util.Set<String> mask, List<String> channels) {
+        if (mask != null && mask.containsAll(channels)) mask = null;
+        Keyframe replacement = keyframe.copy();
+        ChannelMasks.set(replacement, mask);
+        upgradeToSceneWrite();
+        editorScene.push(new EditorSceneHistoryEntry(
+                List.of(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, tick, keyframe.copy())),
+                List.of(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, tick, replacement)),
+                I18n.get("vector3.history.channels")));
+        vector3$keyframesChanged();
+    }
+
+    // A diamond on the last item: filled when keyed, outlined when not.
+    @Unique
+    private static void vector3$drawDiamond(boolean filled) {
+        float cx = (ImGui.getItemRectMinX() + ImGui.getItemRectMaxX()) / 2, cy = (ImGui.getItemRectMinY() + ImGui.getItemRectMaxY()) / 2;
+        float r = (ImGui.getItemRectMaxY() - ImGui.getItemRectMinY()) * 0.3f;
+        int colour = ImGui.getColorU32(imgui.moulberry90.flag.ImGuiCol.Text);
+        ImDrawList drawList = ImGui.getWindowDrawList();
+        if (filled) drawList.addQuadFilled(cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy, colour);
+        else drawList.addQuad(cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy, colour, 1.5f);
+    }
+
+    /** The nearest keyframe before (or after) {@code tick} that keys {@code channel}. */
+    @Unique
+    private static Integer vector3$channelKey(KeyframeTrack track, String channel, int tick, boolean after) {
+        Map.Entry<Integer, Keyframe> entry = after ? track.keyframesByTick.higherEntry(tick) : track.keyframesByTick.lowerEntry(tick);
+        while (entry != null && !ChannelMasks.keys(entry.getValue(), channel)) {
+            entry = after ? track.keyframesByTick.higherEntry(entry.getKey()) : track.keyframesByTick.lowerEntry(entry.getKey());
+        }
+        return entry == null ? null : entry.getKey();
+    }
+
+    @Unique
+    private static void vector3$jumpToKeyframe(int row, int tick) {
+        ReplayServer server = com.moulberry.flashback.Flashback.getReplayServer();
+        if (server != null) server.goToReplayTick(tick);
+        vector3$selectChannelKeyframe(row, tick);
+    }
+
+    @Unique
+    private static void vector3$selectChannelKeyframe(int row, int tick) {
+        KeyframeTrack track = editorScene.keyframeTracks.get(row);
+        IntSet ticks = new IntOpenHashSet();
+        ticks.add(tick);
+        selectedKeyframesList.clear();
+        selectedKeyframesList.add(new SelectedKeyframes(track.keyframeType, row, ticks));
+        editingKeyframeTrack = row;
+        editingKeyframeTick = tick;
+    }
+
+    // A new keyframe at the playhead keying only this channel, holding what the track shows there now.
+    @Unique
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void vector3$keyChannelAt(KeyframeTrack track, int row, int tick, String channel, ChannelSpec spec,
+            Keyframe template) {
+        KeyframeChange change = track.createKeyframeChange(tick, null);
+        if (change == null) {
+            Map.Entry<Integer, Keyframe> nearest = track.keyframesByTick.floorEntry(tick);
+            if (nearest == null) nearest = track.keyframesByTick.firstEntry();
+            change = nearest.getValue().createChange();
+        }
+        Object value = spec.result(change);
+        Keyframe created = value == null ? null : spec.keyframe(value, template);
+        if (created == null) {
+            ReplayUI.setInfoOverlayShort(I18n.get("vector3.channels.cannot_key"));
+            return;
+        }
+        ChannelMasks.set(created, java.util.Set.of(channel));
+        upgradeToSceneWrite();
+        editorScene.push(new EditorSceneHistoryEntry(
+                List.of(new EditorSceneHistoryAction.RemoveKeyframe(track.keyframeType, row, tick)),
+                List.of(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, tick, created)),
+                I18n.get("vector3.history.key_channel", spec.label(channel))));
+        vector3$selectChannelKeyframe(row, tick);
+        vector3$keyframesChanged();
+    }
+
+    // Keyframes keying only some channels have the lower half of their diamond darkened; hovering lists the channels.
+    @Inject(method = "renderKeyframes", at = @At("RETURN"))
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void vector3$drawPartialKeyframes(float x, float y, float mouseX, int minTicks, float availableTicks,
+            int totalTicks, CallbackInfo ci) {
+        if (editorScene == null) return;
+        float lineHeight = ImGui.getTextLineHeightWithSpacing() + ImGui.getStyle().getItemSpacingY();
+        float size = keyframeSize;
+        ImDrawList drawList = ImGui.getWindowDrawList();
+        for (int row = 0; row < editorScene.keyframeTracks.size(); row++) {
+            KeyframeTrack track = editorScene.keyframeTracks.get(row);
+            if (!Channels.enabled(track)) continue;
+            ChannelSpec spec = Channels.spec(track.keyframeType);
+            float middle = y + 2 + row * lineHeight + lineHeight / 2;
+            for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+                java.util.Set<String> mask = ChannelMasks.of(entry.getValue());
+                if (mask == null) continue;
+                float keyX = x + replayTickToTimelineX(entry.getKey());
+                if (keyX < x - size || keyX > x + width + size) continue;
+                drawList.addTriangleFilled(keyX - size, middle, keyX + size, middle, keyX, middle + size, 0xC0101010);
+                if (Math.abs(TimelineWindowMixin.mouseX - keyX) <= size && Math.abs(mouseY - middle) <= size) {
+                    StringBuilder text = new StringBuilder(I18n.get("vector3.channels.keyed")).append(':');
+                    for (String channel : mask) text.append("\n  ").append(spec.label(channel));
+                    ImGui.setTooltip(text.toString());
+                }
+            }
+        }
     }
 
     // Flashback only tests the mouse position, so clicks on a floating window over the timeline fell through.
@@ -807,7 +1043,22 @@ public abstract class TimelineWindowMixin {
         ImDrawList drawList = ImGui.getWindowDrawList();
         vector3$dragGroup(x, y, mouseX);
         vector3$clipEdges(x, y, lineHeight);
+        for (int row = 0; row < editorScene.keyframeTracks.size(); row++) {
+            float top = y + 2 + row * lineHeight;
+            if (Channels.enabled(editorScene.keyframeTracks.get(row))) {
+                drawList.addRectFilled(x, top, x + width, top + lineHeight, vector3$CHANNEL_TINT);
+            }
+            if (TrackManagement.locked(editorScene.keyframeTracks.get(row))) {
+                drawList.addRectFilled(x, top, x + width, top + lineHeight, vector3$LOCKED_TINT);
+            }
+        }
         vector3$drawRepeats(drawList, x, y, lineHeight);
+        // Tracks silenced by another track's Solo are dimmed, so it's visible why they do nothing.
+        for (int row = 0; row < editorScene.keyframeTracks.size(); row++) {
+            if (ml.mypals.vectorthree.flashback.TrackManagement.audible(editorScene.keyframeTracks.get(row))) continue;
+            float top = y + 2 + row * lineHeight;
+            drawList.addRectFilled(x, top, x + width, top + lineHeight, 0x70000000);
+        }
         vector3$drawTrackMoveTargets(drawList, x, y, lineHeight, vector3$trackMovePlan(y));
         vector3$drawTrackMoveTargets(drawList, x, y, lineHeight, vector3$groupMovePlan(y));
         for (PrefabGroups.Span span : PrefabGroups.spans(editorScene)) {
@@ -1091,6 +1342,12 @@ public abstract class TimelineWindowMixin {
 
         for (int row = 0; row < tracks.size(); row++) {
             KeyframeTrack track = tracks.get(row);
+            float rowTop = top + row * lineHeight + (repositioningKeyframeTrack == row ? mouseY - dragStartMouseY : track.animatedOffsetInUi);
+            if (Channels.enabled(track)) drawList.addRectFilled(panelX, rowTop, middleX, rowTop + lineHeight, vector3$CHANNEL_TINT);
+            if (TrackManagement.locked(track)) drawList.addRectFilled(panelX, rowTop, middleX, rowTop + lineHeight, vector3$LOCKED_TINT);
+        }
+        for (int row = 0; row < tracks.size(); row++) {
+            KeyframeTrack track = tracks.get(row);
             if (!TrackSelection.contains(track)) continue;
             float rowTop = top + row * lineHeight + (repositioningKeyframeTrack == row ? mouseY - dragStartMouseY : track.animatedOffsetInUi);
             drawList.addRectFilled(panelX, rowTop, middleX, rowTop + lineHeight, 0x38E0A040);
@@ -1293,6 +1550,7 @@ public abstract class TimelineWindowMixin {
             editorState.markDirty();
         }
         vector3$repeatMenu(trackIndex);
+        vector3$channelModeItem(trackIndex);
         ImGui.separator();
         if (TrackManagement.menu(editorScene, editorScene.keyframeTracks.get(trackIndex))) vector3$keyframesChanged();
     }
@@ -1620,6 +1878,7 @@ public abstract class TimelineWindowMixin {
                 replacement.yaw = pose.yaw();
                 replacement.pitch = pose.pitch();
                 replacement.roll = pose.roll();
+                ml.mypals.vectorthree.flashback.channel.ChannelMasks.markChanged(cameraKeyframe, replacement);
                 upgradeToSceneWrite();
                 editorScene.setKeyframe(trackIndex, tick, replacement);
                 EditorStateManager.getCurrent().markDirty();
@@ -1633,6 +1892,7 @@ public abstract class TimelineWindowMixin {
             Vector3.POSE_GIZMO.select(pose, replacement -> {
                 CustomKeyframe<EntityPose> copy = (CustomKeyframe<EntityPose>) pose.copy();
                 copy.value = replacement;
+                ml.mypals.vectorthree.flashback.channel.ChannelMasks.markChanged(pose, copy);
                 upgradeToSceneWrite();
                 editorScene.setKeyframe(trackIndex, tick, copy);
                 EditorStateManager.getCurrent().markDirty();
@@ -1647,8 +1907,9 @@ public abstract class TimelineWindowMixin {
         }
         Vector3.GIZMO_EDITOR.select(shape, replacement -> {
             upgradeToSceneWrite();
-            editorScene.setKeyframe(trackIndex, tick,
-                    new ShapeKeyframe(replacement, shape.interpolationType()));
+            ShapeKeyframe moved = new ShapeKeyframe(replacement, shape.interpolationType());
+            ml.mypals.vectorthree.flashback.channel.ChannelMasks.carry(shape, moved);
+            editorScene.setKeyframe(trackIndex, tick, moved);
             EditorStateManager.getCurrent().markDirty();
         });
     }

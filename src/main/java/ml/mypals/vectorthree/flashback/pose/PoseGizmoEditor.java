@@ -9,6 +9,7 @@ import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
+import ml.mypals.vectorthree.shape.GizmoMode;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -28,8 +29,9 @@ import java.util.function.Consumer;
 
 /**
  * Viewport gizmo for an Entity Pose keyframe: a marker on every part's pivot (right-click one to pick it) and, on the
- * picked part, one ring per rotation: each ring turns exactly one of the part's X / Y / Z angles, about the axis that
- * angle really turns about, so keyframes keep blending angle by angle. Right-drag a ring; Ctrl snaps.
+ * picked part, one ring per rotation and one arrow per offset axis (R / G pick which). Each ring turns exactly one of
+ * the part's X / Y / Z angles, about the axis that angle really turns about, so keyframes keep blending angle by angle.
+ * Right-drag a handle; Ctrl snaps.
  * <p>
  * The part frames come from the renderer (see LivingEntityRendererPoseMixin), which reports them for the selected
  * entity each frame.
@@ -37,7 +39,7 @@ import java.util.function.Consumer;
 public final class PoseGizmoEditor {
     private enum Axis { X, Y, Z }
 
-    private record Ring(Axis axis, ObjModelShape shape, Color color) {}
+    private record Ring(Axis axis, boolean move, ObjModelShape shape, Color color) {}
 
     private record Marker(String part, ObjModelShape shape) {}
 
@@ -67,6 +69,8 @@ public final class PoseGizmoEditor {
     private Vec3 dragAxis;
     private boolean dragMirrored;
     private Vec3 dragFrom;
+    private double dragParameter;
+    private double dragUnit;
 
     public boolean isDragging() {
         return dragging != null;
@@ -187,16 +191,27 @@ public final class PoseGizmoEditor {
             ShapeManagers.addShape(Vector3.id("pose_gizmo/" + session + "/marker/" + markers.size()), shape);
             markers.add(new Marker(name, shape));
         }
-        addRing(Axis.X, X_COLOR);
-        addRing(Axis.Y, Y_COLOR);
-        addRing(Axis.Z, Z_COLOR);
+        for (boolean move : new boolean[]{false, true}) {
+            addRing(Axis.X, move, X_COLOR);
+            addRing(Axis.Y, move, Y_COLOR);
+            addRing(Axis.Z, move, Z_COLOR);
+        }
     }
 
-    private void addRing(Axis axis, Color color) {
+    private void addRing(Axis axis, boolean move, Color color) {
         ObjModelShape shape = new ObjModelShape(Shape.RenderingType.BATCH, transformer -> {},
-                ShapeGizmoEditor.ROTATE_MODEL, Vec3.ZERO, color, true);
-        ShapeManagers.addShape(Vector3.id("pose_gizmo/" + session + "/ring/" + axis), shape);
-        rings.add(new Ring(axis, shape, color));
+                move ? ShapeGizmoEditor.MOVE_MODEL : ShapeGizmoEditor.ROTATE_MODEL, Vec3.ZERO, color, true);
+        ShapeManagers.addShape(Vector3.id("pose_gizmo/" + session + "/" + (move ? "arrow/" : "ring/") + axis), shape);
+        rings.add(new Ring(axis, move, shape, color));
+    }
+
+    private boolean shown(Ring ring) {
+        if (dragging != null) return dragging == ring;
+        return switch (GizmoMode.current()) {
+            case MOVE -> ring.move();
+            case ROTATE -> !ring.move();
+            default -> true;
+        };
     }
 
     private void layout(Map<String, EntityPoses.Frame> frames) {
@@ -209,7 +224,7 @@ public final class PoseGizmoEditor {
         }
         EntityPoses.Frame selected = part == null ? null : frames.get(part);
         for (Ring ring : rings) {
-            if (selected == null) {
+            if (selected == null || !shown(ring)) {
                 ring.shape().disable();
                 continue;
             }
@@ -217,8 +232,9 @@ public final class PoseGizmoEditor {
             double scale = ShapeGizmoEditor.gizmoScale(selected.pivot()) * RING_SCALE;
             ring.shape().forceSetWorldPosition(selected.pivot());
             ring.shape().forceSetWorldScale(new Vec3(scale, scale, scale));
-            Vector3f axis = axis(selected, ring.axis()).toVector3f();
-            ring.shape().forceSetWorldRotation(eulerDegrees(new Quaternionf().rotationTo(new Vector3f(1, 0, 0), axis)));
+            Vector3f axis = (ring.move() ? moveAxis(selected, ring.axis()).normalize() : axis(selected, ring.axis())).toVector3f();
+            Vector3f from = ring.move() ? new Vector3f(0, 1, 0) : new Vector3f(1, 0, 0);
+            ring.shape().forceSetWorldRotation(eulerDegrees(new Quaternionf().rotationTo(from, axis)));
         }
     }
 
@@ -227,6 +243,14 @@ public final class PoseGizmoEditor {
             case X -> frame.xAxis();
             case Y -> frame.yAxis();
             case Z -> frame.zAxis();
+        };
+    }
+
+    private static Vec3 moveAxis(EntityPoses.Frame frame, Axis axis) {
+        return switch (axis) {
+            case X -> frame.moveX();
+            case Y -> frame.moveY();
+            case Z -> frame.moveZ();
         };
     }
 
@@ -281,6 +305,16 @@ public final class PoseGizmoEditor {
     private void beginDrag(Ring ring, EntityPoses.Frame frame, RayModelIntersection.Ray ray) {
         if (frame == null) return;
         dragging = ring;
+        if (ring.move()) {
+            dragStart = enabledOffset(keyframe.value, frame);
+            dragPivot = frame.pivot();
+            Vec3 step = moveAxis(frame, ring.axis());
+            dragUnit = Math.max(1.0e-6, step.length());
+            dragAxis = step.scale(1 / dragUnit);
+            dragParameter = ShapeGizmoEditor.axisParameter(ray, dragPivot, dragAxis);
+            updateColors();
+            return;
+        }
         dragStart = enabledPart(keyframe.value, frame);
         dragPivot = frame.pivot();
         dragAxis = axis(frame, ring.axis());
@@ -299,7 +333,35 @@ public final class PoseGizmoEditor {
         return pose.withPart(part, start.withRotate(true));
     }
 
+    private EntityPose enabledOffset(EntityPose pose, EntityPoses.Frame frame) {
+        EntityPose.Limb limb = pose.parts().getOrDefault(part, EntityPose.Limb.NONE);
+        if (limb.move()) return pose;
+        EntityPose.Limb start = pose.mode() == EntityPose.Mode.ADDITIVE ? limb.withOffset(0, 0, 0)
+                : limb.withOffset(frame.x(), frame.y(), frame.z());
+        return pose.withPart(part, start.withMove(true));
+    }
+
+    private EntityPose dragOffset(RayModelIntersection.Ray ray) {
+        double moved = (ShapeGizmoEditor.axisParameter(ray, dragPivot, dragAxis) - dragParameter) / dragUnit;
+        EntityPose.Limb limb = dragStart.parts().get(part);
+        float start = switch (dragging.axis()) {
+            case X -> limb.x();
+            case Y -> limb.y();
+            case Z -> limb.z();
+        };
+        double value = start + moved;
+        if (InputHelper.isCtrlDownRaw()) value = ShapeGizmoEditor.snap(value, start, 1, false);
+        float offset = (float) value;
+        EntityPose.Limb movedLimb = switch (dragging.axis()) {
+            case X -> limb.withOffset(offset, limb.y(), limb.z());
+            case Y -> limb.withOffset(limb.x(), offset, limb.z());
+            case Z -> limb.withOffset(limb.x(), limb.y(), offset);
+        };
+        return dragStart.withPart(part, movedLimb);
+    }
+
     private @Nullable EntityPose drag(RayModelIntersection.Ray ray) {
+        if (dragging.move()) return dragOffset(ray);
         Vec3 point = ShapeGizmoEditor.intersectPlane(ray, dragPivot, dragAxis);
         if (point == null || dragFrom == null) return null;
         Vec3 to = point.subtract(dragPivot);

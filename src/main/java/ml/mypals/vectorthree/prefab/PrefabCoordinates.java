@@ -49,10 +49,16 @@ public final class PrefabCoordinates {
         for (Prefab.Track track : prefab.tracks()) {
             TreeMap<Integer, Keyframe> keyframes = new TreeMap<>();
             track.keyframes().forEach((tick, keyframe) ->
-                    keyframes.put(tick, map(keyframe, transform, eyeIn, eyeOut, ids, contained)));
+                    keyframes.put(tick, withMask(keyframe, map(keyframe, transform, eyeIn, eyeOut, ids, contained))));
             tracks.add(new Prefab.Track(track.type(), track.customName(), track.customColour(), keyframes));
         }
         return new Prefab(prefab.name(), tracks);
+    }
+
+    // A mapped keyframe keys the same channels as the original.
+    private static Keyframe withMask(Keyframe original, Keyframe mapped) {
+        if (mapped != original) ml.mypals.vectorthree.flashback.channel.ChannelMasks.set(mapped, ml.mypals.vectorthree.flashback.channel.ChannelMasks.of(original));
+        return mapped;
     }
 
     private static Keyframe map(Keyframe keyframe, PrefabTransform t, double eyeIn, double eyeOut,

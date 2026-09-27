@@ -44,6 +44,15 @@ public final class PropertySelection {
 
     private PropertySelection() {}
 
+    /** A widget drawn this frame: its key ("label#n") and vertical extent. */
+    public record RowInfo(String key, float y0, float y1) {}
+
+    public static List<RowInfo> rows() {
+        List<RowInfo> rows = new ArrayList<>(ROWS.size());
+        for (Row row : ROWS) rows.add(new RowInfo(row.key(), row.y0(), row.y1()));
+        return rows;
+    }
+
     public static void beginFrame(Object selectionContext) {
         ROWS.clear();
         if (!Objects.equals(selectionContext, context)) {

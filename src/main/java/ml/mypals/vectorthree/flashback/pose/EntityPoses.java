@@ -58,7 +58,9 @@ public final class EntityPoses {
     record Tree(Map<String, ModelPart> byName, Map<ModelPart, ModelPart> parents) {}
 
     /** Where a part sits this frame: its pivot and the world axes its X / Y / Z rotations turn about. */
-    public record Frame(Vec3 pivot, Vec3 xAxis, Vec3 yAxis, Vec3 zAxis, boolean mirrored, float xRot, float yRot, float zRot) {}
+    /** {@code moveX..Z}: the world displacement of one unit of offset; {@code x..z}: the part's offset from rest. */
+    public record Frame(Vec3 pivot, Vec3 xAxis, Vec3 yAxis, Vec3 zAxis, boolean mirrored, float xRot, float yRot, float zRot,
+                        Vec3 moveX, Vec3 moveY, Vec3 moveZ, float x, float y, float z) {}
 
     private EntityPoses() {}
 
@@ -204,14 +206,22 @@ public final class EntityPoses {
             Vector3f pivot = parentMatrix.transformPosition(new Vector3f(part.x / 16f, part.y / 16f, part.z / 16f));
             Quaternionf z = new Quaternionf().rotationZ(part.zRot);
             Quaternionf zy = new Quaternionf(z).rotateY(part.yRot);
+            PartPose rest = part.getInitialPose();
             frames.put(name, new Frame(new Vec3(pivot.x + camera.x, pivot.y + camera.y, pivot.z + camera.z),
                     worldAxis(parentMatrix, zy.transform(new Vector3f(1, 0, 0))),
                     worldAxis(parentMatrix, z.transform(new Vector3f(0, 1, 0))),
                     worldAxis(parentMatrix, new Vector3f(0, 0, 1)),
                     parentMatrix.determinant3x3() < 0,
-                    part.xRot * Mth.RAD_TO_DEG, part.yRot * Mth.RAD_TO_DEG, part.zRot * Mth.RAD_TO_DEG));
+                    part.xRot * Mth.RAD_TO_DEG, part.yRot * Mth.RAD_TO_DEG, part.zRot * Mth.RAD_TO_DEG,
+                    worldStep(parentMatrix, 1, 0, 0), worldStep(parentMatrix, 0, 1, 0), worldStep(parentMatrix, 0, 0, 1),
+                    part.x - rest.x(), part.y - rest.y(), part.z - rest.z()));
         });
         return frames;
+    }
+
+    private static Vec3 worldStep(Matrix4f matrix, float x, float y, float z) {
+        Vector3f world = matrix.transformDirection(new Vector3f(x / 16f, y / 16f, z / 16f));
+        return new Vec3(world.x, world.y, world.z);
     }
 
     private static Vec3 worldAxis(Matrix4f matrix, Vector3f local) {
@@ -220,7 +230,7 @@ public final class EntityPoses {
     }
 
     // Part names are looked up through the whole tree once per model; the first part with a name wins.
-    private static Tree parts(Model<?> model) {
+    static Tree parts(Model<?> model) {
         return PARTS.computeIfAbsent(model, m -> {
             Tree tree = new Tree(new LinkedHashMap<>(), new java.util.IdentityHashMap<>());
             tree.byName().put(EntityPose.ROOT, m.root());

@@ -7,22 +7,33 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
+import ml.mypals.vectorthree.flashback.pose.EntityParts;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.util.UUID;
 
 
-public record ShapeMount(UUID entity, TrackingBodyPart part, boolean followRotation) {
+/** {@code modelPart}, when set, mounts on that part of the entity's model instead of on {@code part}. */
+public record ShapeMount(UUID entity, TrackingBodyPart part, boolean followRotation, @Nullable String modelPart) {
+    public ShapeMount(UUID entity, TrackingBodyPart part, boolean followRotation) {
+        this(entity, part, followRotation, null);
+    }
+
     public ShapeMount sanitized() {
-        return part == null ? new ShapeMount(entity, TrackingBodyPart.ROOT, followRotation) : this;
+        return part == null ? new ShapeMount(entity, TrackingBodyPart.ROOT, followRotation, modelPart) : this;
     }
 
     public ShapeMount withPart(TrackingBodyPart part) {
-        return new ShapeMount(entity, part, followRotation);
+        return new ShapeMount(entity, part, followRotation, modelPart);
     }
 
     public ShapeMount withFollowRotation(boolean followRotation) {
-        return new ShapeMount(entity, part, followRotation);
+        return new ShapeMount(entity, part, followRotation, modelPart);
+    }
+
+    public ShapeMount withModelPart(@Nullable String modelPart) {
+        return new ShapeMount(entity, part, followRotation, modelPart);
     }
 
     public @Nullable Entity resolve() {
@@ -34,6 +45,14 @@ public record ShapeMount(UUID entity, TrackingBodyPart part, boolean followRotat
         Entity target = resolve();
         if (target == null) return null;
         float partialTick = Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        if (modelPart != null && target instanceof LivingEntity living) {
+            Matrix4f onPart = EntityParts.transform(living, modelPart, partialTick);
+            if (onPart != null) {
+                if (followRotation) return onPart;
+                Vector3f pivot = onPart.getTranslation(new Vector3f());
+                return new Matrix4f().translation(pivot);
+            }
+        }
         TrackingBodyPart bodyPart = part == null ? TrackingBodyPart.ROOT : part;
         Vec3 point = switch (bodyPart) {
             case HEAD -> target.getEyePosition(partialTick);

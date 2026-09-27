@@ -11,6 +11,7 @@ import ml.mypals.ryansrenderingkit.shape.line.LineShape;
 import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.shape.GizmoMode;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -203,6 +204,11 @@ public final class CameraGizmoEditor {
         upLine.forceSetStart(eye);
         upLine.forceSetEnd(eye.add(pose.up().scale(scale * 2)));
         for (Handle handle : handles) {
+            if (!shown(handle.kind())) {
+                handle.shape().disable();
+                continue;
+            }
+            handle.shape().enable();
             double handleScale = switch (handle.kind()) {
                 case YAW, PITCH, ROLL -> scale * RING_SCALE;
                 case MOVE_FREE -> scale * 0.5;
@@ -214,6 +220,15 @@ public final class CameraGizmoEditor {
             handle.shape().forceSetWorldScale(new Vec3(handleScale, handleScale, handleScale));
             handle.shape().forceSetWorldRotation(eulerDegrees(new Quaternionf().rotationTo(from, direction.toVector3f())));
         }
+    }
+
+    private boolean shown(Kind kind) {
+        if (dragging != null) return dragging.kind() == kind;
+        return switch (GizmoMode.current()) {
+            case MOVE -> !isRing(kind);
+            case ROTATE -> isRing(kind);
+            default -> true;
+        };
     }
 
     private static boolean isRing(Kind kind) {
@@ -234,6 +249,7 @@ public final class CameraGizmoEditor {
         Handle best = null;
         double distance = Double.POSITIVE_INFINITY;
         for (Handle handle : handles) {
+            if (!handle.shape().enabled()) continue;
             RayModelIntersection.HitResult hit = RayModelIntersection.rayIntersectsModel(
                     ray, handle.shape().getModel(false), handle.shape().indexBuffer);
             if (hit.hit && hit.distance < distance) {

@@ -8,6 +8,7 @@ import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.shape.GizmoMode;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -23,8 +24,6 @@ import java.util.UUID;
 
 /** Move / rotate / uniform-scale handles for a prefab's placement, dragged with the right mouse button. */
 public final class PrefabGizmoEditor {
-    public enum Mode { MOVE, ROTATE, SCALE }
-
     private enum Operation { MOVE_AXIS, MOVE_FREE, ROTATE, SCALE }
 
     private record Handle(Operation operation, int axis, ObjModelShape shape, Color color) {}
@@ -36,8 +35,7 @@ public final class PrefabGizmoEditor {
 
     private final String session = UUID.randomUUID().toString();
     private final List<Handle> handles = new ArrayList<>();
-    private Mode mode = Mode.MOVE;
-    private Mode builtMode;
+    private GizmoMode builtMode;
     private PrefabTransform transform = PrefabTransform.IDENTITY;
     private Handle hovered;
     private Handle dragging;
@@ -49,8 +47,8 @@ public final class PrefabGizmoEditor {
 
     public PrefabTransform transform() { return transform; }
     public void setTransform(PrefabTransform transform) { if (dragging == null) this.transform = transform; }
-    public Mode mode() { return mode; }
-    public void setMode(Mode mode) { this.mode = mode; dragging = null; }
+    public GizmoMode mode() { return GizmoMode.current(); }
+    public void setMode(GizmoMode mode) { if (dragging == null) GizmoMode.set(mode); }
     public boolean isDragging() { return dragging != null; }
     public boolean isHovering() { return hovered != null || dragging != null; }
 
@@ -65,7 +63,7 @@ public final class PrefabGizmoEditor {
 
     public void frame() {
         if (!ReplayUI.isActive()) return;
-        if (builtMode != mode) rebuild();
+        if (dragging == null && builtMode != GizmoMode.current()) rebuild();
         if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
             dragging = null;
@@ -92,17 +90,16 @@ public final class PrefabGizmoEditor {
 
     private void rebuild() {
         clear();
-        builtMode = mode;
-        switch (mode) {
-            case MOVE -> {
-                for (int axis = 0; axis < 3; axis++) add(Operation.MOVE_AXIS, axis, ShapeGizmoEditor.MOVE_MODEL, AXIS_COLORS[axis]);
-                add(Operation.MOVE_FREE, -1, ShapeGizmoEditor.CENTER_MODEL, CENTER_COLOR);
-            }
-            case ROTATE -> {
-                for (int axis = 0; axis < 3; axis++) add(Operation.ROTATE, axis, ShapeGizmoEditor.ROTATE_MODEL, AXIS_COLORS[axis]);
-            }
-            case SCALE -> add(Operation.SCALE, -1, ShapeGizmoEditor.SCALE_MODEL, CENTER_COLOR);
+        builtMode = GizmoMode.current();
+        boolean all = builtMode == GizmoMode.GEOMETRY;
+        if (all || builtMode == GizmoMode.MOVE) {
+            for (int axis = 0; axis < 3; axis++) add(Operation.MOVE_AXIS, axis, ShapeGizmoEditor.MOVE_MODEL, AXIS_COLORS[axis]);
+            add(Operation.MOVE_FREE, -1, ShapeGizmoEditor.CENTER_MODEL, CENTER_COLOR);
         }
+        if (all || builtMode == GizmoMode.ROTATE) {
+            for (int axis = 0; axis < 3; axis++) add(Operation.ROTATE, axis, ShapeGizmoEditor.ROTATE_MODEL, AXIS_COLORS[axis]);
+        }
+        if (all || builtMode == GizmoMode.SCALE) add(Operation.SCALE, -1, ShapeGizmoEditor.SCALE_MODEL, CENTER_COLOR);
     }
 
     private void add(Operation operation, int axis, Identifier model, Color color) {

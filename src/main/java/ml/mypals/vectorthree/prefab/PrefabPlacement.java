@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.prefab;
 
+import ml.mypals.vectorthree.shape.GizmoMode;
 import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.impl.BlockOverrideKeyframe;
@@ -141,7 +142,7 @@ public final class PrefabPlacement {
         ImGui.setNextWindowSize(340, 0, ImGuiCond.FirstUseEver);
         if (ImGui.begin(I18n.get(switch (kind) { case PLACE -> "vector3.prefab.placing"; case EDIT -> "vector3.prefab.editing"; case SAVE -> "vector3.prefab.saving"; }) + "###vector3_prefab_placement")) {
             ImGui.textUnformatted(prefab.name());
-            for (PrefabGizmoEditor.Mode mode : PrefabGizmoEditor.Mode.values()) {
+            for (GizmoMode mode : new GizmoMode[]{GizmoMode.MOVE, GizmoMode.ROTATE, GizmoMode.SCALE}) {
                 if (ImGui.radioButton(I18n.get("vector3.prefab.mode." + mode.name().toLowerCase()), gizmo.mode() == mode)) gizmo.setMode(mode);
                 ImGui.sameLine();
             }

@@ -55,6 +55,7 @@ public class Vector3 implements ClientModInitializer {
 		CustomKeyframes.register(LoopKeyframeType.INSTANCE);
 		CustomKeyframes.register(FadeKeyframeType.INSTANCE);
 		CustomKeyframes.register(ml.mypals.vectorthree.flashback.pose.EntityPoseKeyframeType.INSTANCE);
+		ml.mypals.vectorthree.flashback.channel.BuiltInChannels.register();
 		CustomKeyframes.register(DollyZoomKeyframeType.INSTANCE);
 		CustomKeyframes.register(ClipKeyframeType.INSTANCE);
 		net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(ml.mypals.vectorthree.clips.EmptyProject::tick);

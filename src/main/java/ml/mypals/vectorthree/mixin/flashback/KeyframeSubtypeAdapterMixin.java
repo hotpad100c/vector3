@@ -33,6 +33,8 @@ public class KeyframeSubtypeAdapterMixin {
         if (keyframe instanceof Keyframe k && cir.getReturnValue() instanceof JsonObject json) {
             PrefabGroups.writeGroup(k, json);
             SpeedCurves.write(k, json);
+            ml.mypals.vectorthree.flashback.pose.ModelPartHolder.write(k, json);
+            ml.mypals.vectorthree.flashback.channel.ChannelMasks.write(k, json);
         }
     }
 }

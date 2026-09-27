@@ -39,6 +39,8 @@ public class KeyframeTypeAdapterMixin {
         if (element.isJsonObject() && cir.getReturnValue() != null) {
             PrefabGroups.readGroup(cir.getReturnValue(), element.getAsJsonObject());
             SpeedCurves.read(cir.getReturnValue(), element.getAsJsonObject());
+            ml.mypals.vectorthree.flashback.pose.ModelPartHolder.read(cir.getReturnValue(), element.getAsJsonObject());
+            ml.mypals.vectorthree.flashback.channel.ChannelMasks.read(cir.getReturnValue(), element.getAsJsonObject());
         }
     }
 }

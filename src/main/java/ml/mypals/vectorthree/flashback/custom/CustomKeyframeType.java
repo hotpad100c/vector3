@@ -100,6 +100,11 @@ public abstract class CustomKeyframeType<T> implements KeyframeType<CustomKeyfra
         return ((CustomKeyframe<T>) keyframe).value;
     }
 
+    /** The change a keyframe holding {@code value} applies. */
+    public final KeyframeChange changeOf(T value) {
+        return CustomKeyframeChange.of(this, value);
+    }
+
     public Class<T> valueType() {
         return valueType;
     }

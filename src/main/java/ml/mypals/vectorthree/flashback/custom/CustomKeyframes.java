@@ -42,6 +42,7 @@ public final class CustomKeyframes implements JsonSerializer<CustomKeyframe<?>>,
         json.add("interpolation_type", context.serialize(keyframe.interpolationType()));
         PrefabGroups.writeGroup(keyframe, json);
         SpeedCurves.write(keyframe, json);
+        ml.mypals.vectorthree.flashback.channel.ChannelMasks.write(keyframe, json);
         return json;
     }
 
@@ -54,6 +55,7 @@ public final class CustomKeyframes implements JsonSerializer<CustomKeyframe<?>>,
         CustomKeyframe<T> keyframe = type.newKeyframe(type.sanitize(value), interpolation);
         PrefabGroups.readGroup(keyframe, json);
         SpeedCurves.read(keyframe, json);
+        ml.mypals.vectorthree.flashback.channel.ChannelMasks.read(keyframe, json);
         return keyframe;
     }
 

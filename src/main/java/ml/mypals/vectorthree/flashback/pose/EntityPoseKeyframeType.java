@@ -7,6 +7,7 @@ import ml.mypals.vectorthree.flashback.EntityPicker;
 import ml.mypals.vectorthree.flashback.VectorIcons;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframeType;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.flashback.channel.ChannelRows;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.locale.Language;
@@ -104,6 +105,7 @@ public final class EntityPoseKeyframeType extends CustomKeyframeType<EntityPose>
                 limb = limb.withRotation(rotation[0], rotation[1], rotation[2]);
                 edited = edited.withPart(name, limb);
             }
+            ChannelRows.mark(name + ":rotate");
             ImGui.endDisabled();
 
             if (ImGui.checkbox("##move", limb.move())) {
@@ -118,6 +120,7 @@ public final class EntityPoseKeyframeType extends CustomKeyframeType<EntityPose>
                 limb = limb.withOffset(offset[0], offset[1], offset[2]);
                 edited = edited.withPart(name, limb);
             }
+            ChannelRows.mark(name + ":move");
             ImGui.endDisabled();
 
             ImGui.unindent();
@@ -127,7 +130,7 @@ public final class EntityPoseKeyframeType extends CustomKeyframeType<EntityPose>
     }
 
     // "right_hind_leg" -> "Right Hind Leg"; the common part names are translated.
-    private static String label(String part) {
+    public static String label(String part) {
         String key = "vector3.entity_pose.part." + part;
         if (Language.getInstance().has(key)) return I18n.get(key);
         StringBuilder text = new StringBuilder();

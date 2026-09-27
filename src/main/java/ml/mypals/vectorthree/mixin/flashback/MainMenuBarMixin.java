@@ -46,6 +46,8 @@ public class MainMenuBarMixin {
         PrefabBasketWindow.renderMenuItem();
         ClipsWindow.renderMenuItem();
         CameraPreview.renderMenuItem();
+        ImGui.separator();
+        ml.mypals.vectorthree.flashback.PacketCompat.renderMenuItem();
         HistoryWindow.renderMenuItem();
         TrackManagerWindow.renderMenuItem();
         ImGui.endMenu();

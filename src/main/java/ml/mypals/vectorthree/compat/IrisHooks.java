@@ -1,9 +1,11 @@
 package ml.mypals.vectorthree.compat;
 
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import ml.mypals.vectorthree.shape.model.ObjPbrTexture;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;
 import net.irisshaders.iris.api.v0.IrisProgram;
+import net.irisshaders.iris.pbr.loader.PBRTextureLoaderRegistry;
 import net.irisshaders.iris.vertices.ImmediateState;
 
 // Links against Iris; only reached through IrisCompat once Iris is known to be loaded.
@@ -12,8 +14,8 @@ final class IrisHooks {
 
     // Iris looks PBR maps up by the texture's class; OBJ textures carry theirs (see ObjPbrTexture).
     static void registerObjPbr() {
-        net.irisshaders.iris.pbr.loader.PBRTextureLoaderRegistry.INSTANCE.register(
-                ml.mypals.vectorthree.shape.model.ObjPbrTexture.class, (texture, resources, consumer) -> {
+        PBRTextureLoaderRegistry.INSTANCE.register(
+                ObjPbrTexture.class, (texture, resources, consumer) -> {
                     var normal = texture.loadNormal();
                     if (normal != null) consumer.acceptNormalTexture(normal);
                     var specular = texture.loadSpecular();

@@ -13,6 +13,7 @@ import ml.mypals.ryansrenderingkit.shape.round.LineCircleShape;
 import ml.mypals.ryansrenderingkit.shape.round.SphereShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.shape.GizmoMode;
 import ml.mypals.vectorthree.shape.ShapeGizmoEditor;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -236,6 +237,11 @@ public final class OrbitGizmoEditor {
         centerMarker.forceSetWorldScale(new Vec3(markerScale, markerScale, markerScale));
 
         for (Handle handle : handles) {
+            if (!shown(handle.kind())) {
+                handle.shape().disable();
+                continue;
+            }
+            handle.shape().enable();
             Vec3 position = switch (handle.kind()) {
                 case CENTER_X, CENTER_Y, CENTER_Z -> center;
                 case YAW, PITCH -> eye;
@@ -247,6 +253,16 @@ public final class OrbitGizmoEditor {
             handle.shape().forceSetWorldRotation(eulerDegrees(new Quaternionf()
                     .rotationTo(new Vector3f(0, 1, 0), handleDirection(orbit, handle.kind()).toVector3f())));
         }
+    }
+
+    private boolean shown(Kind kind) {
+        if (dragging != null) return dragging.kind() == kind;
+        return switch (GizmoMode.current()) {
+            case MOVE -> kind == Kind.CENTER_X || kind == Kind.CENTER_Y || kind == Kind.CENTER_Z;
+            case ROTATE -> kind == Kind.YAW || kind == Kind.PITCH || kind == Kind.TILT;
+            case SCALE -> kind == Kind.DISTANCE;
+            case GEOMETRY -> true;
+        };
     }
 
     private static void placeBall(SphereShape ball, Vec3 position, double size) {
@@ -284,6 +300,7 @@ public final class OrbitGizmoEditor {
         Handle best = null;
         double distance = Double.POSITIVE_INFINITY;
         for (Handle handle : handles) {
+            if (!handle.shape().enabled()) continue;
             RayModelIntersection.HitResult hit = RayModelIntersection.rayIntersectsModel(
                     ray, handle.shape().getModel(false), handle.shape().indexBuffer);
             if (hit.hit && hit.distance < distance) {

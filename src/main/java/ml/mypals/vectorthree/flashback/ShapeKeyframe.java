@@ -13,6 +13,7 @@ import ml.mypals.vectorthree.shape.ShapeState;
 import ml.mypals.vectorthree.text.FontOptions;
 import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.ShapeTrackEditor;
+import ml.mypals.vectorthree.flashback.pose.ModelPartCombo;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.text.SdfFont;
 import ml.mypals.vectorthree.shape.text.TextSettings;
@@ -146,6 +147,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         if (mount[0] != null && !multi) {
             TrackingBodyPart part = ImGuiHelper.enumCombo(I18n.get("flashback.body_part"), mount[0].part());
             if (part != mount[0].part()) nextMount = nextMount.withPart(part);
+            String modelPart = ModelPartCombo.render(I18n.get("vector3.mount.model_part"), mount[0].resolve(), mount[0].modelPart());
+            if (!java.util.Objects.equals(modelPart, mount[0].modelPart())) nextMount = nextMount.withModelPart(modelPart);
             ImBoolean followRotation = new ImBoolean(mount[0].followRotation());
             if (ImGui.checkbox(I18n.get("vector3.keyframe.mount_follow_rotation"), followRotation)) {
                 nextMount = nextMount.withFollowRotation(followRotation.get());

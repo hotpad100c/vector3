@@ -27,5 +27,6 @@ public class KeyframeCopyGroupMixin {
     private void vector3$copyGroup(CallbackInfoReturnable<Keyframe> cir) {
         PrefabGroups.tag(cir.getReturnValue(), PrefabGroups.groupOf((Keyframe) (Object) this));
         SpeedCurves.set(cir.getReturnValue(), SpeedCurves.of((Keyframe) (Object) this));
+        ml.mypals.vectorthree.flashback.channel.ChannelMasks.set(cir.getReturnValue(), ml.mypals.vectorthree.flashback.channel.ChannelMasks.of((Keyframe) (Object) this));
     }
 }

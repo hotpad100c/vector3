@@ -25,7 +25,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
-import com.mojang.blaze3d.platform.InputConstants;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -59,7 +58,6 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     public static final double GRID_STEP = 0.5;
     public static final double ANGLE_STEP = 15;
 
-    private enum Mode { MOVE, ROTATE, SCALE, GEOMETRY }
     private enum Axis { X, Y, Z, NONE }
     private enum Operation { MOVE_AXIS, MOVE_FREE, ROTATE, SCALE_AXIS, SCALE_UNIFORM, RADIUS, HEIGHT, DIMENSION, POINT }
 
@@ -69,7 +67,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private final List<Handle> handles = new ArrayList<>();
     private ShapeKeyframe keyframe;
     private Consumer<ShapeState> commit = state -> {};
-    private Mode mode = Mode.MOVE;
+    private GizmoMode mode = GizmoMode.MOVE;
     private boolean localSpace;
     private String layoutKey = "";
     private Handle hovered;
@@ -82,7 +80,6 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private double dragParameter;
     private double dragAngle;
     private ShapeState previewState;
-    private final Set<Integer> heldShortcutKeys = new HashSet<>();
     private BoxWireframeShape aabbBox;
     private ObjModelShape centerPoint;
     private BoxWireframeShape areaSelectionBox;
@@ -100,10 +97,10 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     public void controls() {
         ImGui.text(I18n.get("vector3.gizmo.viewport_gizmo"));
-        setModeButton(I18n.get("vector3.gizmo.move"), Mode.MOVE); ImGui.sameLine();
-        setModeButton(I18n.get("vector3.gizmo.rotate"), Mode.ROTATE); ImGui.sameLine();
-        setModeButton(I18n.get("vector3.gizmo.scale"), Mode.SCALE); ImGui.sameLine();
-        setModeButton(I18n.get("vector3.gizmo.geometry"), Mode.GEOMETRY);
+        setModeButton(I18n.get("vector3.gizmo.move"), GizmoMode.MOVE); ImGui.sameLine();
+        setModeButton(I18n.get("vector3.gizmo.rotate"), GizmoMode.ROTATE); ImGui.sameLine();
+        setModeButton(I18n.get("vector3.gizmo.scale"), GizmoMode.SCALE); ImGui.sameLine();
+        setModeButton(I18n.get("vector3.gizmo.geometry"), GizmoMode.GEOMETRY);
         setSpaceButton(I18n.get("vector3.gizmo.global"), false); ImGui.sameLine();
         setSpaceButton(I18n.get("vector3.gizmo.local"), true);
         ImGui.textDisabled(I18n.get("vector3.gizmo.place_hint"));
@@ -113,7 +110,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     public void frame() {
         if (!ReplayUI.isActive()) return;
         Minecraft minecraft = Minecraft.getInstance();
-        handleShortcuts();
+        followMode();
         if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) {
             ReplayUI.imguiWindower.ungrab();
         }
@@ -176,7 +173,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             }
         }
 
-        if (dragging != null && ImGui.isMouseDown(1) && grouped() && mode != Mode.GEOMETRY) {
+        if (dragging != null && ImGui.isMouseDown(1) && grouped() && mode != GizmoMode.GEOMETRY) {
             Map<GroupTransform.Member, ShapeState> replacement = dragGroup(ray);
             if (replacement != null) {
                 groupPreview = replacement;
@@ -405,8 +402,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         layoutKey = "";
     }
 
-    private void setModeButton(String label, Mode candidate) {
+    private void setModeButton(String label, GizmoMode candidate) {
         if (ImGui.radioButton(label + "##shape_gizmo", mode == candidate) && mode != candidate) {
+            GizmoMode.set(candidate);
             setMode(candidate);
         }
     }
@@ -421,30 +419,18 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     // Geometry handles always follow the shape; move, rotate and scale follow it only in local space.
     private boolean usesLocalAxes(ShapeState state) {
-        return mode == Mode.GEOMETRY ? !usesAbsolutePoints(state) : localSpace;
+        return mode == GizmoMode.GEOMETRY ? !usesAbsolutePoints(state) : localSpace;
     }
 
     private Vec3 gizmoAxis(ShapeState state, Axis axis) {
         return usesLocalAxes(state) ? localAxis(state, axis) : axis(axis);
     }
 
-    private void handleShortcuts() {
-        if (keyframe == null || dragging != null || ImGui.getIO().getWantTextInput() || ImGui.isAnyItemActive()) return;
-        boolean move = keyJustPressed(InputConstants.KEY_G);
-        boolean scale = keyJustPressed(InputConstants.KEY_B);
-        boolean rotate = keyJustPressed(InputConstants.KEY_R);
-        boolean geometry = keyJustPressed(InputConstants.KEY_M);
-        Mode requested = move ? Mode.MOVE : scale ? Mode.SCALE : rotate ? Mode.ROTATE : geometry ? Mode.GEOMETRY : null;
-        if (requested != null) setMode(requested);
+    private void followMode() {
+        if (dragging == null) setMode(GizmoMode.current());
     }
 
-    private boolean keyJustPressed(int key) {
-        boolean down = InputConstants.isKeyDown(key);
-        boolean wasDown = down ? !heldShortcutKeys.add(key) : heldShortcutKeys.remove(key);
-        return down && !wasDown;
-    }
-
-    private void setMode(Mode requested) {
+    private void setMode(GizmoMode requested) {
         if (mode == requested) return;
         mode = requested;
         dragging = null;
@@ -522,7 +508,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     }
 
     private void updateHandles(ShapeState state) {
-        Vec3 center = grouped() && mode != Mode.GEOMETRY ? groupPivot() : center(state);
+        Vec3 center = grouped() && mode != GizmoMode.GEOMETRY ? groupPivot() : center(state);
         double scale = gizmoScale(center);
         for (Handle handle : handles) {
             Vec3 position = handlePosition(state, handle);
@@ -652,7 +638,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             Axis radial = handle.axis();
             return center.add(localAxis(state, radial).scale(state.sizeX() * scale(state, radial) / 2));
         }
-        return grouped() && mode != Mode.GEOMETRY ? groupPivot() : center;
+        return grouped() && mode != GizmoMode.GEOMETRY ? groupPivot() : center;
     }
 
     private Vector3f handleRotation(ShapeState state, Handle handle) {
@@ -711,7 +697,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         dragStart = state;
         groupStart = grouped() ? currentGroupStates() : null;
         dragOrigin = handle.operation() == Operation.POINT ? handlePosition(state, handle)
-                : grouped() && mode != Mode.GEOMETRY ? groupPivot() : center(state);
+                : grouped() && mode != GizmoMode.GEOMETRY ? groupPivot() : center(state);
         dragAxis = handle.operation() == Operation.SCALE_UNIFORM
                 ? new Vec3(camera.leftVector()).scale(-1)
                 : handle.axis() == Axis.NONE ? Vec3.ZERO

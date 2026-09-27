@@ -6,12 +6,8 @@ import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.state.KeyframeTrack;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiCond;
-import imgui.moulberry90.flag.ImGuiTreeNodeFlags;
 import net.minecraft.client.resources.language.I18n;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 public final class TrackManagerWindow {
     private static final PersistentWindow WINDOW = new PersistentWindow("vector3_tracks");
@@ -36,24 +32,7 @@ public final class TrackManagerWindow {
         long stamp = state.acquireWrite();
         try {
             EditorScene scene = state.getCurrentScene(stamp);
-            Map<String, List<KeyframeTrack>> folders = new LinkedHashMap<>();
-            for (KeyframeTrack track : scene.keyframeTracks) {
-                String folder = ((TrackManagement.Holder) track).vector3$folder();
-                folders.computeIfAbsent(folder == null ? "" : folder, key -> new java.util.ArrayList<>()).add(track);
-            }
-            for (Map.Entry<String, List<KeyframeTrack>> entry : folders.entrySet()) {
-                if (entry.getKey().isEmpty()) for (KeyframeTrack track : entry.getValue()) renderTrack(scene, track, state);
-                else {
-                    TrackManagement.Holder folder = (TrackManagement.Holder) entry.getValue().getFirst();
-                    int flags = folder.vector3$collapsed() ? 0 : ImGuiTreeNodeFlags.DefaultOpen;
-                    boolean open = ImGui.treeNodeEx(entry.getKey() + "###folder" + entry.getKey(), flags);
-                    folder.vector3$setCollapsed(!open);
-                    if (open) {
-                        for (KeyframeTrack track : entry.getValue()) renderTrack(scene, track, state);
-                        ImGui.treePop();
-                    }
-                }
-            }
+            for (KeyframeTrack track : scene.keyframeTracks) renderTrack(scene, track, state);
         } finally { state.release(stamp); }
     }
 

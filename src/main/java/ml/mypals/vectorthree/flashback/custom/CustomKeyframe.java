@@ -41,6 +41,7 @@ public class CustomKeyframe<T> extends Keyframe {
         Keyframe copy = type.newKeyframe(value, interpolationType());
         PrefabGroups.tag(copy, PrefabGroups.groupOf(this));
         SpeedCurves.set(copy, SpeedCurves.of(this));
+        ml.mypals.vectorthree.flashback.channel.ChannelMasks.set(copy, ml.mypals.vectorthree.flashback.channel.ChannelMasks.of(this));
         return copy;
     }
     @Override public final KeyframeChange createChange() { return CustomKeyframeChange.of(type, value); }
@@ -63,7 +64,11 @@ public class CustomKeyframe<T> extends Keyframe {
     public void renderEditKeyframe(Consumer<Consumer<Keyframe>> update) {
         T edited = type.edit(value);
         if (edited == value) return;
-        update.accept(keyframe -> ((CustomKeyframe<T>) keyframe).value = edited);
+        update.accept(keyframe -> {
+            Keyframe before = keyframe.copy();
+            ((CustomKeyframe<T>) keyframe).value = edited;
+            ml.mypals.vectorthree.flashback.channel.ChannelMasks.markChanged(before, keyframe);
+        });
         // Keyframes are otherwise only re-applied when the playhead moves.
         ((com.moulberry.flashback.ext.MinecraftExt) net.minecraft.client.Minecraft.getInstance()).flashback$applyKeyframes();
     }
