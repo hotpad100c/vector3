@@ -47,6 +47,7 @@ public class Vector3 implements ClientModInitializer {
 	public void onInitializeClient() {
 		FontOptions.ensureFontFolder();
 		ShapeTrackRegistry.registerDefaults();
+		ml.mypals.vectorthree.compat.IrisCompat.registerObjPbr();
 		ShapeKeyframeType.register();
 		CustomKeyframes.register(LookToKeyframeType.INSTANCE);
 		CustomKeyframes.register(SkipKeyframeType.INSTANCE);

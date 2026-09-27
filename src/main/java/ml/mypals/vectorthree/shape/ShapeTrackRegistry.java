@@ -26,6 +26,7 @@ import ml.mypals.vectorthree.shape.area.AreaShape;
 import ml.mypals.vectorthree.shape.arrow.ArrowShape;
 import ml.mypals.vectorthree.shape.media.ImageShape;
 import ml.mypals.vectorthree.shape.media.VideoShape;
+import ml.mypals.vectorthree.shape.model.TexturedObjShape;
 import ml.mypals.vectorthree.shape.point.ShapePoint;
 import ml.mypals.vectorthree.shape.text.FontTextShape;
 import ml.mypals.vectorthree.shape.text.TextSettings;
@@ -126,9 +127,9 @@ public final class ShapeTrackRegistry {
                 .itemStack(new ItemStack(item(state))).build());
         register("entity", "vector3.shape.entity", state -> ShapeGenerator.generateEntity()
                 .entity(entity(state)).light(0xF000F0).build(Shape.RenderingType.BATCH));
-        register("obj", "vector3.shape.obj", state -> new ObjModelShape(Shape.RenderingType.BATCH,
-                transformer -> {}, objModelId(state.model()), Vec3.ZERO,
-                new Color(state.color(), true), state.seeThrough()));
+        register("obj", "vector3.shape.obj", state -> new TexturedObjShape(state.model(),
+                TexturedObjShape.mode(state), TexturedObjShape.texturePath(state), new Color(state.color(), true),
+                state.seeThrough()));
         register("arrow", "vector3.shape.arrow", state -> new ArrowShape(point(state, 0), point(state, 1),
                 state.lineWidth(), (float) state.sizeX(), new Color(state.color(), true), state.seeThrough()));
         register("image", "vector3.shape.image", state -> new ImageShape(state.model(),
@@ -252,6 +253,7 @@ public final class ShapeTrackRegistry {
         LAST_STATES.clear();
         previewHighlightId = null;
         ImageShape.clearTextures();
+        TexturedObjShape.clearTextures();
         PARTICLE_CLOCKS.clear();
     }
 
@@ -505,7 +507,7 @@ public final class ShapeTrackRegistry {
     /** Vanilla-content shapes, which can either be shaded by the shader pack or drawn in the bypass pass. */
     public static boolean usesBypassOption(String type) {
         return switch (type) {
-            case "block", "item", "entity" -> true;
+            case "block", "item", "entity", "obj" -> true;
             default -> false;
         };
     }
@@ -619,6 +621,8 @@ public final class ShapeTrackRegistry {
             VertexBuilderGetter.registerEmptyShapeBuilder(VideoShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof AreaShape)
             VertexBuilderGetter.registerEmptyShapeBuilder(AreaShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
+        else if (shape instanceof TexturedObjShape)
+            VertexBuilderGetter.registerEmptyShapeBuilder(TexturedObjShape.class, ShapeManagers.NON_SHAPE_OBJECTS);
         else if (shape instanceof ArrowShape)
             VertexBuilderGetter.registerShapeBuilder(ArrowShape.class, ShapeManagers.TRIANGLES_SHAPE_MANAGER);
     }
@@ -634,11 +638,6 @@ public final class ShapeTrackRegistry {
 
     private static List<Vec3> points(ShapeState state) {
         return state.points() == null ? List.of() : state.points().stream().map(ShapePoint::vec3).toList();
-    }
-
-    private static Identifier objModelId(String value) {
-        Identifier id = value == null ? null : Identifier.tryParse(value);
-        return id == null ? Identifier.fromNamespaceAndPath("ryansrenderingkit", "models/monkey.obj") : id;
     }
 
     public static BlockState blockState(String blockId, Map<String, String> properties) {
@@ -795,6 +794,10 @@ public final class ShapeTrackRegistry {
                 .sortOnUpload()
                 .createRenderSetup();
         return RenderType.create(seeThrough ? "vector3_image_see_through" : "vector3_image", setup);
+    }
+
+    public static RenderType objType(Identifier textureId, boolean seeThrough) {
+        return imageType(textureId, seeThrough);
     }
 
     private static RenderPipeline registerImagePipeline(String name, DepthStencilState depth) {

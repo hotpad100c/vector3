@@ -12,12 +12,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-final class ImageDecoder {
+public final class ImageDecoder {
     private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G'};
 
     private ImageDecoder() {}
 
-    static NativeImage decode(Path path) throws IOException {
+    public static NativeImage decode(Path path) throws IOException {
         byte[] bytes = Files.readAllBytes(path);
         if (isPng(bytes)) return NativeImage.read(bytes);
         BufferedImage image = null;

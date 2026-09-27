@@ -3,6 +3,7 @@ package ml.mypals.vectorthree.mixin.area;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.shape.area.AreaShape;
+import ml.mypals.vectorthree.shape.model.TexturedObjShape;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
@@ -20,9 +21,12 @@ public class AreaMainPassMixin {
             CallbackInfo ci) {
         ShapeTrackRegistry.updateMounts();
         AreaShape.beginFrame();
+        TexturedObjShape.beginFrame();
         for (String shapeId : ShapeTrackRegistry.shapeIds()) {
             if (ShapeTrackRegistry.shape(shapeId) instanceof AreaShape area) {
                 area.submitFrame(collector, levelRenderState.cameraRenderState);
+            } else if (ShapeTrackRegistry.shape(shapeId) instanceof TexturedObjShape obj) {
+                obj.submitFrame();
             }
         }
     }
@@ -32,6 +36,7 @@ public class AreaMainPassMixin {
     private void vector3$drawAreaOpaque(ChunkSectionsToRender chunks, FeatureRenderDispatcher.PreparedFrame frame,
             RenderPass pass, CallbackInfo ci) {
         AreaShape.drawPreparedOpaque(pass);
+        TexturedObjShape.drawPreparedOpaque(pass);
     }
 
     @Inject(method = "executeClassicTransparency", at = @At(value = "INVOKE",
@@ -39,11 +44,13 @@ public class AreaMainPassMixin {
     private void vector3$drawAreaTranslucent(ChunkSectionsToRender chunks, FeatureRenderDispatcher.PreparedFrame frame,
             RenderPass pass, CallbackInfo ci) {
         AreaShape.drawPreparedTranslucent(pass);
+        TexturedObjShape.drawPreparedTranslucent(pass);
     }
 
     @Inject(method = "executeOit", at = @At("HEAD"))
     private void vector3$drawAreaTranslucentOit(ChunkSectionsToRender chunks, FeatureRenderDispatcher.PreparedFrame frame,
             CallbackInfo ci) {
         AreaShape.drawPreparedTranslucent();
+        TexturedObjShape.drawPreparedTranslucent();
     }
 }

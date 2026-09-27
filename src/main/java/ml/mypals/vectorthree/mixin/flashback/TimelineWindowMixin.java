@@ -60,9 +60,7 @@ import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
 import ml.mypals.vectorthree.flashback.TrackMove;
-import ml.mypals.vectorthree.flashback.PlaybackRange;
 import ml.mypals.vectorthree.flashback.TrackManagement;
-import ml.mypals.vectorthree.flashback.VectorKeybinds;
 import ml.mypals.vectorthree.prefab.PrefabBasketWindow;
 import ml.mypals.vectorthree.prefab.PrefabGroups;
 import imgui.moulberry90.ImDrawList;
@@ -159,33 +157,6 @@ public abstract class TimelineWindowMixin {
     private static List<SelectedKeyframes> vector3$rightClickSelection = List.of();
     @Unique
     private static boolean vector3$openSelectionMenu;
-
-    @Inject(method = "handleKeyPresses", at = @At("HEAD"))
-    private static void vector3$rangeShortcuts(ReplayServer server, int currentTick, int totalTicks, CallbackInfo ci) {
-        if (ImGui.getIO().getWantTextInput() || editorScene == null) return;
-        if (VectorKeybinds.pressed(VectorKeybinds.MARK_IN)) {
-            upgradeToSceneWrite();
-            PlaybackRange.setIn(editorScene, currentTick);
-            editorState.markDirty();
-            ReplayUI.setInfoOverlayShort(I18n.get("vector3.playback.in_set", currentTick));
-        }
-        if (VectorKeybinds.pressed(VectorKeybinds.MARK_OUT)) {
-            upgradeToSceneWrite();
-            PlaybackRange.setOut(editorScene, currentTick);
-            editorState.markDirty();
-            ReplayUI.setInfoOverlayShort(I18n.get("vector3.playback.out_set", currentTick));
-        }
-        if (VectorKeybinds.pressed(VectorKeybinds.CLEAR_IN)) {
-            upgradeToSceneWrite();
-            ((PlaybackRange.Holder) editorScene).vector3$setInTick(-1);
-            editorState.markDirty();
-        }
-        if (VectorKeybinds.pressed(VectorKeybinds.CLEAR_OUT)) {
-            upgradeToSceneWrite();
-            ((PlaybackRange.Holder) editorScene).vector3$setOutTick(-1);
-            editorState.markDirty();
-        }
-    }
 
     @Inject(method = "renderInner", at = @At(value = "INVOKE",
             target = "Lcom/moulberry/flashback/editor/ui/ImGuiHelper;beginPopup(Ljava/lang/String;)Z",

@@ -25,6 +25,7 @@ public abstract class ReplayServerRangeMixin {
         long stamp = state.acquireRead();
         try {
             EditorScene scene = state.getCurrentScene(stamp);
+            if (!PlaybackRange.enabled(scene)) return;
             int in = PlaybackRange.in(scene), out = PlaybackRange.out(scene);
             if (in >= 0 && out > in && getReplayTick() >= out) {
                 goToReplayTick(in);

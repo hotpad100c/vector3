@@ -3,6 +3,7 @@ package ml.mypals.vectorthree.flashback;
 import imgui.moulberry90.flag.ImGuiHoveredFlags;
 import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.state.EditorState;
+import com.moulberry.flashback.state.EditorScene;
 import ml.mypals.vectorthree.shape.ShapeReparent;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiCond;
@@ -60,6 +61,7 @@ public final class ShapeManagerWindow {
             if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.instant_preview.tooltip"));
             ImGui.checkbox(I18n.get("vector3.shape_manager.auto_key"), autoKey);
             if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.auto_key.tooltip"));
+            renderPlaybackLoop();
             ImGui.checkbox(I18n.get("vector3.shape_manager.debug_bypass_only"), debugBypassOnly);
             IrisBypassTarget.debugShowOnly = debugBypassOnly.get();
             ImGui.separator();
@@ -76,6 +78,23 @@ public final class ShapeManagerWindow {
         }
         ImGui.end();
         WINDOW.sync();
+    }
+
+    private static void renderPlaybackLoop() {
+        EditorState state = EditorStateManager.getCurrent();
+        if (state == null) return;
+        long stamp = state.acquireWrite();
+        try {
+            EditorScene scene = state.getCurrentScene(stamp);
+            ImBoolean enabled = new ImBoolean(PlaybackRange.enabled(scene));
+            if (ImGui.checkbox(I18n.get("vector3.shape_manager.loop_playback"), enabled)) {
+                PlaybackRange.setEnabled(scene, enabled.get());
+                state.markDirty();
+            }
+            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.loop_playback.tooltip"));
+        } finally {
+            state.release(stamp);
+        }
     }
 
     private static void renderTree() {

@@ -17,6 +17,7 @@ import ml.mypals.vectorthree.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.text.SdfFont;
 import ml.mypals.vectorthree.shape.text.TextSettings;
 import ml.mypals.vectorthree.shape.media.VideoShape;
+import ml.mypals.vectorthree.shape.model.TexturedObjShape;
 import ml.mypals.vectorthree.shape.WireframeSettings;
 import ml.mypals.vectorthree.shape.area.AreaOptions;
 import ml.mypals.vectorthree.shape.area.AreaShape;
@@ -211,6 +212,9 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         ImString model = new ImString(state.shapeType().equals("obj")
                 && state.model() != null && !state.model().isBlank()
                 ? state.model() : "ryansrenderingkit:models/monkey.obj", 512);
+        ImInt objMode = new ImInt(TexturedObjShape.mode(state).ordinal());
+        String objTexturePath = TexturedObjShape.texturePath(state);
+        ImString objTexture = new ImString(objTexturePath == null ? "" : objTexturePath, 1024);
         ImString imageFile = new ImString(state.shapeType().equals("image") && state.model() != null
                 ? state.model() : "", 1024);
         ImString videoFile = new ImString(state.shapeType().equals("video") && state.model() != null
@@ -341,7 +345,21 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                     ImGui.endCombo();
                 }
             }
-            case "obj" -> changed |= ImGui.inputText(I18n.get("vector3.keyframe.obj_resource"), model);
+            case "obj" -> {
+                changed |= ImGui.inputText(I18n.get("vector3.keyframe.obj_resource"), model);
+                changed |= FileBrowse.button("obj", model, I18n.get("vector3.file.obj_filter"), "obj");
+                String[] objModes = java.util.Arrays.stream(TexturedObjShape.Mode.values())
+                        .map(mode -> I18n.get("vector3.keyframe.obj_mode." + mode.id)).toArray(String[]::new);
+                changed |= ImGui.combo(I18n.get("vector3.keyframe.obj_mode"), objMode, objModes);
+                if (objMode.get() == TexturedObjShape.Mode.MATERIALS.ordinal() && ImGui.isItemHovered()) {
+                    ImGui.setTooltip(I18n.get("vector3.keyframe.obj_mode.mtl.tooltip"));
+                }
+                if (objMode.get() == TexturedObjShape.Mode.TEXTURE.ordinal()) {
+                    changed |= ImGui.inputText(I18n.get("vector3.keyframe.obj_texture"), objTexture);
+                    changed |= FileBrowse.button("obj_texture", objTexture, I18n.get("vector3.file.image_filter"),
+                            "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff", "tga");
+                }
+            }
             case "image" -> {
                 changed |= ImGui.inputText(I18n.get("vector3.keyframe.image_file"), imageFile);
                 changed |= FileBrowse.button("image", imageFile, I18n.get("vector3.file.image_filter"),
@@ -511,8 +529,10 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                         case "video" -> videoFile.get();
                         default -> state.model();
                     })
-                    .withBlockProperties(selectedType[0].equals("block")
-                            ? blockProperties : state.blockProperties())
+                    .withBlockProperties(selectedType[0].equals("block") ? blockProperties
+                            : selectedType[0].equals("obj") ? Map.of(
+                                    TexturedObjShape.MODE, TexturedObjShape.Mode.values()[objMode.get()].id,
+                                    TexturedObjShape.TEXTURE, objTexture.get()) : state.blockProperties())
                     .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick())
                     .withName(nameField.get().isBlank() ? null : nameField.get());
             ShapeTrackRegistry.apply(replacement);

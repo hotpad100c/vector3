@@ -10,6 +10,17 @@ import net.irisshaders.iris.vertices.ImmediateState;
 final class IrisHooks {
     private IrisHooks() {}
 
+    // Iris looks PBR maps up by the texture's class; OBJ textures carry theirs (see ObjPbrTexture).
+    static void registerObjPbr() {
+        net.irisshaders.iris.pbr.loader.PBRTextureLoaderRegistry.INSTANCE.register(
+                ml.mypals.vectorthree.shape.model.ObjPbrTexture.class, (texture, resources, consumer) -> {
+                    var normal = texture.loadNormal();
+                    if (normal != null) consumer.acceptNormalTexture(normal);
+                    var specular = texture.loadSpecular();
+                    if (specular != null) consumer.acceptSpecularTexture(specular);
+                });
+    }
+
     static boolean isPackInUse() {
         return Iris.isPackInUseQuick();
     }

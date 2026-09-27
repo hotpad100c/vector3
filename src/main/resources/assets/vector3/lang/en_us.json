@@ -22,6 +22,8 @@
   "vector3.keyframe.particle": "Particle",
   "vector3.keyframe.emission_rate": "Rate / second",
   "vector3.keyframe.spread": "Spread",
+  "vector3.keyframe.obj_texture": "Texture file",
+  "vector3.file.obj_filter": "Wavefront OBJ (*.obj)",
   "vector3.shape.box": "Box",
   "vector3.shape.sphere": "Sphere",
   "vector3.shape.face_circle": "Circle",
@@ -341,5 +343,10 @@
   "vector3.camera_preview.with_shaders": "Also with shaders (experimental)",
   "vector3.camera_preview.with_shaders.tooltip": "Renders the world twice per frame through the shader pack. It costs about double, and effects that reuse the previous frame (TAA, motion blur, auto exposure) may smear or flicker between the two views.",
   "vector3.camera_preview.detach": "Main view doesn't follow the camera",
-  "vector3.camera_preview.detach.tooltip": "While this window is open, camera keyframes (position, FOV, shake, Look To, Dolly Zoom) only drive the preview, so the main view stays where you put it during playback. Exports are unaffected."
+  "vector3.camera_preview.detach.tooltip": "While this window is open, camera keyframes (position, FOV, shake, Look To, Dolly Zoom) only drive the preview, so the main view stays where you put it during playback. Exports are unaffected.",
+  "vector3.keyframe.obj_mode": "Look",
+  "vector3.keyframe.obj_mode.solid": "Solid colour",
+  "vector3.keyframe.obj_mode.texture": "Texture file",
+  "vector3.keyframe.obj_mode.mtl": "Model materials (MTL)",
+  "vector3.keyframe.obj_mode.mtl.tooltip": "Uses the .mtl files the OBJ names (mtllib / usemtl): each material's colour (Kd), opacity (d) and texture (map_Kd), found next to the OBJ. Colour still tints the whole model."
 }

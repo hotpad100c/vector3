@@ -22,6 +22,8 @@
   "vector3.keyframe.particle": "粒子",
   "vector3.keyframe.emission_rate": "每秒发射速率",
   "vector3.keyframe.spread": "扩散范围",
+  "vector3.keyframe.obj_texture": "贴图文件",
+  "vector3.file.obj_filter": "Wavefront OBJ (*.obj)",
   "vector3.shape.box": "立方体",
   "vector3.shape.sphere": "球体",
   "vector3.shape.face_circle": "圆形",
@@ -341,5 +343,10 @@
   "vector3.camera_preview.with_shaders": "光影下也启用（实验）",
   "vector3.camera_preview.with_shaders.tooltip": "每帧经过光影包把世界渲染两遍，开销约翻倍；依赖上一帧的效果（TAA、运动模糊、自动曝光等）可能在两个视角间拖影或闪烁。",
   "vector3.camera_preview.detach": "主画面不跟随相机",
-  "vector3.camera_preview.detach.tooltip": "此窗口打开时，相机关键帧（位置、FOV、抖动、看向、滑动变焦）只驱动预览，播放时主画面停在你摆好的位置。不影响导出。"
+  "vector3.camera_preview.detach.tooltip": "此窗口打开时，相机关键帧（位置、FOV、抖动、看向、滑动变焦）只驱动预览，播放时主画面停在你摆好的位置。不影响导出。",
+  "vector3.keyframe.obj_mode": "外观",
+  "vector3.keyframe.obj_mode.solid": "纯色",
+  "vector3.keyframe.obj_mode.texture": "贴图文件",
+  "vector3.keyframe.obj_mode.mtl": "模型材质（MTL）",
+  "vector3.keyframe.obj_mode.mtl.tooltip": "使用 OBJ 引用的 .mtl 文件（mtllib / usemtl）：每个材质的颜色（Kd）、不透明度（d）和贴图（map_Kd），在 OBJ 同目录下查找。颜色属性仍会给整个模型着色。"
 }

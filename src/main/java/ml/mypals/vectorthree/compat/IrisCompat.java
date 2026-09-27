@@ -14,6 +14,10 @@ public final class IrisCompat {
 
     private IrisCompat() {}
 
+    public static void registerObjPbr() {
+        if (LOADED) IrisHooks.registerObjPbr();
+    }
+
     public static boolean isPackInUse() {
         return LOADED && IrisHooks.isPackInUse();
     }

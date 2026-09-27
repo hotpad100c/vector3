@@ -28,8 +28,7 @@ public class EditorSceneMixin implements PrefabGroupHolder.Scene, ClipProject.Cl
     @Final
     @Shadow public List<KeyframeTrack> keyframeTracks;
     @Unique private PrefabGroupStore vector3$prefabGroups;
-    @Unique private int vector3$inTick = -1;
-    @Unique private int vector3$outTick = -1;
+    @Unique private boolean vector3$loopPlayback;
     @Shadow @Final private EditorSceneHistory history;
 
     @Override
@@ -38,10 +37,8 @@ public class EditorSceneMixin implements PrefabGroupHolder.Scene, ClipProject.Cl
     }
 
     @Override public EditorSceneHistory vector3$history() { return history; }
-    @Override public int vector3$inTick() { return vector3$inTick; }
-    @Override public int vector3$outTick() { return vector3$outTick; }
-    @Override public void vector3$setInTick(int tick) { vector3$inTick = tick; }
-    @Override public void vector3$setOutTick(int tick) { vector3$outTick = tick; }
+    @Override public boolean vector3$loopPlayback() { return vector3$loopPlayback; }
+    @Override public void vector3$setLoopPlayback(boolean enabled) { vector3$loopPlayback = enabled; }
 
     @Override
     public PrefabGroupStore vector3$prefabGroups() {
