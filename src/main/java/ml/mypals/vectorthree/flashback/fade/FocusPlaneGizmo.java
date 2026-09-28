@@ -10,6 +10,7 @@ import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.camera.CameraPreview;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
+import ml.mypals.vectorthree.flashback.fade.effects.DofSettings;
 import net.minecraft.world.phys.Vec3;
 
 import java.awt.Color;
@@ -66,24 +67,28 @@ public final class FocusPlaneGizmo {
             hide();
             return;
         }
-        Vec3 forward = shot.forward().normalize();
-        Vec3 up = shot.up().normalize();
-        Vec3 right = forward.cross(up).normalize();
-        double tan = Math.tan(Math.toRadians(shot.fov()) * 0.5);
-        double distance = value.focusDistance(), half = value.focusRange() * 0.5;
+        DofSettings dof = value.dof();
+        if (dof.autofocus() || value.dofMode() == ScreenVFX.DOF_DISTANCE) {
+            hide();
+            return;
+        }
+        Frustum frustum = new Frustum(shot);
+        double half = value.focusRange() * 0.5;
         ensureLines();
 
-        Vec3[] plane = rectangle(shot.eye(), forward, right, up, distance, tan, shot.aspect());
+        Vec3[] plane = frustum.rectangle(dof, value.focusDistance(), 0);
         for (int i = 0; i < 4; i++) segment(FRAME_START + i, plane[i], plane[(i + 1) % 4]);
         for (int i = 1; i < DIVISIONS; i++) {
             double t = (double) i / DIVISIONS;
-            segment(GRID_START + (i - 1) * 2, lerp(plane[0], plane[1], t), lerp(plane[3], plane[2], t));
-            segment(GRID_START + (i - 1) * 2 + 1, lerp(plane[0], plane[3], t), lerp(plane[1], plane[2], t));
+            segment(GRID_START + (i - 1) * 2, frustum.at(dof, value.focusDistance(), 0, t, 0),
+                    frustum.at(dof, value.focusDistance(), 0, t, 1));
+            segment(GRID_START + (i - 1) * 2 + 1, frustum.at(dof, value.focusDistance(), 0, 0, t),
+                    frustum.at(dof, value.focusDistance(), 0, 1, t));
         }
 
         boolean showRange = half > 0.01;
-        Vec3[] near = rectangle(shot.eye(), forward, right, up, Math.max(0.05, distance - half), tan, shot.aspect());
-        Vec3[] far = rectangle(shot.eye(), forward, right, up, distance + half, tan, shot.aspect());
+        Vec3[] near = frustum.rectangle(dof, value.focusDistance(), -half);
+        Vec3[] far = frustum.rectangle(dof, value.focusDistance(), half);
         for (int i = 0; i < 4; i++) {
             segment(RANGE_START + i, near[i], near[(i + 1) % 4]);
             segment(RANGE_START + 4 + i, far[i], far[(i + 1) % 4]);
@@ -95,22 +100,29 @@ public final class FocusPlaneGizmo {
         }
     }
 
+    /** Points on the (possibly tilted) focus surface, by screen position u, v in [0, 1]. */
+    private record Frustum(Vec3 eye, Vec3 forward, Vec3 right, Vec3 up, double tan, double aspect) {
+        Frustum(CameraPreview.Shot shot) {
+            this(shot.eye(), shot.forward().normalize(), shot.forward().cross(shot.up()).normalize(),
+                    shot.up().normalize(), Math.tan(Math.toRadians(shot.fov()) * 0.5), shot.aspect());
+        }
+
+        Vec3 at(DofSettings dof, double focus, double offset, double u, double v) {
+            double distance = Math.max(0.05, dof.focusAt(focus, u, v) + offset);
+            Vec3 ray = forward.add(right.scale((u * 2 - 1) * tan * aspect)).add(up.scale((v * 2 - 1) * tan));
+            return eye.add(ray.scale(distance));
+        }
+
+        Vec3[] rectangle(DofSettings dof, double focus, double offset) {
+            return new Vec3[]{at(dof, focus, offset, 0, 0), at(dof, focus, offset, 1, 0),
+                    at(dof, focus, offset, 1, 1), at(dof, focus, offset, 0, 1)};
+        }
+    }
+
     private ScreenVFX editing() {
         if (selected == null || !ReplayUI.isActive() || Flashback.isExporting()) return null;
         ScreenVFX value = selected.value;
         return value != null && value.applies(ScreenVFX.DOF) ? value : null;
-    }
-
-    private static Vec3[] rectangle(Vec3 eye, Vec3 forward, Vec3 right, Vec3 up, double distance,
-                                    double tan, double aspect) {
-        Vec3 center = eye.add(forward.scale(distance));
-        Vec3 y = up.scale(distance * tan), x = right.scale(distance * tan * aspect);
-        return new Vec3[]{center.subtract(x).subtract(y), center.add(x).subtract(y),
-                center.add(x).add(y), center.subtract(x).add(y)};
-    }
-
-    private static Vec3 lerp(Vec3 a, Vec3 b, double t) {
-        return a.add(b.subtract(a).scale(t));
     }
 
     private void ensureLines() {

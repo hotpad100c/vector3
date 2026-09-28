@@ -14,6 +14,13 @@ import ml.mypals.vectorthree.flashback.custom.CustomKeyframeType;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
 import ml.mypals.vectorthree.flashback.fade.effects.ColorGradingEditor;
 import ml.mypals.vectorthree.flashback.fade.effects.BloomEditor;
+import ml.mypals.vectorthree.flashback.fade.effects.DepthOfFieldEffect;
+import ml.mypals.vectorthree.flashback.fade.effects.DofEditor;
+import ml.mypals.vectorthree.flashback.fade.effects.DofSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.GrainEditor;
+import ml.mypals.vectorthree.flashback.fade.effects.PixelationEditor;
+import ml.mypals.vectorthree.flashback.fade.effects.LensEditor;
+import ml.mypals.vectorthree.flashback.fade.effects.AdditionalEffectsEditor;
 import net.minecraft.client.resources.language.I18n;
 
 public final class ScreenVFXKeyframeType extends CustomKeyframeType<ScreenVFX> {
@@ -79,17 +86,42 @@ public final class ScreenVFXKeyframeType extends CustomKeyframeType<ScreenVFX> {
             var bloom = BloomEditor.edit(value.bloom());
             if (bloom != value.bloom()) editedSettings = editedSettings.withBloom(bloom);
         }
+        if (value.effect().equals(ScreenVFX.GRAIN)) {
+            var grain = GrainEditor.edit(value.grain());
+            if (grain != value.grain()) editedSettings = editedSettings.withGrain(grain);
+        }
+        if (value.effect().equals(ScreenVFX.PIXELATION)) {
+            var pixelation = PixelationEditor.edit(value.pixelation());
+            if (pixelation != value.pixelation()) editedSettings = editedSettings.withPixelation(pixelation);
+        }
+        if (value.effect().equals(ScreenVFX.LENS)) {
+            var lens = LensEditor.edit(value.lens());
+            if (lens != value.lens()) editedSettings = editedSettings.withLens(lens);
+        }
+        var additional = AdditionalEffectsEditor.edit(value.effect(), value.additional());
+        if (additional != value.additional()) editedSettings = editedSettings.withAdditional(additional);
         if (value.applies(ScreenVFX.DOF)) {
             changed |= ImGui.combo(I18n.get("vector3.vfx.dof_mode"), dofMode, new String[]{
                     I18n.get("vector3.vfx.dof_mode.both"), I18n.get("vector3.vfx.dof_mode.near"),
-                    I18n.get("vector3.vfx.dof_mode.far")});
-            changed |= ImGui.sliderFloat(I18n.get("vector3.vfx.dof_strength"), dofStrength, 0, 1);
-            changed |= ImGui.sliderFloat(I18n.get("vector3.vfx.focus_depth"), focusDistance, 0.1f, 512, "%.2f",
-                    ImGuiSliderFlags.Logarithmic);
-            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.vfx.focus_tip"));
-            changed |= ImGui.sliderFloat(I18n.get("vector3.vfx.focus_range"), focusRange, 0, 128, "%.2f",
-                    ImGuiSliderFlags.Logarithmic);
-            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.vfx.focus_range_tip"));
+                    I18n.get("vector3.vfx.dof_mode.far"), I18n.get("vector3.vfx.dof_mode.distance")});
+            boolean distanceBlur = dofMode.get() == ScreenVFX.DOF_DISTANCE;
+            DofSettings dof = distanceBlur ? editedSettings.dof() : DofEditor.autofocus(editedSettings.dof());
+            if (distanceBlur || !dof.autofocus()) {
+                changed |= ImGui.sliderFloat(I18n.get(distanceBlur ? "vector3.vfx.blur_distance" : "vector3.vfx.focus_depth"),
+                        focusDistance, 0.1f, 512, "%.2f", ImGuiSliderFlags.Logarithmic);
+                if (ImGui.isItemHovered())
+                    ImGui.setTooltip(I18n.get(distanceBlur ? "vector3.vfx.blur_distance_tip" : "vector3.vfx.focus_tip"));
+            }
+            if (!distanceBlur) {
+                changed |= ImGui.sliderFloat(I18n.get("vector3.vfx.focus_range"), focusRange, 0, 128, "%.2f",
+                        ImGuiSliderFlags.Logarithmic);
+                if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.vfx.focus_range_tip"));
+            }
+            changed |= ImGui.sliderFloat(I18n.get("vector3.vfx.dof_strength"), dofStrength, 0,
+                    DepthOfFieldEffect.MAX_STRENGTH, "%.2f");
+            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.vfx.dof_strength_tip"));
+            dof = DofEditor.lens(dof);
+            if (dof != value.dof()) editedSettings = editedSettings.withDof(dof);
             ImGui.checkbox(I18n.get("vector3.vfx.focus_overlay"), FocusPlaneGizmo.OVERLAY);
             if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.vfx.focus_overlay_tip"));
         }
@@ -128,7 +160,9 @@ public final class ScreenVFXKeyframeType extends CustomKeyframeType<ScreenVFX> {
         return changed ? new ScreenVFX(ScreenVFX.VERSION, colour[0], colour[1], colour[2], opacity[0],
                 value.exposure(), value.contrast(), value.saturation(), value.temperature(), vignette[0], vignetteRadius[0],
                 dofStrength[0], Math.max(0.01f, focusDistance[0]), Math.max(0, focusRange[0]), dofMode.get(), lutStrength[0], lut.get(),
-                value.effect(), editedSettings.grading(), editedSettings.bloom()) : editedSettings;
+                value.effect(), editedSettings.grading(), editedSettings.bloom(), editedSettings.dof(),
+                editedSettings.grain(), editedSettings.pixelation(), editedSettings.lens(),
+                editedSettings.additional()) : editedSettings;
     }
 
     @Override protected ScreenVFX lerp(ScreenVFX from, ScreenVFX to, double amount) {

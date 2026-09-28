@@ -35,6 +35,8 @@ public final class ScreenVFXRenderer {
         pending.clear();
         current = List.of();
         EffectTextures.clear();
+        AutoExposureEffect.clear();
+        MotionBlurEffect.clear();
     }
 
     /** Called before the hand pass, which clears the main depth buffer. */
@@ -44,11 +46,18 @@ public final class ScreenVFXRenderer {
     }
 
     private static boolean usesDepth(ScreenVFX value) {
-        return value.effect().equals(ScreenVFX.DOF) || value.effect().equals(ScreenVFX.LEGACY) && value.dofStrength() > 0;
+        return value.effect().equals(ScreenVFX.DOF) || value.effect().equals(ScreenVFX.FLARE)
+                || value.effect().equals(ScreenVFX.MOTION_BLUR)
+                || value.effect().equals(ScreenVFX.AO) || value.effect().equals(ScreenVFX.SSR)
+                || value.effect().equals(ScreenVFX.LEGACY) && value.dofStrength() > 0;
     }
 
     public static void renderEffects() {
         try {
+            if (current.stream().noneMatch(value -> value.effect().equals(ScreenVFX.AUTO_EXPOSURE)))
+                AutoExposureEffect.clear();
+            if (current.stream().noneMatch(value -> value.effect().equals(ScreenVFX.MOTION_BLUR)))
+                MotionBlurEffect.clear();
             render();
         } finally {
             DepthOfFieldEffect.endFrame();
@@ -67,6 +76,15 @@ public final class ScreenVFXRenderer {
                 case ScreenVFX.DOF -> DepthOfFieldEffect.render(main, value, overlay);
                 case ScreenVFX.VIGNETTE -> VignetteEffect.render(main, value);
                 case ScreenVFX.LUT -> LutEffect.render(main, value);
+                case ScreenVFX.GRAIN -> GrainEffect.render(main, value.grain());
+                case ScreenVFX.PIXELATION -> PixelationEffect.render(main, value.pixelation());
+                case ScreenVFX.LENS -> LensEffect.render(main, value.lens());
+                case ScreenVFX.FLARE -> FlareEffect.render(main, value.additional().flare());
+                case ScreenVFX.AUTO_EXPOSURE -> AutoExposureEffect.render(main, value.additional().exposure());
+                case ScreenVFX.MOTION_BLUR -> MotionBlurEffect.render(main, value.additional().motion());
+                case ScreenVFX.PANINI -> PaniniEffect.render(main, value.additional().panini());
+                case ScreenVFX.AO -> OcclusionEffect.render(main, value.additional().ao());
+                case ScreenVFX.SSR -> ReflectionEffect.render(main, value.additional().ssr());
                 case ScreenVFX.LEGACY -> {
                     if (value.dofStrength() > 0) DepthOfFieldEffect.render(main, value, overlay);
                     ColorGradingEffect.render(main, value.grading());

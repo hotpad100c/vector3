@@ -8,6 +8,19 @@ import com.moulberry.flashback.keyframe.types.CameraKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.fade.ScreenVFX;
 import ml.mypals.vectorthree.flashback.fade.ScreenVFXKeyframeType;
+import ml.mypals.vectorthree.flashback.fade.effects.DofSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.GradingCurves;
+import ml.mypals.vectorthree.flashback.fade.effects.GrainSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.PixelationSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.LensSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.AdvancedGradingSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.AdditionalEffects;
+import ml.mypals.vectorthree.flashback.fade.effects.FlareSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.ExposureSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.MotionBlurSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.PaniniSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.OcclusionSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.ReflectionSettings;
 import ml.mypals.vectorthree.flashback.pose.EntityPose;
 import ml.mypals.vectorthree.flashback.pose.EntityPoseKeyframeType;
 import ml.mypals.vectorthree.shape.ShapeState;
@@ -38,12 +51,25 @@ public final class BuiltInChannels {
 
     private static final class ScreenVFXChannels extends ValueChannels<ScreenVFX> {
         ScreenVFXChannels() {
-            super(ScreenVFXKeyframeType.INSTANCE, List.of("effect", "colour", "opacity", "exposure", "contrast",
-                    "saturation", "temperature", "tint", "hue", "tonemap", "mixer_red", "mixer_green",
-                    "mixer_blue", "lift", "gamma", "gain", "bloom_intensity", "bloom_threshold",
-                    "bloom_soft_knee", "bloom_radius", "bloom_clamp", "bloom_tint", "bloom_anti_flicker",
-                    "bloom_high_quality", "bloom_dirt_texture", "bloom_dirt_intensity", "vignette",
-                    "vignette_radius", "dof", "focus_depth", "focus_range", "dof_mode", "lut_strength", "lut"));
+            super(ScreenVFXKeyframeType.INSTANCE, allChannels());
+        }
+
+        private static List<String> allChannels() {
+            List<String> result = new ArrayList<>(List.of("effect", "colour",
+                    "opacity", "exposure", "contrast", "saturation", "temperature", "tint", "hue", "tonemap",
+                    "mixer_red", "mixer_green", "mixer_blue", "lift", "gamma", "gain", "bloom_intensity",
+                    "bloom_threshold", "bloom_soft_knee", "bloom_radius", "bloom_clamp", "bloom_tint",
+                    "bloom_anti_flicker", "bloom_high_quality", "bloom_dirt_texture", "bloom_dirt_intensity",
+                    "vignette", "vignette_radius", "dof", "focus_depth", "focus_range", "dof_mode", "lut_strength",
+                    "lut"));
+            result.addAll(DofSettings.CHANNELS);
+            result.addAll(GradingCurves.CHANNELS);
+            result.addAll(AdvancedGradingSettings.CHANNELS);
+            result.addAll(GrainSettings.CHANNELS);
+            result.addAll(PixelationSettings.CHANNELS);
+            result.addAll(LensSettings.CHANNELS);
+            result.addAll(AdditionalEffects.CHANNELS);
+            return result;
         }
 
         @Override
@@ -59,19 +85,35 @@ public final class BuiltInChannels {
                     case ScreenVFX.BLOOM -> channels.addAll(List.of("bloom_intensity", "bloom_threshold", "bloom_soft_knee",
                             "bloom_radius", "bloom_clamp", "bloom_tint", "bloom_anti_flicker", "bloom_high_quality",
                             "bloom_dirt_texture", "bloom_dirt_intensity"));
-                    case ScreenVFX.DOF -> channels.addAll(List.of("dof", "focus_depth", "focus_range", "dof_mode"));
+                    case ScreenVFX.DOF -> {
+                        channels.addAll(List.of("dof", "focus_depth", "focus_range", "dof_mode"));
+                        channels.addAll(DofSettings.CHANNELS);
+                    }
                     case ScreenVFX.VIGNETTE -> channels.addAll(List.of("vignette", "vignette_radius"));
                     case ScreenVFX.LUT -> channels.addAll(List.of("lut", "lut_strength"));
+                    case ScreenVFX.GRAIN -> channels.addAll(GrainSettings.CHANNELS);
+                    case ScreenVFX.PIXELATION -> channels.addAll(PixelationSettings.CHANNELS);
+                    case ScreenVFX.LENS -> channels.addAll(LensSettings.CHANNELS);
+                    case ScreenVFX.FLARE -> channels.addAll(FlareSettings.CHANNELS);
+                    case ScreenVFX.AUTO_EXPOSURE -> channels.addAll(ExposureSettings.CHANNELS);
+                    case ScreenVFX.MOTION_BLUR -> channels.addAll(MotionBlurSettings.CHANNELS);
+                    case ScreenVFX.PANINI -> channels.addAll(PaniniSettings.CHANNELS);
+                    case ScreenVFX.AO -> channels.addAll(OcclusionSettings.CHANNELS);
+                    case ScreenVFX.SSR -> channels.addAll(ReflectionSettings.CHANNELS);
                     case ScreenVFX.FADE -> channels.addAll(List.of("colour", "opacity"));
                     default -> channels.addAll(super.channels(keyframes));
                 }
+            }
+            if (channels.contains("exposure")) {
+                channels.addAll(GradingCurves.CHANNELS);
+                channels.addAll(AdvancedGradingSettings.CHANNELS);
             }
             return List.copyOf(channels);
         }
 
         @Override
         public Map<String, String> labels() {
-            return Map.ofEntries(Map.entry("vector3.vfx.effect", "effect"),
+            Map<String, String> labels = new java.util.HashMap<>(Map.ofEntries(Map.entry("vector3.vfx.effect", "effect"),
                     Map.entry("vector3.fade.colour", "colour"),
                     Map.entry("vector3.fade.opacity", "opacity"),
                     Map.entry("vector3.vfx.exposure", "exposure"),
@@ -104,7 +146,20 @@ public final class BuiltInChannels {
                     Map.entry("vector3.vfx.focus_range", "focus_range"),
                     Map.entry("vector3.vfx.dof_mode", "dof_mode"),
                     Map.entry("vector3.vfx.lut_strength", "lut_strength"),
-                    Map.entry("vector3.vfx.lut_texture", "lut"));
+                    Map.entry("vector3.vfx.lut_texture", "lut")));
+            for (String channel : DofSettings.CHANNELS) labels.put("vector3.dof." + channel.substring(4), channel);
+            for (String channel : GradingCurves.CHANNELS) labels.put("vector3.grade." + channel, channel);
+            for (String channel : AdvancedGradingSettings.CHANNELS) labels.put("vector3.grade." + channel, channel);
+            for (String channel : GrainSettings.CHANNELS) labels.put("vector3.grain." + channel.substring(6), channel);
+            for (String channel : PixelationSettings.CHANNELS) labels.put("vector3.pixel." + channel.substring(6), channel);
+            for (String channel : LensSettings.CHANNELS) labels.put("vector3.lens." + channel.substring(5), channel);
+            for (String channel : FlareSettings.CHANNELS) labels.put("vector3.flare." + channel.substring(6), channel);
+            for (String channel : ExposureSettings.CHANNELS) labels.put("vector3.autoexposure." + channel.substring(9), channel);
+            for (String channel : MotionBlurSettings.CHANNELS) labels.put("vector3.motion." + channel.substring(7), channel);
+            for (String channel : PaniniSettings.CHANNELS) labels.put("vector3.panini." + channel.substring(7), channel);
+            for (String channel : OcclusionSettings.CHANNELS) labels.put("vector3.ao." + channel.substring(3), channel);
+            for (String channel : ReflectionSettings.CHANNELS) labels.put("vector3.ssr." + channel.substring(4), channel);
+            return labels;
         }
 
         @Override
@@ -138,7 +193,23 @@ public final class BuiltInChannels {
                 case "focus_depth" -> "vector3.vfx.focus_depth";
                 case "focus_range" -> "vector3.vfx.focus_range";
                 case "lut" -> "vector3.vfx.lut_texture";
-                default -> "vector3.vfx.lut_strength";
+                case "lut_strength" -> "vector3.vfx.lut_strength";
+                case "curve_master", "curve_red", "curve_green", "curve_blue", "curve_hue_hue", "curve_hue_sat",
+                        "curve_sat_sat", "curve_lum_sat" -> "vector3.grade." + channel;
+                case "split_shadows", "split_highlights", "split_balance", "smh_shadows", "smh_midtones",
+                        "smh_highlights", "smh_shadow_end", "smh_highlight_start" -> "vector3.grade." + channel;
+                case "grain_intensity", "grain_size", "grain_speed", "grain_colored" -> "vector3.grain." + channel.substring(6);
+                case "pixel_block", "pixel_levels" -> "vector3.pixel." + channel.substring(6);
+                case "lens_distortion", "lens_chromatic", "lens_center_x", "lens_center_y" -> "vector3.lens." + channel.substring(5);
+                case "flare_intensity", "flare_threshold", "flare_ghosts", "flare_halo", "flare_chromatic" ->
+                        "vector3.flare." + channel.substring(6);
+                case "exposure_target", "exposure_compensation", "exposure_min", "exposure_max", "exposure_speed" ->
+                        "vector3.autoexposure." + channel.substring(9);
+                case "motion_strength", "motion_samples", "motion_max_pixels" -> "vector3.motion." + channel.substring(7);
+                case "panini_distance", "panini_crop" -> "vector3.panini." + channel.substring(7);
+                case "ao_intensity", "ao_radius", "ao_bias", "ao_samples" -> "vector3.ao." + channel.substring(3);
+                case "ssr_intensity", "ssr_distance", "ssr_thickness", "ssr_steps" -> "vector3.ssr." + channel.substring(4);
+                default -> "vector3.dof." + channel.substring(4);
             };
             return I18n.get(key);
         }

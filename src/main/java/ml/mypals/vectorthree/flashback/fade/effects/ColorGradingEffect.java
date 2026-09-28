@@ -47,6 +47,8 @@ public final class ColorGradingEffect {
             pass.draw(3, 1, 0, 0);
         }
         ScreenPass.copy(target, main);
+        ColorCurvesEffect.render(main, value.curves());
+        AdvancedGradingEffect.render(main, value.advanced());
     }
 
     private static void putRgb(Std140Builder builder, Rgb value) {

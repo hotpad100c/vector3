@@ -35,13 +35,22 @@ public final class ColorGradingEditor {
             changed |= ImGui.dragFloat3(I18n.get("vector3.grade.mixer_blue"), blue, 0.01f, -2, 2);
         }
         if (ImGui.collapsingHeader(I18n.get("vector3.grade.lift_gamma_gain"))) {
-            changed |= ImGui.dragFloat3(I18n.get("vector3.grade.lift"), lift, 0.005f, -1, 1);
-            changed |= ImGui.dragFloat3(I18n.get("vector3.grade.gamma"), gamma, 0.005f, 0.1f, 3);
-            changed |= ImGui.dragFloat3(I18n.get("vector3.grade.gain"), gain, 0.005f, 0, 3);
+            Rgb wheelLift = ColorWheelEditor.edit(I18n.get("vector3.grade.lift"), rgb(lift), -1, 1);
+            Rgb wheelGamma = ColorWheelEditor.edit(I18n.get("vector3.grade.gamma"), rgb(gamma), 0.1f, 3);
+            Rgb wheelGain = ColorWheelEditor.edit(I18n.get("vector3.grade.gain"), rgb(gain), 0, 3);
+            if (!wheelLift.equals(rgb(lift))) { lift = rgb(wheelLift); changed = true; }
+            if (!wheelGamma.equals(rgb(gamma))) { gamma = rgb(wheelGamma); changed = true; }
+            if (!wheelGain.equals(rgb(gain))) { gain = rgb(wheelGain); changed = true; }
         }
+        GradingCurves curves = GradingCurvesEditor.edit(value.curves());
+        AdvancedGradingSettings advanced = AdvancedGradingEditor.edit(value.advanced());
         return changed ? new ColorGradingSettings(exposure[0], temperature[0], tint[0], hue[0],
                 saturation[0], contrast[0], toneMap.get(), rgb(red), rgb(green), rgb(blue),
-                rgb(lift), rgb(gamma), rgb(gain)) : value;
+                rgb(lift), rgb(gamma), rgb(gain), curves, advanced)
+                : curves != value.curves() || advanced != value.advanced()
+                ? new ColorGradingSettings(value.exposure(), value.temperature(), value.tint(),
+                value.hue(), value.saturation(), value.contrast(), value.toneMap(), value.mixerRed(), value.mixerGreen(),
+                value.mixerBlue(), value.lift(), value.gamma(), value.gain(), curves, advanced) : value;
     }
 
     private static float[] rgb(Rgb value) { return new float[]{value.r(), value.g(), value.b()}; }
