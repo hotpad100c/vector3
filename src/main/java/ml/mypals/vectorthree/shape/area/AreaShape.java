@@ -58,7 +58,7 @@ public class AreaShape extends Shape implements EmptyMesh {
     private final Matrix4d parentTransform = new Matrix4d();
     // Source-region world coordinates to destination world coordinates.
     private final Matrix4d destTransform = new Matrix4d();
-    private List<BlockEntity> blockEntities = List.of();
+    protected List<BlockEntity> blockEntities = List.of();
     private AABB sourceBounds;
     private AreaOptions options = AreaOptions.DEFAULT;
     private boolean projectionShown;
@@ -183,6 +183,10 @@ public class AreaShape extends Shape implements EmptyMesh {
     /** Runs before each draw is prepared; a subclass may rebuild its meshes here. */
     protected void beforePrepare() {}
 
+    protected boolean hasContent() {
+        return !solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty();
+    }
+
     protected boolean forceTranslucent() {
         return false;
     }
@@ -208,7 +212,7 @@ public class AreaShape extends Shape implements EmptyMesh {
     private static final List<AreaShape> PREPARED = new ArrayList<>();
     private boolean drawFailed;
     private boolean blockEntityDrawFailed;
-    private boolean frameTranslucent;
+    protected boolean frameTranslucent;
     private PreparedRenderType frameSolid;
     private PreparedRenderType frameCutout;
     private PreparedRenderType frameTranslucentMesh;
@@ -225,7 +229,7 @@ public class AreaShape extends Shape implements EmptyMesh {
         if (baseColor.getAlpha() == 0) return;
         beforePrepare();
         Matrix4f model = ScreenLayer.origin().mul(new Matrix4f(new Matrix4d(destTransform).mul(meshToSource())));
-        if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
+        if (hasContent() && !drawFailed) {
             drawSafely(() -> {
                 // No fog on the UI layer: a zero fog transform puts every vertex at distance 0.
                 prepareMesh(model, new Matrix4f().zero(), !IrisCompat.isPackInUse());
@@ -265,7 +269,7 @@ public class AreaShape extends Shape implements EmptyMesh {
         if (baseColor.getAlpha() == 0) return;
         beforePrepare();
         Matrix4f model = destinationModel(camera.pos);
-        if ((!solidMesh.isEmpty() || !cutoutMesh.isEmpty() || !translucentMesh.isEmpty()) && !drawFailed) {
+        if (hasContent() && !drawFailed) {
             try {
                 prepareMesh(model, model, !IrisCompat.isPackInUse());
                 PREPARED.add(this);
@@ -284,16 +288,17 @@ public class AreaShape extends Shape implements EmptyMesh {
         }
     }
 
-    private void submitBlockEntities(SubmitNodeCollector collector, CameraRenderState camera, Matrix4f model) {
+    protected void submitBlockEntities(SubmitNodeCollector collector, CameraRenderState camera, Matrix4f model) {
         Minecraft minecraft = Minecraft.getInstance();
         BlockEntityRenderDispatcher dispatcher = minecraft.getBlockEntityRenderDispatcher();
         float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         float alpha = baseColor.getAlpha() / 255f;
         SubmitNodeCollector submits = alpha < 1.0f ? new AreaTintedCollector(collector, alpha) : collector;
         Matrix4f linear = new Matrix4f(model).setTranslation(0, 0, 0);
+        Vec3 viewer = sourceViewer(camera);
         AreaSuppression.bypassing(() -> {
             for (BlockEntity blockEntity : blockEntities) {
-                BlockEntityRenderState state = dispatcher.tryExtractRenderState(blockEntity, partialTick, null, false);
+                BlockEntityRenderState state = extractBlockEntity(blockEntity, partialTick, viewer);
                 if (state == null) continue;
                 BlockPos pos = blockEntity.getBlockPos();
                 Vector3f destPos = model.transformPosition(new Vector3f(pos.getX(), pos.getY(), pos.getZ()), new Vector3f());
@@ -306,7 +311,30 @@ public class AreaShape extends Shape implements EmptyMesh {
     }
 
     // Only core/area_block reads fogModel from TextureMat; every other program (Iris's too) takes it as the UV transform.
-    private void prepareMesh(Matrix4f model, Matrix4f fogModel, boolean ownShader) {
+    // Where the camera is as seen from the source region: block entity renderers judge distance and facing from it.
+    protected Vec3 sourceViewer(CameraRenderState camera) {
+        if (ScreenLayer.isRendering()) return sourceCenter;
+        org.joml.Vector3d source = new Matrix4d(destTransform).invert()
+                .transformPosition(new org.joml.Vector3d(camera.pos.x, camera.pos.y, camera.pos.z));
+        return new Vec3(source.x, source.y, source.z);
+    }
+
+    // BlockEntityRenderDispatcher#tryExtractRenderState without its distance check, which would measure from the
+    // block entity's own place rather than from where this shape shows it.
+    protected static BlockEntityRenderState extractBlockEntity(BlockEntity blockEntity, float partialTick, Vec3 viewer) {
+        return extract(blockEntity, partialTick, viewer);
+    }
+
+    private static <E extends BlockEntity, S extends BlockEntityRenderState> S extract(E blockEntity, float partialTick, Vec3 viewer) {
+        net.minecraft.client.renderer.blockentity.BlockEntityRenderer<E, S> renderer =
+                Minecraft.getInstance().getBlockEntityRenderDispatcher().getRenderer(blockEntity);
+        if (renderer == null || !blockEntity.hasLevel() || !blockEntity.getType().isValid(blockEntity.getBlockState())) return null;
+        S state = renderer.createRenderState();
+        renderer.extractRenderState(blockEntity, state, partialTick, viewer, null);
+        return state;
+    }
+
+    protected void prepareMesh(Matrix4f model, Matrix4f fogModel, boolean ownShader) {
         Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrixCopy()).mul(model);
         Vector4f colorModulator = colorToVector4f(baseColor);
         frameTranslucent = colorModulator.w() < 1.0f || forceTranslucent();
@@ -332,7 +360,7 @@ public class AreaShape extends Shape implements EmptyMesh {
         sequentialIndices.resizeToRequestedIndexCount();
     }
 
-    private static PreparedRenderType withTransform(RenderType renderType, GpuBufferSlice transform) {
+    protected static PreparedRenderType withTransform(RenderType renderType, GpuBufferSlice transform) {
         PreparedRenderType prepared = renderType.prepare();
         return new PreparedRenderType(prepared.name(), prepared.pipeline(), prepared.oitPipelineSet(), transform,
                 prepared.scissorState(), prepared.textures());
@@ -375,14 +403,14 @@ public class AreaShape extends Shape implements EmptyMesh {
         }
     }
 
-    private void drawTranslucentMesh(RenderPass pass) {
+    protected void drawTranslucentMesh(RenderPass pass) {
         if (frameTranslucentMesh == null) return;
         frameTranslucentMesh.drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(translucentMesh.vertexBuffer(),
                 translucentMesh.indexBuffer(), translucentMesh.indexType(), 0, 0, translucentMesh.indexCount(),
                 translucentMesh.topology()), pass);
     }
 
-    private void drawOpaqueMeshes(RenderPass pass) {
+    protected void drawOpaqueMeshes(RenderPass pass) {
         if (frameSolid != null) drawSequential(pass, frameSolid, solidMesh);
         if (frameCutout != null) drawSequential(pass, frameCutout, cutoutMesh);
     }
@@ -416,7 +444,7 @@ public class AreaShape extends Shape implements EmptyMesh {
         });
     }
 
-    private static Vector4f colorToVector4f(Color color) {
+    protected static Vector4f colorToVector4f(Color color) {
         return new Vector4f(color.getRed() / 255f, color.getGreen() / 255f,
                 color.getBlue() / 255f, color.getAlpha() / 255f);
     }

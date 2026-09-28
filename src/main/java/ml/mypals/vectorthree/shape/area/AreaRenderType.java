@@ -1,6 +1,9 @@
 package ml.mypals.vectorthree.shape.area;
 
+import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
 import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.UniformType;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
 import ml.mypals.vectorthree.Vector3;
@@ -20,6 +23,11 @@ final class AreaRenderType {
     private static RenderType ownTranslucent;
     private static RenderType ownSolid;
     private static RenderType ownCutout;
+    private static final RenderType[] skinned = new RenderType[3];
+    private static final BindGroupLayout SKIN_LAYOUT = BindGroupLayout.builder()
+            .withUniform("BlastBlockOf", UniformType.TEXEL_BUFFER, GpuFormat.R32_SINT)
+            .withUniform("BlastTransforms", UniformType.TEXEL_BUFFER, GpuFormat.RGBA32_FLOAT)
+            .build();
 
     private AreaRenderType() {}
 
@@ -63,6 +71,17 @@ final class AreaRenderType {
         return ownCutout;
     }
 
+    /** BlastShape's GPU-skinned block layers (0 solid, 1 cutout, 2 translucent), with core/blast_skin. */
+    static RenderType skinned(int layer) {
+        if (skinned[layer] == null) {
+            RenderPipeline base = layer == 0 ? RenderPipelines.SOLID_BLOCK : layer == 1 ? RenderPipelines.CUTOUT_BLOCK
+                    : RenderPipelines.TRANSLUCENT_BLOCK;
+            String name = layer == 0 ? "solid" : layer == 1 ? "cutout" : "translucent";
+            skinned[layer] = create("vector3_blast_skin_" + name, derive(base, "blast_skin_" + name, "core/blast_skin", SKIN_LAYOUT));
+        }
+        return skinned[layer];
+    }
+
     private static RenderType create(String name, RenderPipeline pipeline) {
         RenderSetup setup = RenderSetup.builder(pipeline)
                 .useLightmap()
@@ -73,15 +92,21 @@ final class AreaRenderType {
     }
 
     private static RenderPipeline derive(RenderPipeline base, String name) {
+        return derive(base, "area_" + name, "core/area_block", null);
+    }
+
+    private static RenderPipeline derive(RenderPipeline base, String name, String vertexShader, BindGroupLayout extra) {
+        java.util.List<BindGroupLayout> layouts = new java.util.ArrayList<>(base.getBindGroupLayouts());
+        if (extra != null) layouts.add(extra);
         RenderPipeline.Snippet snippet = new RenderPipeline.Snippet(base.getShaders(), Optional.of(base.getShaderDefines()),
-                Optional.of(base.getBindGroupLayouts()), base.getColorTargetStates().toArray(new ColorTargetState[0]),
+                Optional.of(layouts), base.getColorTargetStates().toArray(new ColorTargetState[0]),
                 base.getColorTargetStates().size(), Optional.ofNullable(base.getDepthStencilState()),
                 Optional.of(base.getPolygonMode()), Optional.of(base.isCull()),
                 base.getVertexFormatBindings().toArray(new VertexFormat[0]), Optional.of(base.getPrimitiveTopology()),
                 base.pushConstantSize());
         return RenderPipelines.register(RenderPipeline.builder(snippet)
-                .withLocation(Vector3.id("pipeline/area_" + name))
-                .withVertexShader(Vector3.id("core/area_block"))
+                .withLocation(Vector3.id("pipeline/" + name))
+                .withVertexShader(Vector3.id(vertexShader))
                 .build());
     }
 

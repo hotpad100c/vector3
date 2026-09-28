@@ -161,6 +161,15 @@ public final class BlastEditor {
                 changed = true;
             }
             if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.blast.clump.tooltip"));
+            changed |= radio("vector3.blast.clump_shape.", m.clumpShape, BlastSettings.ClumpShape.values(), value -> m.clumpShape = value);
+            if (m.clumpShape != BlastSettings.ClumpShape.GRID) {
+                float[] jitter = {m.clumpJitter};
+                if (ImGui.sliderFloat(I18n.get("vector3.blast.clump_jitter"), jitter, 0, 1)) {
+                    m.clumpJitter = jitter[0];
+                    changed = true;
+                }
+                if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.blast.clump_jitter.tooltip"));
+            }
             if (ImGui.dragFloat2(I18n.get("vector3.blast.alpha"), alpha, 0.01f, 0, 1)) {
                 m.alphaStart = alpha[0];
                 m.alphaEnd = alpha[1];

@@ -36,18 +36,30 @@ import java.util.List;
 final class BlastBaker {
     static final int MAX_BLOCKS = 32768;
 
-    /** One layer's vertices of one block: x, y, z, u, v, nx, ny, nz per vertex, plus color and packed light. */
+    /**
+     * One layer's vertices of one block: x, y, z, u, v, nx, ny, nz per vertex, plus color and packed light. Quads
+     * (4 vertices each) on the block's boundary that a neighbor would cull record that neighbor's piece index.
+     */
     static final class Layer {
         final FloatArrayList data = new FloatArrayList();
         final IntArrayList colors = new IntArrayList();
         final IntArrayList lights = new IntArrayList();
+        final IntArrayList occluders = new IntArrayList();
 
         int vertexCount() {
             return colors.size();
         }
+
+        int quadCount() {
+            return colors.size() / 4;
+        }
     }
 
-    record Piece(BlockPos pos, Layer solid, Layer cutout, Layer translucent) {}
+    record Piece(BlockPos pos, BlockState state, BlockEntity blockEntity, Layer solid, Layer cutout, Layer translucent) {
+        Layer layer(int index) {
+            return index == 0 ? solid : index == 1 ? cutout : translucent;
+        }
+    }
 
     record Result(List<Piece> pieces, boolean truncated) {}
 
@@ -90,14 +102,52 @@ final class BlastBaker {
                             fluidRenderer.tesselate(view, at, output, state, fluid);
                             output.finish();
                         }
-                        if (output.solid.vertexCount() + output.cutout.vertexCount() + output.translucent.vertexCount() > 0) {
-                            pieces.add(new Piece(at, output.solid, output.cutout, output.translucent));
+                        BlockEntity blockEntity = region.getBlockEntity(at);
+                        if (blockEntity != null
+                                || output.solid.vertexCount() + output.cutout.vertexCount() + output.translucent.vertexCount() > 0) {
+                            pieces.add(new Piece(at, state, blockEntity, output.solid, output.cutout, output.translucent));
                         }
                     }
                 }
             }
         });
+        findOccluders(pieces);
         return new Result(pieces, truncated[0]);
+    }
+
+    private static void findOccluders(List<Piece> pieces) {
+        it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap index = new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
+        index.defaultReturnValue(-1);
+        for (int i = 0; i < pieces.size(); i++) index.put(pieces.get(i).pos().asLong(), i);
+        for (Piece piece : pieces) {
+            for (int layer = 0; layer < 3; layer++) {
+                Layer data = piece.layer(layer);
+                for (int quad = 0; quad < data.quadCount(); quad++) {
+                    Direction face = boundaryFace(data, quad);
+                    int neighbor = face == null ? -1 : index.get(piece.pos().relative(face).asLong());
+                    boolean hidden = neighbor >= 0
+                            && !net.minecraft.world.level.block.Block.shouldRenderFace(piece.state(), pieces.get(neighbor).state(), face);
+                    data.occluders.add(hidden ? neighbor : -1);
+                }
+            }
+        }
+    }
+
+    // The side of the unit block a quad lies flat on (and faces out of), or null.
+    private static Direction boundaryFace(Layer layer, int quad) {
+        float[] data = layer.data.elements();
+        int first = quad * 4 * 8;
+        for (Direction direction : Direction.values()) {
+            int axis = direction.getAxis().ordinal();
+            float plane = direction.getAxisDirection() == Direction.AxisDirection.POSITIVE ? 1 : 0;
+            boolean flat = true;
+            for (int v = 0; v < 4 && flat; v++) flat = Math.abs(data[first + v * 8 + axis] - plane) < 1.0e-4f;
+            if (!flat) continue;
+            float normal = data[first + 5 + axis];
+            if (Math.abs(normal) > 0.5f && Math.signum(normal) != direction.getAxisDirection().getStep()) continue;
+            return direction;
+        }
+        return null;
     }
 
     private static final class Output implements BlockQuadOutput, FluidRenderer.Output {

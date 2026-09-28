@@ -27,6 +27,30 @@ final class AreaGpuMesh {
         }
     }
 
+    /** Like upload, but writes into the current buffer when it is big enough, so a mesh rebuilt every frame
+     *  doesn't allocate a new one each time. */
+    void uploadReusing(MeshData mesh) {
+        if (mesh == null) {
+            indexCount = 0;
+            return;
+        }
+        try {
+            MeshData.DrawState drawState = mesh.drawState();
+            java.nio.ByteBuffer bytes = mesh.vertexBuffer();
+            int size = bytes.remaining();
+            if (vertexBuffer == null || vertexBuffer.size() < size) {
+                close();
+                vertexBuffer = RenderSystem.getDevice().createBuffer(() -> "vector3_area/vertex", VERTEX_USAGE,
+                        Math.max(size + size / 2, 1 << 16));
+            }
+            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(vertexBuffer.slice(0, size), bytes);
+            indexCount = drawState.indexCount();
+            topology = drawState.primitiveTopology();
+        } finally {
+            mesh.close();
+        }
+    }
+
     boolean isEmpty() {
         return vertexBuffer == null || indexCount == 0;
     }

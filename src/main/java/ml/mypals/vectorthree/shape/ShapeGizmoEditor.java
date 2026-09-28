@@ -8,6 +8,7 @@ import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
 import ml.mypals.vectorthree.multiedit.GroupTransform;
 import ml.mypals.vectorthree.camera.ViewportPick;
 import ml.mypals.vectorthree.render.ScreenLayer;
+import ml.mypals.vectorthree.shape.area.BlastShape;
 import ml.mypals.vectorthree.mixin.flashback.ReplayUIAccessor;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.utils.InputHelper;
@@ -153,6 +154,9 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
         if (dragging == null) {
             setHovered(keyframe != null && inViewport ? pick(ray) : null);
+            if (hovered != null && hovered.operation() == Operation.POINT && state != null && state.shapeType().equals("blast")) {
+                ImGui.setTooltip(BlastShape.pointLabel(state, hovered.point()));
+            }
             if (ImGui.isMouseClicked(1) && hovered != null) {
                 ReplayUI.imguiWindower.ungrab();
                 beginDrag(hovered, state, ray, camera);
@@ -452,7 +456,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     private String layoutKey(ShapeState state) {
         int points = state.points() == null ? 0 : state.points().size();
-        return mode + ":" + state.shapeType() + ":" + points + ":" + state.screen();
+        String blast = state.shapeType().equals("blast") ? ":" + BlastShape.pointLayout(state) : "";
+        return mode + ":" + state.shapeType() + ":" + points + ":" + state.screen() + blast;
     }
 
     /** The selected shape is on the UI layer: rays, handles and sizes work in its orthographic space. */
@@ -546,11 +551,14 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             case "sphere" -> add(Operation.RADIUS, Axis.X, -1, SCALE_MODEL, PROPERTY_COLOR);
             case "line", "line_strip", "arrow", "area", "blast" -> {
                 int count = state.points() == null ? 0 : state.points().size();
+                boolean blast = state.shapeType().equals("blast");
                 for (int i = 0; i < count; i++) {
+                    String role = blast ? BlastShape.pointRole(state, i) : null;
+                    if (blast && role == null) continue;
                     add(Operation.POINT, Axis.X, i, MOVE_MODEL, X_COLOR);
                     add(Operation.POINT, Axis.Y, i, MOVE_MODEL, Y_COLOR);
                     add(Operation.POINT, Axis.Z, i, MOVE_MODEL, Z_COLOR);
-                    add(Operation.POINT, Axis.NONE, i, CENTER_MODEL, PROPERTY_COLOR);
+                    add(Operation.POINT, Axis.NONE, i, CENTER_MODEL, blast ? BlastShape.pointColor(role) : PROPERTY_COLOR);
                 }
             }
         }

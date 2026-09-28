@@ -13,20 +13,24 @@ import org.joml.Vector3f;
 import java.util.List;
 
 /**
- * Where every block of a blast is at a given progress. Blocks are grouped by nested grids (clump sizes 16, 8, ... 1
- * blocks); a clump flies as one rigid piece until its size level ends, then its children carry on from where it was,
- * each towards its own scatter point, so the break-up is continuous. Everything is seeded, so any progress can be
- * evaluated on its own.
+ * Where every block of a blast is at a given progress. Blocks are grouped into nested clumps (sizes 16, 8, ... 1
+ * blocks: boxes, noisy boxes or Voronoi cells, every clump inside one clump of the level above); a clump flies as one
+ * rigid piece until its size level ends, then its children carry on from where it was, each towards its own scatter
+ * point, so the break-up is continuous. Everything is seeded, so any progress can be evaluated on its own.
  */
 public final class BlastMotion {
-    private static final int MAX_LEVEL = 4;
+    public static final int MAX_LEVEL = 4;
+    /** Floats per block in {@link #evaluate}'s output: rotation xyzw, position xyz, scale, clump center xyz, alpha. */
+    public static final int PACK = 12;
 
     private final int count;
     private final int[] gx, gy, gz;
     private final Vector3f[] centers;
     private final Vector3f boundsMin = new Vector3f(Float.POSITIVE_INFINITY), boundsMax = new Vector3f(Float.NEGATIVE_INFINITY);
-    private int builtSeed = Integer.MIN_VALUE;
+    private Object builtKeys;
     private int offsetX, offsetY, offsetZ;
+    private final long[][] keys = new long[MAX_LEVEL + 1][];
+    private int[] order;
     @SuppressWarnings("unchecked")
     private final Long2ObjectOpenHashMap<Vector3f>[] clumpCenters = new Long2ObjectOpenHashMap[MAX_LEVEL + 1];
 
@@ -70,8 +74,8 @@ public final class BlastMotion {
      * {@code start} through {@code path}; the order and the explosion radiate from {@code origin}.
      */
     public void evaluate(BlastSettings s, Vector3f start, List<Vector3f> path, Vector3f origin, Vector3f sweepEnd,
-            Vector3f scatter, float p, Matrix4f[] transforms, float[] alpha) {
-        prepare(s.seed());
+            Vector3f scatter, float p, float[] pack, int[] levels) {
+        prepare(s);
         this.scatter = scatter;
         this.start = start;
         this.origin = origin;
@@ -96,10 +100,47 @@ public final class BlastMotion {
                 state = state(s, path, level, top, i, t);
                 memo.put(memoKey(level, key), state);
             }
-            transforms[i].identity().translate(state.position()).rotate(state.rotation()).scale(scale(s, t))
-                    .translate(-state.center().x, -state.center().y, -state.center().z);
-            alpha[i] = Math.clamp(s.alphaStart() + (s.alphaEnd() - s.alphaStart()) * alphaCurve.evaluate(t), 0, 1);
+            int at = i * PACK;
+            Quaternionf rotation = state.rotation();
+            Vector3f position = state.position(), center = state.center();
+            pack[at] = rotation.x;
+            pack[at + 1] = rotation.y;
+            pack[at + 2] = rotation.z;
+            pack[at + 3] = rotation.w;
+            pack[at + 4] = position.x;
+            pack[at + 5] = position.y;
+            pack[at + 6] = position.z;
+            pack[at + 7] = scale(s, t);
+            pack[at + 8] = center.x;
+            pack[at + 9] = center.y;
+            pack[at + 10] = center.z;
+            pack[at + 11] = Math.clamp(s.alphaStart() + (s.alphaEnd() - s.alphaStart()) * alphaCurve.evaluate(t), 0, 1);
+            levels[i] = level;
         }
+    }
+
+    /** Block i's transform (local to local) from {@link #evaluate}'s output. */
+    public static Matrix4f matrix(float[] pack, int i, Matrix4f into) {
+        int at = i * PACK;
+        return into.translation(pack[at + 4], pack[at + 5], pack[at + 6])
+                .rotate(new Quaternionf(pack[at], pack[at + 1], pack[at + 2], pack[at + 3]))
+                .scale(pack[at + 7]).translate(-pack[at + 8], -pack[at + 9], -pack[at + 10]);
+    }
+
+    /** The blocks sorted so that at every level each clump is one run of consecutive entries. */
+    public int[] order(BlastSettings s) {
+        prepare(s);
+        return order;
+    }
+
+    public long clumpKey(int block, int level) {
+        return keys[level][block];
+    }
+
+    /** The lowest level at which the two blocks share a clump (they do at every level above it), or MAX_LEVEL + 1. */
+    public int sharedLevel(int a, int b) {
+        for (int level = 0; level <= MAX_LEVEL; level++) if (keys[level][a] == keys[level][b]) return level;
+        return MAX_LEVEL + 1;
     }
 
     private SpeedCurve motionCurve, spinCurve, scaleCurve;
@@ -293,14 +334,31 @@ public final class BlastMotion {
         return Math.clamp((int) Math.floor(Math.log(size) / Math.log(2) + 1.0e-4), 0, MAX_LEVEL);
     }
 
-    // The grids share one seeded origin, so every clump lies inside one clump of the level above.
-    private void prepare(int seed) {
-        if (builtSeed == seed) return;
-        builtSeed = seed;
+    private void prepare(BlastSettings s) {
+        Object wanted = List.of(s.seed(), s.clumpShape(), s.clumpJitter());
+        if (wanted.equals(builtKeys)) return;
+        builtKeys = wanted;
+        int seed = s.seed();
         long h = hash(seed, 9, 0, 0);
         offsetX = (int) (h & 15);
         offsetY = (int) (h >>> 4 & 15);
         offsetZ = (int) (h >>> 8 & 15);
+        switch (s.clumpShape()) {
+            case GRID -> gridKeys(0, 0);
+            case NOISE -> gridKeys(seed, s.clumpJitter() * 4);
+            case VORONOI -> voronoiKeys(seed, s.clumpJitter());
+        }
+        Integer[] sorted = new Integer[count];
+        for (int i = 0; i < count; i++) sorted[i] = i;
+        java.util.Arrays.sort(sorted, (a, b) -> {
+            for (int level = MAX_LEVEL; level >= 0; level--) {
+                int c = Long.compare(keys[level][a], keys[level][b]);
+                if (c != 0) return c;
+            }
+            return Integer.compare(a, b);
+        });
+        order = new int[count];
+        for (int i = 0; i < count; i++) order[i] = sorted[i];
         for (int level = 0; level <= MAX_LEVEL; level++) {
             Long2ObjectOpenHashMap<float[]> sums = new Long2ObjectOpenHashMap<>();
             for (int i = 0; i < count; i++) {
@@ -317,10 +375,112 @@ public final class BlastMotion {
     }
 
     private long key(int block, int level) {
-        long x = Math.floorDiv(gx[block] + offsetX, 1 << level) & 0x1FFFFF;
-        long y = Math.floorDiv(gy[block] + offsetY, 1 << level) & 0x1FFFFF;
-        long z = Math.floorDiv(gz[block] + offsetZ, 1 << level) & 0x1FFFFF;
-        return x | y << 21 | z << 42;
+        return keys[level][block];
+    }
+
+    // Boxes on one seeded origin, so every box lies inside one box of the level above. A displacement field shared
+    // by all levels bends their borders without breaking that.
+    private void gridKeys(int seed, float amplitude) {
+        for (int level = 0; level <= MAX_LEVEL; level++) keys[level] = new long[count];
+        for (int i = 0; i < count; i++) {
+            float x = gx[i] + 0.5f + offsetX, y = gy[i] + 0.5f + offsetY, z = gz[i] + 0.5f + offsetZ;
+            if (amplitude > 0) {
+                float dx = noise(seed, 11, x, y, z), dy = noise(seed, 12, x, y, z), dz = noise(seed, 13, x, y, z);
+                x += dx * amplitude;
+                y += dy * amplitude;
+                z += dz * amplitude;
+            }
+            for (int level = 0; level <= MAX_LEVEL; level++) {
+                float size = 1 << level;
+                keys[level][i] = cell((int) Math.floor(x / size), (int) Math.floor(y / size), (int) Math.floor(z / size));
+            }
+        }
+    }
+
+    // Nested Voronoi cells: the top level splits the region around jittered seeds; each lower level splits every
+    // parent around the seeds (on a finer jittered grid) that fall inside that parent.
+    private void voronoiKeys(int seed, float jitter) {
+        for (int level = 0; level <= MAX_LEVEL; level++) keys[level] = new long[count];
+        @SuppressWarnings("unchecked")
+        it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap[] seedParents = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap[MAX_LEVEL];
+        for (int level = 0; level < MAX_LEVEL; level++) seedParents[level] = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+        for (int i = 0; i < count; i++) {
+            Vector3f point = new Vector3f(gx[i] + 0.5f + offsetX, gy[i] + 0.5f + offsetY, gz[i] + 0.5f + offsetZ);
+            long parent = voronoi(seed, jitter, point, MAX_LEVEL, 0, seedParents);
+            keys[MAX_LEVEL][i] = parent;
+            for (int level = MAX_LEVEL - 1; level >= 0; level--) {
+                parent = voronoi(seed, jitter, point, level, parent, seedParents);
+                keys[level][i] = parent;
+            }
+        }
+    }
+
+    // The cell at this level holding the point, given the cell it has at the level above.
+    private long voronoi(int seed, float jitter, Vector3f point, int level, long parent,
+            it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap[] seedParents) {
+        float size = 1 << level;
+        int cx = (int) Math.floor(point.x / size), cy = (int) Math.floor(point.y / size), cz = (int) Math.floor(point.z / size);
+        long best = Long.MIN_VALUE;
+        float bestDistance = Float.POSITIVE_INFINITY;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    long cell = cell(cx + dx, cy + dy, cz + dz);
+                    Vector3f site = site(seed, jitter, level, cx + dx, cy + dy, cz + dz);
+                    if (level < MAX_LEVEL) {
+                        long owner = seedParents[level].computeIfAbsent(cell,
+                                c -> ownerAbove(seed, jitter, site, level + 1, seedParents));
+                        if (owner != parent) continue;
+                    }
+                    float distance = site.distanceSquared(point);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        best = cell;
+                    }
+                }
+            }
+        }
+        if (best == Long.MIN_VALUE) best = cell(cx, cy, cz);
+        return level == MAX_LEVEL ? best : hash(0, level, parent, (int) best ^ (int) (best >>> 32));
+    }
+
+    // Which cell of this level (and so of every level above) a seed point lies in.
+    private long ownerAbove(int seed, float jitter, Vector3f site, int level,
+            it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap[] seedParents) {
+        long parent = voronoi(seed, jitter, site, MAX_LEVEL, 0, seedParents);
+        for (int above = MAX_LEVEL - 1; above >= level; above--) parent = voronoi(seed, jitter, site, above, parent, seedParents);
+        return parent;
+    }
+
+    private static Vector3f site(int seed, float jitter, int level, int x, int y, int z) {
+        long h = hash(seed, level, cell(x, y, z), 21);
+        float size = 1 << level;
+        return new Vector3f(x + 0.5f + jitter * (random(h) - 0.5f), y + 0.5f + jitter * (random(h * 31 + 7) - 0.5f),
+                z + 0.5f + jitter * (random(h * 131 + 3) - 0.5f)).mul(size);
+    }
+
+    private static long cell(int x, int y, int z) {
+        return (x & 0x1FFFFFL) | (y & 0x1FFFFFL) << 21 | (z & 0x1FFFFFL) << 42;
+    }
+
+    // Smooth value noise in [-1, 1], about four blocks across.
+    private static float noise(int seed, int salt, float x, float y, float z) {
+        x /= 4;
+        y /= 4;
+        z /= 4;
+        int x0 = (int) Math.floor(x), y0 = (int) Math.floor(y), z0 = (int) Math.floor(z);
+        float fx = smooth(x - x0), fy = smooth(y - y0), fz = smooth(z - z0);
+        float result = 0;
+        for (int corner = 0; corner < 8; corner++) {
+            int ox = corner & 1, oy = corner >> 1 & 1, oz = corner >> 2 & 1;
+            float weight = (ox == 1 ? fx : 1 - fx) * (oy == 1 ? fy : 1 - fy) * (oz == 1 ? fz : 1 - fz);
+            result += weight * (random(hash(seed, salt, cell(x0 + ox, y0 + oy, z0 + oz), 0)) * 2 - 1);
+        }
+        return result;
+    }
+
+    private static float smooth(float t) {
+        return t * t * (3 - 2 * t);
     }
 
     private static long memoKey(int level, long key) {

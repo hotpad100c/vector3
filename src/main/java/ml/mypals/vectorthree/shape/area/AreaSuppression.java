@@ -107,15 +107,36 @@ public final class AreaSuppression {
             for (Bounds bounds : new Bounds[]{a, b}) {
                 if (bounds != null) relight(level, chunk, bounds, before);
             }
+            // Once more after the next update, in case light data for the chunk is still queued.
+            PENDING.add(packed);
         }
     }
 
+    private static final it.unimi.dsi.fastutil.longs.LongOpenHashSet PENDING = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+
+    /**
+     * Light data that just arrived is only queued: LightEngine#runLightUpdates checks its nodes first and writes the
+     * queued sections last, over whatever those checks worked out. So the chunk is relit after that run instead.
+     */
     public static void relightChunk(int chunkX, int chunkZ) {
+        if (!ACTIVE.isEmpty()) PENDING.add(ChunkPos.pack(chunkX, chunkZ));
+    }
+
+    /** After the client light engine's runLightUpdates; the checks queued here run in its next update. */
+    public static void afterLightUpdates(net.minecraft.world.level.lighting.LevelLightEngine engine) {
+        if (PENDING.isEmpty()) return;
         ClientLevel level = Minecraft.getInstance().level;
-        if (level == null || ACTIVE.isEmpty()) return;
-        LevelChunk chunk = level.getChunkSource().getChunk(chunkX, chunkZ, false);
-        if (chunk == null) return;
-        for (Bounds bounds : ACTIVE.values()) relight(level, chunk, bounds, null);
+        if (level == null || engine != level.getLightEngine() || ACTIVE.isEmpty()) {
+            PENDING.clear();
+            return;
+        }
+        long[] chunks = PENDING.toLongArray();
+        PENDING.clear();
+        for (long packed : chunks) {
+            LevelChunk chunk = level.getChunkSource().getChunk(ChunkPos.getX(packed), ChunkPos.getZ(packed), false);
+            if (chunk == null) continue;
+            for (Bounds bounds : ACTIVE.values()) relight(level, chunk, bounds, null);
+        }
     }
 
     private static void relight(ClientLevel level, LevelChunk chunk, Bounds bounds, int[] sourcesBefore) {

@@ -15,6 +15,7 @@
 		"area.AreaProjectEntitySubmitMixin",
 		"area.AreaProjectParticleMixin",
 		"area.AreaLightEngineMixin",
+		"area.AreaLightFlushMixin",
 		"area.AreaLightPacketMixin",
 		"area.AreaMainPassMixin",
 		"area.AreaOutlineSubmitMixin",
