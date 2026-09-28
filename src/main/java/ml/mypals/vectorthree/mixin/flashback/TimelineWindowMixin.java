@@ -56,6 +56,8 @@ import ml.mypals.vectorthree.flashback.loop.TrackRepeat;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
 import ml.mypals.vectorthree.flashback.pose.EntityPose;
 import ml.mypals.vectorthree.flashback.pose.EntityPoseKeyframeType;
+import ml.mypals.vectorthree.flashback.fade.ScreenVFX;
+import ml.mypals.vectorthree.flashback.fade.ScreenVFXKeyframeType;
 import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
 import com.moulberry.flashback.playback.ReplayServer;
 import com.moulberry.flashback.state.EditorScene;
@@ -179,6 +181,8 @@ public abstract class TimelineWindowMixin {
                 || Vector3.POSE_GIZMO.isDragging() || Vector3.GIZMO_EDITOR.isDragging() || Vector3.PREFABS.isDragging());
         Vector3.ORBIT_GIZMO.frame();
         Vector3.CAMERA_GIZMO.frame();
+        vector3$syncFocusPlaneSelection();
+        Vector3.FOCUS_GIZMO.frame();
         Vector3.POSE_GIZMO.frame();
         vector3$shapeShortcuts();
         Vector3.GIZMO_EDITOR.frame();
@@ -1822,6 +1826,7 @@ public abstract class TimelineWindowMixin {
                 || Vector3.POSE_GIZMO.isDragging() || Vector3.PREFABS.isDragging()) {
             return;
         }
+        vector3$syncFocusPlaneSelection();
         if (vector3$autoKeyframe != null) {
             boolean cancelled = !ShapeManagerWindow.isAutoKey()
                     || ImGui.isKeyPressed(ImGuiKey.Escape) && !ImGui.getIO().getWantTextInput();
@@ -1912,6 +1917,30 @@ public abstract class TimelineWindowMixin {
             editorScene.setKeyframe(trackIndex, tick, moved);
             EditorStateManager.getCurrent().markDirty();
         });
+    }
+
+    @Unique
+    private static void vector3$syncFocusPlaneSelection() {
+        if (MultiSelection.count(selectedKeyframesList) != 1 || selectedKeyframesList.size() != 1
+                || selectedKeyframesList.getFirst().keyframeTicks().size() != 1) {
+            Vector3.FOCUS_GIZMO.clearSelection();
+            return;
+        }
+        SelectedKeyframes selected = selectedKeyframesList.getFirst();
+        int trackIndex = selected.trackIndex();
+        if (trackIndex < 0 || trackIndex >= editorScene.keyframeTracks.size()) {
+            Vector3.FOCUS_GIZMO.clearSelection();
+            return;
+        }
+        int tick = selected.keyframeTicks().iterator().nextInt();
+        Keyframe keyframe = editorScene.keyframeTracks.get(trackIndex).keyframesByTick.get(tick);
+        if (keyframe instanceof CustomKeyframe<?> custom && custom.type() == ScreenVFXKeyframeType.INSTANCE
+                && custom.value instanceof ScreenVFX value
+                && (value.effect().equals(ScreenVFX.DOF)
+                || value.effect().equals(ScreenVFX.LEGACY) && value.dofStrength() > 0)) {
+            @SuppressWarnings("unchecked") CustomKeyframe<ScreenVFX> focus = (CustomKeyframe<ScreenVFX>) custom;
+            Vector3.FOCUS_GIZMO.select(focus);
+        } else Vector3.FOCUS_GIZMO.clearSelection();
     }
 
     @Unique

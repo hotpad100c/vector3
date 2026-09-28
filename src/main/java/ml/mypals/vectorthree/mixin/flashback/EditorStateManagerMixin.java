@@ -15,6 +15,7 @@ public class EditorStateManagerMixin {
         Vector3.GIZMO_EDITOR.clear();
         Vector3.ORBIT_GIZMO.clear();
         Vector3.CAMERA_GIZMO.clear();
+        Vector3.FOCUS_GIZMO.clear();
         Vector3.PREFABS.clear();
         Vector3.EDITOR_CAMERA.reset();
         ShapeTrackRegistry.clear();

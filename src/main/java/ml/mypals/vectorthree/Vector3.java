@@ -12,8 +12,9 @@ import ml.mypals.vectorthree.camera.orbit.OrbitGizmoEditor;
 import ml.mypals.vectorthree.flashback.custom.CustomKeyframes;
 import ml.mypals.vectorthree.flashback.skip.SkipKeyframeType;
 import ml.mypals.vectorthree.flashback.loop.LoopKeyframeType;
-import ml.mypals.vectorthree.flashback.fade.FadeKeyframeType;
-import ml.mypals.vectorthree.flashback.fade.FadeOverlay;
+import ml.mypals.vectorthree.flashback.fade.ScreenVFXKeyframeType;
+import ml.mypals.vectorthree.flashback.fade.ScreenVFXRenderer;
+import ml.mypals.vectorthree.flashback.fade.FocusPlaneGizmo;
 import ml.mypals.vectorthree.prefab.PrefabPlacement;
 import ml.mypals.vectorthree.flashback.ShapeKeyframeType;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
@@ -35,6 +36,7 @@ public class Vector3 implements ClientModInitializer {
 	public static final ShapeGizmoEditor GIZMO_EDITOR = new ShapeGizmoEditor();
 	public static final OrbitGizmoEditor ORBIT_GIZMO = new OrbitGizmoEditor();
 	public static final CameraGizmoEditor CAMERA_GIZMO = new CameraGizmoEditor();
+	public static final FocusPlaneGizmo FOCUS_GIZMO = new FocusPlaneGizmo();
 	public static final PrefabPlacement PREFABS = new PrefabPlacement();
 	public static final EditorCameraController EDITOR_CAMERA = new EditorCameraController();
 	public static final ml.mypals.vectorthree.flashback.pose.PoseGizmoEditor POSE_GIZMO = new ml.mypals.vectorthree.flashback.pose.PoseGizmoEditor();
@@ -53,7 +55,7 @@ public class Vector3 implements ClientModInitializer {
 		CustomKeyframes.register(LookToKeyframeType.INSTANCE);
 		CustomKeyframes.register(SkipKeyframeType.INSTANCE);
 		CustomKeyframes.register(LoopKeyframeType.INSTANCE);
-		CustomKeyframes.register(FadeKeyframeType.INSTANCE);
+			CustomKeyframes.register(ScreenVFXKeyframeType.INSTANCE);
 		CustomKeyframes.register(ml.mypals.vectorthree.flashback.pose.EntityPoseKeyframeType.INSTANCE);
 		ml.mypals.vectorthree.flashback.channel.BuiltInChannels.register();
 		CustomKeyframes.register(DollyZoomKeyframeType.INSTANCE);
@@ -63,12 +65,13 @@ public class Vector3 implements ClientModInitializer {
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			GIZMO_EDITOR.clear();
 			ORBIT_GIZMO.clear();
-			CAMERA_GIZMO.clear();
+				CAMERA_GIZMO.clear();
+				FOCUS_GIZMO.clear();
 			POSE_GIZMO.clear();
 			PREFABS.clear();
 			EDITOR_CAMERA.reset();
 			ShapeTrackRegistry.clear();
-			FadeOverlay.clear();
+				ScreenVFXRenderer.clear();
 			ml.mypals.vectorthree.flashback.pose.EntityPoses.clear();
 		});
 		LOGGER.info("Registered RyansRenderingKit shape tracks with Flashback");

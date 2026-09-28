@@ -10,7 +10,7 @@ import java.util.List;
 /** vector3's editor-only shapes (gizmos, selection boxes, placement previews), switched off for a render pass. */
 final class EditorOverlays {
     private static final List<String> PREFIXES = List.of("gizmo", "camera_gizmo", "orbit_gizmo", "prefab_gizmo",
-            "prefab_preview", "eyedropper_highlight", "pose_gizmo");
+            "prefab_preview", "eyedropper_highlight", "pose_gizmo", "focus_plane_gizmo");
     private static final ShapeHider HIDER = new ShapeHider();
 
     private EditorOverlays() {}

@@ -22,11 +22,13 @@ import imgui.moulberry90.flag.ImGuiWindowFlags;
 import imgui.moulberry90.type.ImBoolean;
 import ml.mypals.vectorthree.compat.IrisCompat;
 import ml.mypals.vectorthree.flashback.PersistentWindow;
+import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
 
@@ -41,11 +43,19 @@ public final class CameraPreview {
     private static @Nullable String problem;
     private static final ImBoolean withShaders = new ImBoolean(false);
     private static final ImBoolean detachMainView = new ImBoolean(true);
+    private static @Nullable Shot shot;
+
+    public record Shot(Vec3 eye, Vec3 forward, Vec3 up, float fov, float aspect) {}
 
     private CameraPreview() {}
 
     public static boolean isRendering() {
         return rendering;
+    }
+
+    /** The keyframed camera of the last preview render, while the main view is detached from it. */
+    public static @Nullable Shot shot() {
+        return detachesMainView() ? shot : null;
     }
 
     /** The main view ignores the camera keyframes; the preview's own pass and exports still use them. */
@@ -108,6 +118,7 @@ public final class CameraPreview {
     public static void beforeFrame(GameRenderer renderer) {
         if (rendering) return;
         fresh = false;
+        shot = null;
         if (!WINDOW.isOpen() || !ReplayUI.isActive() || Flashback.isExporting()) return;
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
@@ -150,6 +161,9 @@ public final class CameraPreview {
             renderer.update(deltaTracker);
             renderer.extract(deltaTracker, true);
             renderer.render();
+            Camera camera = renderer.mainCamera();
+            shot = new Shot(camera.position(), new Vec3(camera.forwardVector()), new Vec3(camera.upVector()),
+                    camera.getFov(), (float) main.width / main.height);
             if (image == null || image.width != main.width || image.height != main.height) {
                 if (image != null) image.destroyBuffers();
                 image = new TextureTarget("vector3_camera_preview", main.width, main.height, GpuFormat.RGBA8_UNORM, null);
