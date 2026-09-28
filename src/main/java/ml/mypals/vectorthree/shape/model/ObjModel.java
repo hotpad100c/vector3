@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.shape.model;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import ml.mypals.vectorthree.Vector3;
 import ml.mypals.vectorthree.shape.media.ImageDecoder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
@@ -9,10 +10,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -121,7 +119,7 @@ final class ObjModel {
                 Optional<Resource> found = Minecraft.getInstance().getResourceManager().getResource(resource);
                 if (found.isPresent()) return found.get().open();
             }
-            throw new IOException("Not found: " + (file != null ? file : resource));
+            throw new FileNotFoundException("Not found: " + (file != null ? file : resource));
         }
 
         TextureRef texture() {
@@ -174,7 +172,8 @@ final class ObjModel {
         return model;
     }
 
-    // A missing or broken MTL only loses its materials; the geometry still loads.
+    // A missing or broken MTL only loses its materials; the geometry still loads. Many OBJs name an MTL they
+    // don't ship with, so that case is one line in the log rather than a stack trace.
     private static void readMaterials(Location location, Map<String, Material> materials) {
         try (BufferedReader reader = reader(location)) {
             String name = null;
@@ -208,8 +207,11 @@ final class ObjModel {
                 }
             }
             if (name != null) materials.put(name, material(name, red, green, blue, alpha, texture, normal, specular));
+        } catch (FileNotFoundException missing) {
+            Vector3.LOGGER.warn("OBJ names an MTL that isn't there, using plain materials: {}",
+                    location);
         } catch (Exception exception) {
-            ml.mypals.vectorthree.Vector3.LOGGER.warn("Could not read MTL {}", location, exception);
+            Vector3.LOGGER.warn("Could not read MTL {}", location, exception);
         }
     }
 

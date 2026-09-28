@@ -33,7 +33,7 @@ import java.util.function.Consumer;
  * the part's X / Y / Z angles, about the axis that angle really turns about, so keyframes keep blending angle by angle.
  * Right-drag a handle; Ctrl snaps.
  * <p>
- * The part frames come from the renderer (see LivingEntityRendererPoseMixin), which reports them for the selected
+ * The part frames come from the renderer (see EntityPoses#modelSubmitted), which reports them for the selected
  * entity each frame.
  */
 public final class PoseGizmoEditor {

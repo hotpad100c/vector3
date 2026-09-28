@@ -38,7 +38,7 @@ public final class LookToCamera {
         // While spectating an entity the camera isn't the player, same as Flashback's camera keyframes.
         if (player == null || minecraft.getCameraEntity() != player) return;
 
-        float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true);
+        float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         Vec3 start = from.target().resolve(partialTick);
         Vec3 end = to.target().resolve(partialTick);
         if (start == null) start = end;

@@ -2,15 +2,15 @@ package ml.mypals.vectorthree.mixin.pose;
 
 import ml.mypals.vectorthree.flashback.pose.EntityPose;
 import ml.mypals.vectorthree.flashback.pose.EntityPoses;
-import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
 import java.util.List;
 import java.util.UUID;
 
-@Mixin(LivingEntityRenderState.class)
-public class LivingEntityRenderStatePoseMixin implements EntityPoses.Holder {
+@Mixin(EntityRenderState.class)
+public class EntityRenderStatePoseMixin implements EntityPoses.Holder {
     @Unique private UUID vector3$poseEntity;
     @Unique private List<EntityPose> vector3$poses = List.of();
 

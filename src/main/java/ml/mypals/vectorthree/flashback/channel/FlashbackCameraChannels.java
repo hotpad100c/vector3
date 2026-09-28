@@ -149,7 +149,7 @@ final class FlashbackCameraChannels {
             KeyframeChangeTrackEntity result = new KeyframeChangeTrackEntity(base.target(), base.trackingBodyPart(),
                     angles.yawOffset(), angles.pitchOffset(), new Vector3d(position.positionOffset()),
                     new Vector3d(view.viewOffset()), roll.roll());
-            ((ml.mypals.vectorthree.flashback.pose.ModelPartHolder) (Object) result).vector3$setModelPart(((ml.mypals.vectorthree.flashback.pose.ModelPartHolder) (Object) base).vector3$modelPart());
+            ml.mypals.vectorthree.flashback.pose.ModelPartHolder.copy(base, result);
             return result;
         }
 

@@ -2,7 +2,11 @@ package ml.mypals.vectorthree.flashback.pose;
 
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
+import ml.mypals.vectorthree.Vector3;
+import ml.mypals.vectorthree.camera.CameraPreview;
+import ml.mypals.vectorthree.compat.IrisCompat;
 import ml.mypals.vectorthree.mixin.pose.ModelPartAccessor;
+import ml.mypals.vectorthree.render.ScreenLayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
@@ -31,17 +35,22 @@ import java.util.WeakHashMap;
 /**
  * Applies entity pose keyframes while models are set up. Poses are collected from the keyframes on the render
  * thread (begin / request / finish, like LookToCamera), one per track in track order, handed to each
- * LivingEntityRenderState at extraction, and applied in that order after every setupAnim that state goes through (the
+ * EntityRenderState at extraction, and applied in that order after every setupAnim that state goes through (the
  * entity's own model, and each armour / cape / elytra model submitted with it), so everything attached follows.
  */
 public final class EntityPoses {
-    /** Implemented on LivingEntityRenderState. */
+    /** Implemented on EntityRenderState. */
     public interface Holder {
         @Nullable UUID vector3$poseEntity();
 
         List<EntityPose> vector3$poses();
 
         void vector3$setPoses(@Nullable UUID entity, List<EntityPose> poses);
+    }
+
+    /** A renderer outside LivingEntityRenderer whose entity has a posable model (the ender dragon's). */
+    public interface ModelOwner {
+        Model<?> vector3$poseModel();
     }
 
     private static final Map<UUID, List<EntityPose>> pending = new HashMap<>();
@@ -86,6 +95,8 @@ public final class EntityPoses {
         current = Map.of();
         snapshotRequests.clear();
         snapshots.clear();
+        MODEL_MATRICES.clear();
+        submission = null;
     }
 
     private static @Nullable UUID identity;
@@ -105,6 +116,13 @@ public final class EntityPoses {
     public static UUID poseIdentity(UUID own) {
         UUID override = identity;
         return override == null || get(override).isEmpty() && !get(own).isEmpty() ? own : override;
+    }
+
+    /** Hands an entity's poses to its render state as it is extracted. */
+    public static void attach(Entity entity, Object state) {
+        if (!(state instanceof Holder holder)) return;
+        UUID identity = poseIdentity(entity.getUUID());
+        holder.vector3$setPoses(identity, get(identity));
     }
 
     public static List<EntityPose> get(UUID entity) {
@@ -192,13 +210,95 @@ public final class EntityPoses {
         return snapshotRequests.contains(entity);
     }
 
+    /** The entity EntityRenderDispatcher is submitting: its state, renderer, origin and the camera it is seen from. */
+    private static final class Submission {
+        final Object state;
+        final EntityRenderer<?, ?> renderer;
+        final Matrix4f inverseOrigin;
+        final Vec3 camera;
+        boolean modelSeen;
+
+        Submission(Object state, EntityRenderer<?, ?> renderer, Matrix4f inverseOrigin, Vec3 camera) {
+            this.state = state;
+            this.renderer = renderer;
+            this.inverseOrigin = inverseOrigin;
+            this.camera = camera;
+        }
+    }
+
+    private static final Map<EntityRenderer<?, ?>, Model<?>> RENDERER_MODELS = new WeakHashMap<>();
+    private static final Map<UUID, Matrix4f> MODEL_MATRICES = new HashMap<>();
+    private static @Nullable Submission submission;
+
+    /** {@code origin}: the pose at the entity's position (camera-relative), before its renderer adds anything. */
+    public static void beginEntitySubmit(Object state, EntityRenderer<?, ?> renderer, Matrix4f origin, Vec3 camera) {
+        submission = new Submission(state, renderer, origin.invert(new Matrix4f()), camera);
+    }
+
+    public static void endEntitySubmit() {
+        submission = null;
+    }
+
+    /**
+     * Every model submission. The first one made with the state being dispatched is that entity's own model,
+     * whatever its renderer: it is remembered for the renderer, with its matrix relative to the entity's position,
+     * and reported to the gizmo and pending snapshots.
+     */
+    public static void modelSubmitted(Model<?> model, Object state, Matrix4f pose) {
+        Submission current = submission;
+        if (current == null || current.state != state || current.modelSeen) return;
+        current.modelSeen = true;
+        RENDERER_MODELS.put(current.renderer, model);
+        if (!(state instanceof Holder holder) || holder.vector3$poseEntity() == null || CameraPreview.isRendering()
+                || IrisCompat.isRenderingShadowPass() || ScreenLayer.isRendering()) return;
+        MODEL_MATRICES.put(holder.vector3$poseEntity(), current.inverseOrigin.mul(pose, new Matrix4f()));
+        beforeSubmit(model, state, pose, current.camera);
+    }
+
+    /** The model {@code renderer} submitted last, and its matrix relative to {@code entity} the last time it was drawn. */
+    static @Nullable Model<?> seenModel(EntityRenderer<?, ?> renderer) {
+        return RENDERER_MODELS.get(renderer);
+    }
+
+    static @Nullable Matrix4f seenMatrix(UUID entity) {
+        return MODEL_MATRICES.get(entity);
+    }
+
+    /**
+     * Called as an entity's model is submitted, with the model-space matrix it is submitted with. The model's parts
+     * are only set up later, when the submit is drawn; for the gizmo's entity, or one with a snapshot pending, they
+     * are set up here once more (as ModelFeatureRenderer will) to report where each part is.
+     */
+    private static void beforeSubmit(Model<?> model, Object state, Matrix4f pose, Vec3 camera) {
+        UUID entity = state instanceof Holder holder ? holder.vector3$poseEntity() : null;
+        boolean gizmo = entity != null && entity.equals(Vector3.POSE_GIZMO.entity());
+        // Not from the preview or shadow passes: their matrices aren't relative to the main camera.
+        if (entity == null || CameraPreview.isRendering() || IrisCompat.isRenderingShadowPass() || ScreenLayer.isRendering()
+                || !gizmo && !snapshotPending(entity)) return;
+        setupAnim(model, state);
+        afterSetupAnim(model, state, true);
+        if (gizmo) Vector3.POSE_GIZMO.reportFrames(model, new Matrix4f(pose), camera);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <S> void setupAnim(Model<S> model, Object state) {
+        model.setupAnim((S) state);
+    }
+
+    // Known up front for living entities and the dragon; any other renderer once it has drawn a model.
+    private static @Nullable Model<?> model(EntityRenderer<?, ?> renderer) {
+        if (renderer instanceof LivingEntityRenderer<?, ?, ?> living) return living.getModel();
+        if (renderer instanceof ModelOwner owner) return owner.vector3$poseModel();
+        return seenModel(renderer);
+    }
+
     /** The entity's model parts at rest (disabled), root first, or an empty map when it has no posable model. */
     public static Map<String, EntityPose.Limb> restPose(@Nullable Entity entity) {
         if (entity == null) return Map.of();
-        EntityRenderer<?, ?> renderer = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(entity);
-        if (!(renderer instanceof LivingEntityRenderer<?, ?, ?> living)) return Map.of();
+        Model<?> model = model(Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(entity));
+        if (model == null) return Map.of();
         Map<String, EntityPose.Limb> limbs = new LinkedHashMap<>();
-        parts(living.getModel()).byName().forEach((name, part) -> {
+        parts(model).byName().forEach((name, part) -> {
             PartPose rest = part.getInitialPose();
             limbs.put(name, new EntityPose.Limb(false, false, rest.xRot() * Mth.RAD_TO_DEG, rest.yRot() * Mth.RAD_TO_DEG,
                     rest.zRot() * Mth.RAD_TO_DEG, 0, 0, 0));

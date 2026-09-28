@@ -68,6 +68,7 @@ import java.util.OptionalDouble;
 public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     public static final String MODE = "vector3:obj_mode";
     public static final String TEXTURE = "vector3:obj_texture";
+    public static final String LIGHTING = "vector3:obj_lighting";
     private static final String DEFAULT_MODEL = "ryansrenderingkit:models/monkey.obj";
     private static final Identifier WHITE = Vector3.id("obj/white");
     private record TextureKey(ObjModel.TextureRef texture, @Nullable ObjModel.TextureRef normal,
@@ -97,6 +98,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
 
     private final Mode mode;
     private final @Nullable String texturePath;
+    private final boolean lighting;
     private ObjModel model;
     private GpuBuffer gpuVertices;
     private GpuBuffer gpuIndices;
@@ -114,12 +116,18 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         return state.blockProperties() == null ? null : state.blockProperties().get(TEXTURE);
     }
 
-    public TexturedObjShape(String modelPath, Mode mode, @Nullable String texturePath, Color color, boolean seeThrough) {
+    public static boolean lighting(ShapeState state) {
+        return state.blockProperties() != null && "true".equals(state.blockProperties().get(LIGHTING));
+    }
+
+    public TexturedObjShape(String modelPath, Mode mode, @Nullable String texturePath, boolean lighting, Color color,
+            boolean seeThrough) {
         super(Shape.RenderingType.BATCH, color, seeThrough);
         this.transformer = new DefaultTransformer(this, Vec3.ZERO);
         this.transformFunction = transformer -> {};
         this.mode = mode;
         this.texturePath = texturePath;
+        this.lighting = lighting;
         String source = modelPath == null || modelPath.isBlank() ? DEFAULT_MODEL : modelPath;
         try {
             model = ObjModel.load(source);
@@ -200,12 +208,10 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
                 }
             }
             MeshData mesh = builder.build();
-            if (mesh == null) return;
-            try {
+            try (mesh) {
+                if (mesh == null) return;
                 entityVertices = RenderSystem.getDevice().createBuffer(() -> "vector3_obj/entity_vertex",
                         GpuBuffer.USAGE_VERTEX, mesh.vertexBuffer());
-            } finally {
-                mesh.close();
             }
         }
     }
@@ -228,6 +234,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         IrisCompat.setSkipExtension(true);
         try {
             var target = IrisBypassTarget.prepareForDraw("Obj");
+            assert target.getColorTextureView() != null;
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "vector3_obj",
                     target.getColorTextureView(), Optional.empty(), target.getDepthTextureView(), OptionalDouble.empty())) {
                 RenderSystem.bindDefaultUniforms(pass);
@@ -272,11 +279,13 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     private void prepareDraws(Matrix4f base) {
         PoseStack poseStack = new PoseStack();
         beforeDraw(poseStack, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(true), true);
-        Matrix4f modelView = base.mul(poseStack.last().pose());
+        Matrix4f pose = new Matrix4f(poseStack.last().pose());
+        Matrix4f modelView = base.mul(pose);
         if (mode == Mode.MATERIALS) {
-            for (ObjModel.Range range : model.ranges) addDraw(modelView, range.material(), range.first(), range.count());
+            for (ObjModel.Range range : model.ranges)
+                addDraw(modelView, pose, range.material(), range.first(), range.count());
         } else {
-            addDraw(modelView, mode == Mode.TEXTURE ? chosenMaterial() : ObjModel.Material.DEFAULT, 0,
+            addDraw(modelView, pose, mode == Mode.TEXTURE ? chosenMaterial() : ObjModel.Material.DEFAULT, 0,
                     model.corners.size());
         }
     }
@@ -308,17 +317,20 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         }
     }
 
-    private void addDraw(Matrix4f modelView, ObjModel.Material material, int first, int count) {
+    // core/obj_lit reads the shape's own transform from TextureMat to light faces in world orientation. It is never
+    // used while a shader pack is loaded, even when the shape bypasses it: the pack does the lighting then.
+    private void addDraw(Matrix4f modelView, Matrix4f pose, ObjModel.Material material, int first, int count) {
         float inverse = 1f / 255f;
         Vector4f color = new Vector4f(baseColor.getRed() * inverse * material.red(),
                 baseColor.getGreen() * inverse * material.green(), baseColor.getBlue() * inverse * material.blue(),
                 baseColor.getAlpha() * inverse * material.alpha());
         if (color.w <= 0) return;
+        boolean lit = lighting && !frameEntity && !IrisCompat.isPackInUse();
         GpuBufferSlice transform = RenderSystem.getDynamicUniforms().writeTransform(modelView, color, new Vector3f(),
-                new Matrix4f());
+                lit ? pose : new Matrix4f());
         Identifier texture = texture(material);
         PreparedRenderType original = (frameEntity ? entityType(texture, seeThrough)
-                : ShapeTrackRegistry.objType(texture, seeThrough)).prepare();
+                : ShapeTrackRegistry.objType(texture, seeThrough, lit)).prepare();
         frameDraws.add(new FrameDraw(new PreparedRenderType(original.name(), original.pipeline(),
                 original.oitPipelineSet(), transform, original.scissorState(), original.textures()),
                 first, count, seeThrough || color.w < 1));

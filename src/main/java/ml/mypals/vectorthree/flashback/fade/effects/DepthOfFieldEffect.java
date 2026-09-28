@@ -63,14 +63,26 @@ public final class DepthOfFieldEffect {
         focalScale = Math.abs(projection.m11());
         projectionX = projection.m00();
         projectionY = projection.m11();
+        boolean zeroToOne = RenderSystem.getDevice().getDeviceInfo().isZZeroToOne();
         write(projectionSettings, projection.m22(), projection.m32(), projection.m23(), projection.m33(),
-                RenderSystem.getDevice().getDeviceInfo().isZZeroToOne() ? 1 : 0, 0, 0, 0);
+                zeroToOne ? 1 : 0, skyDepth(projection, zeroToOne), 0, 0);
         try (RenderPass pass = begin("depth", distance.getColorTextureView(), depthPipeline)) {
             pass.setUniform("DepthSampler", main.getDepthTextureView(), ScreenPass.nearest());
             pass.setUniform("DOFProjection", projectionSettings);
             pass.draw(3, 1, 0, 0);
         }
         depthReady = true;
+    }
+
+    /** The depth-buffer value of the far plane, which the sky keeps: 0 with MC's reverse-Z, 1 otherwise. */
+    private static float skyDepth(Matrix4fc projection, boolean zeroToOne) {
+        return distanceAt(projection, zeroToOne, 0) > distanceAt(projection, zeroToOne, 1) ? 0 : 1;
+    }
+
+    private static double distanceAt(Matrix4fc projection, boolean zeroToOne, float depth) {
+        double ndc = zeroToOne ? depth : depth * 2 - 1;
+        double distance = (ndc * projection.m33() - projection.m32()) / (ndc * projection.m23() - projection.m22());
+        return Double.isFinite(distance) && distance > 0 ? distance : Double.POSITIVE_INFINITY;
     }
 
     public static void endFrame() {

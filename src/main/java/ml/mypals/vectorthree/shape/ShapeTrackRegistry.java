@@ -131,8 +131,8 @@ public final class ShapeTrackRegistry {
                 ? new ProjectedEntityShape(state.shapeId(), ShapeEntities.source(state), entity(state))
                 : ShapeGenerator.generateEntity().entity(entity(state)).light(0xF000F0).build(Shape.RenderingType.BATCH));
         register("obj", "vector3.shape.obj", state -> new TexturedObjShape(state.model(),
-                TexturedObjShape.mode(state), TexturedObjShape.texturePath(state), new Color(state.color(), true),
-                state.seeThrough()));
+                TexturedObjShape.mode(state), TexturedObjShape.texturePath(state), TexturedObjShape.lighting(state),
+                new Color(state.color(), true), state.seeThrough()));
         register("arrow", "vector3.shape.arrow", state -> new ArrowShape(point(state, 0), point(state, 1),
                 state.lineWidth(), (float) state.sizeX(), new Color(state.color(), true), state.seeThrough()));
         register("image", "vector3.shape.image", state -> new ImageShape(state.model(),
@@ -823,8 +823,36 @@ public final class ShapeTrackRegistry {
         return RenderType.create(seeThrough ? "vector3_image_see_through" : "vector3_image", setup);
     }
 
-    public static RenderType objType(Identifier textureId, boolean seeThrough) {
-        return imageType(textureId, seeThrough);
+    private static RenderPipeline objLitPipeline;
+    private static RenderPipeline objLitSeeThroughPipeline;
+
+    public static RenderType objType(Identifier textureId, boolean seeThrough, boolean lit) {
+        if (!lit) return imageType(textureId, seeThrough);
+        if (objLitPipeline == null) {
+            objLitPipeline = registerObjLitPipeline("obj_lit", DepthStencilState.DEFAULT);
+            objLitSeeThroughPipeline = registerObjLitPipeline("obj_lit_see_through",
+                    new DepthStencilState(CompareOp.ALWAYS_PASS, true));
+        }
+        RenderSetup setup = RenderSetup.builder(seeThrough ? objLitSeeThroughPipeline : objLitPipeline)
+                .withTexture("Sampler0", textureId)
+                .sortOnUpload()
+                .createRenderSetup();
+        return RenderType.create(seeThrough ? "vector3_obj_lit_see_through" : "vector3_obj_lit", setup);
+    }
+
+    // The image pipeline with core/obj_lit, which shades each face like vanilla lights entities.
+    private static RenderPipeline registerObjLitPipeline(String name, DepthStencilState depth) {
+        Identifier shader = Identifier.fromNamespaceAndPath("vector3", "core/obj_lit");
+        RenderPipeline pipeline = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.GUI_TEXTURED_SNIPPET)
+                .withLocation(Identifier.fromNamespaceAndPath("vector3", name))
+                .withVertexShader(shader)
+                .withFragmentShader(shader)
+                .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+                .withDepthStencilState(depth)
+                .withCull(true)
+                .build());
+        IrisCompat.assignPipeline(pipeline, IrisCompat.Program.ENTITIES_TRANSLUCENT);
+        return pipeline;
     }
 
     private static RenderPipeline registerImagePipeline(String name, DepthStencilState depth) {

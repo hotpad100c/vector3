@@ -45,8 +45,8 @@ public record ShapeMount(UUID entity, TrackingBodyPart part, boolean followRotat
         Entity target = resolve();
         if (target == null) return null;
         float partialTick = Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false);
-        if (modelPart != null && target instanceof LivingEntity living) {
-            Matrix4f onPart = EntityParts.transform(living, modelPart, partialTick);
+        if (modelPart != null) {
+            Matrix4f onPart = EntityParts.transform(target, modelPart, partialTick);
             if (onPart != null) {
                 if (followRotation) return onPart;
                 Vector3f pivot = onPart.getTranslation(new Vector3f());

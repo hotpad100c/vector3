@@ -35,7 +35,7 @@ public final class DollyZoomCamera {
         LocalPlayer player = minecraft.player;
         if (player == null || minecraft.getCameraEntity() != player) return;
 
-        float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(true);
+        float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         Vec3 start = from.target().resolve(partialTick);
         Vec3 end = to.target().resolve(partialTick);
         if (start == null) start = end;

@@ -256,6 +256,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         ImInt objMode = new ImInt(TexturedObjShape.mode(state).ordinal());
         String objTexturePath = TexturedObjShape.texturePath(state);
         ImString objTexture = new ImString(objTexturePath == null ? "" : objTexturePath, 1024);
+        ImBoolean objLighting = new ImBoolean(TexturedObjShape.lighting(state));
         ImString imageFile = new ImString(state.shapeType().equals("image") && state.model() != null
                 ? state.model() : "", 1024);
         ImString videoFile = new ImString(state.shapeType().equals("video") && state.model() != null
@@ -400,6 +401,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                     changed |= FileBrowse.button("obj_texture", objTexture, I18n.get("vector3.file.image_filter"),
                             "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff", "tga");
                 }
+                changed |= ImGui.checkbox(I18n.get("vector3.keyframe.obj_lighting"), objLighting);
+                if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.keyframe.obj_lighting.tooltip"));
             }
             case "image" -> {
                 changed |= ImGui.inputText(I18n.get("vector3.keyframe.image_file"), imageFile);
@@ -590,7 +593,9 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                             : selectedType[0].equals("block") ? blockProperties
                             : selectedType[0].equals("obj") ? Map.of(
                                     TexturedObjShape.MODE, TexturedObjShape.Mode.values()[objMode.get()].id,
-                                    TexturedObjShape.TEXTURE, objTexture.get()) : state.blockProperties())
+                                    TexturedObjShape.TEXTURE, objTexture.get(),
+                                    TexturedObjShape.LIGHTING, Boolean.toString(objLighting.get()))
+                            : state.blockProperties())
                     .withParticle(selectedType[0].equals("particle") ? particle[0] : state.particle())
                     .withScreen(screen[0] && layerCapable)
                     .withBlast(selectedType[0].equals("blast") ? blast[0] : state.blast())
