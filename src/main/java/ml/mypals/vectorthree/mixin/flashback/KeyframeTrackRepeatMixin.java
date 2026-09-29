@@ -2,7 +2,7 @@ package ml.mypals.vectorthree.mixin.flashback;
 
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.state.KeyframeTrack;
-import ml.mypals.vectorthree.flashback.loop.TrackRepeat;
+import ml.mypals.vectorthree.fb.loop.TrackRepeat;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;

@@ -3,7 +3,7 @@ package ml.mypals.vectorthree.mixin.flashback;
 import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.state.KeyframeTrack;
 import com.moulberry.flashback.state.RealTimeMapping;
-import ml.mypals.vectorthree.flashback.TrackManagement;
+import ml.mypals.vectorthree.fb.timeline.TrackManagement;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;

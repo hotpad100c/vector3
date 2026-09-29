@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
 import com.moulberry.flashback.state.KeyframeTrack;
-import ml.mypals.vectorthree.prefab.PrefabGroupHolder;
+import ml.mypals.vectorthree.fb.prefab.PrefabGroupHolder;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 

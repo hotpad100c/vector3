@@ -3,7 +3,7 @@ package ml.mypals.vectorthree.mixin.flashback;
 import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
-import ml.mypals.vectorthree.camera.CameraPreview;
+import ml.mypals.vectorthree.fb.camera.CameraPreview;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

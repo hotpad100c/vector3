@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.moulberry.flashback.exception.UnsupportedPacketException;
 import com.moulberry.flashback.playback.ReplayServer;
-import ml.mypals.vectorthree.flashback.PacketCompat;
+import ml.mypals.vectorthree.fb.editor.PacketCompat;
 import net.minecraft.network.PacketListener;
 import net.minecraft.network.protocol.Packet;
 import org.spongepowered.asm.mixin.Mixin;

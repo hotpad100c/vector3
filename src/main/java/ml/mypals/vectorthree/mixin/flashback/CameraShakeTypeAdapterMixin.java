@@ -1,14 +1,14 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import ml.mypals.vectorthree.core.Mod;
 import com.google.gson.Gson;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializationContext;
 import com.moulberry.flashback.keyframe.impl.CameraShakeKeyframe;
-import ml.mypals.vectorthree.Vector3;
-import ml.mypals.vectorthree.camera.shake.ShakeHolder;
-import ml.mypals.vectorthree.camera.shake.ShakeParams;
+import ml.mypals.vectorthree.core.camera.shake.ShakeHolder;
+import ml.mypals.vectorthree.core.camera.shake.ShakeParams;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -42,7 +42,7 @@ public class CameraShakeTypeAdapterMixin {
             ShakeParams params = GSON.fromJson(json.get(FIELD), ShakeParams.class);
             ((ShakeHolder) cir.getReturnValue()).vector3$setShake(ShakeParams.of(params.floats(), params.octaves(), params.seed()));
         } catch (RuntimeException exception) {
-            Vector3.LOGGER.warn("Dropping unreadable camera shake settings", exception);
+            Mod.LOGGER.warn("Dropping unreadable camera shake settings", exception);
         }
     }
 }

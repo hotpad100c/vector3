@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.mixin.rrk;
 
 import ml.mypals.ryansrenderingkit.render.MainRender;
-import ml.mypals.vectorthree.render.ScreenLayer;
+import ml.mypals.vectorthree.mc.render.ScreenLayer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

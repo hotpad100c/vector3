@@ -5,7 +5,7 @@ import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.visuals.CameraRotation;
 import com.moulberry.flashback.visuals.ReplayVisuals;
-import ml.mypals.vectorthree.camera.shake.CameraShake;
+import ml.mypals.vectorthree.fb.camera.shake.CameraShake;
 import org.joml.Quaternionf;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

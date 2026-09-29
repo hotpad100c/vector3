@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
 import com.moulberry.flashback.editor.keybinds.Keybinds;
-import ml.mypals.vectorthree.flashback.VectorKeybinds;
+import ml.mypals.vectorthree.fb.editor.VectorKeybinds;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;

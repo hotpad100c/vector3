@@ -4,8 +4,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializationContext;
 import com.moulberry.flashback.keyframe.Keyframe;
-import ml.mypals.vectorthree.flashback.curve.SpeedCurves;
-import ml.mypals.vectorthree.prefab.PrefabGroups;
+import ml.mypals.vectorthree.fb.curve.SpeedCurves;
+import ml.mypals.vectorthree.fb.prefab.PrefabGroups;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -33,8 +33,8 @@ public class KeyframeSubtypeAdapterMixin {
         if (keyframe instanceof Keyframe k && cir.getReturnValue() instanceof JsonObject json) {
             PrefabGroups.writeGroup(k, json);
             SpeedCurves.write(k, json);
-            ml.mypals.vectorthree.flashback.pose.ModelPartHolder.write(k, json);
-            ml.mypals.vectorthree.flashback.channel.ChannelMasks.write(k, json);
+            ml.mypals.vectorthree.core.pose.ModelPartHolder.write(k, json);
+            ml.mypals.vectorthree.fb.channel.ChannelMasks.write(k, json);
         }
     }
 }

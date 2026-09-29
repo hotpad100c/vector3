@@ -1,12 +1,12 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
-import ml.mypals.vectorthree.flashback.curve.SpeedCurves;
-import ml.mypals.vectorthree.prefab.PrefabGroups;
+import ml.mypals.vectorthree.fb.curve.SpeedCurves;
+import ml.mypals.vectorthree.fb.prefab.PrefabGroups;
 import com.google.gson.*;
 import com.moulberry.flashback.keyframe.Keyframe;
-import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
-import ml.mypals.vectorthree.flashback.custom.CustomKeyframeType;
-import ml.mypals.vectorthree.flashback.custom.CustomKeyframes;
+import ml.mypals.vectorthree.fb.custom.CustomKeyframe;
+import ml.mypals.vectorthree.fb.custom.CustomKeyframeType;
+import ml.mypals.vectorthree.fb.custom.CustomKeyframes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -39,8 +39,8 @@ public class KeyframeTypeAdapterMixin {
         if (element.isJsonObject() && cir.getReturnValue() != null) {
             PrefabGroups.readGroup(cir.getReturnValue(), element.getAsJsonObject());
             SpeedCurves.read(cir.getReturnValue(), element.getAsJsonObject());
-            ml.mypals.vectorthree.flashback.pose.ModelPartHolder.read(cir.getReturnValue(), element.getAsJsonObject());
-            ml.mypals.vectorthree.flashback.channel.ChannelMasks.read(cir.getReturnValue(), element.getAsJsonObject());
+            ml.mypals.vectorthree.core.pose.ModelPartHolder.read(cir.getReturnValue(), element.getAsJsonObject());
+            ml.mypals.vectorthree.fb.channel.ChannelMasks.read(cir.getReturnValue(), element.getAsJsonObject());
         }
     }
 }

@@ -5,7 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.moulberry.flashback.action.Action;
 import com.moulberry.flashback.io.ReplayReader;
 import com.moulberry.flashback.playback.ReplayServer;
-import ml.mypals.vectorthree.flashback.PacketCompat;
+import ml.mypals.vectorthree.fb.editor.PacketCompat;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

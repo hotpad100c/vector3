@@ -6,7 +6,7 @@ import com.moulberry.flashback.editor.ui.ReplayUI;
 import imgui.moulberry90.ImFont;
 import imgui.moulberry90.ImFontAtlas;
 import imgui.moulberry90.ImFontConfig;
-import ml.mypals.vectorthree.flashback.VectorIcons;
+import ml.mypals.vectorthree.fb.editor.VectorIcons;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 

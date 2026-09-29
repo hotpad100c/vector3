@@ -2,9 +2,9 @@ package ml.mypals.vectorthree.mixin.flashback;
 
 import com.google.gson.GsonBuilder;
 import com.moulberry.flashback.FlashbackGson;
-import ml.mypals.vectorthree.flashback.custom.CustomKeyframe;
-import ml.mypals.vectorthree.flashback.custom.CustomKeyframes;
-import ml.mypals.vectorthree.prefab.PrefabGroupStore;
+import ml.mypals.vectorthree.fb.custom.CustomKeyframe;
+import ml.mypals.vectorthree.fb.custom.CustomKeyframes;
+import ml.mypals.vectorthree.fb.prefab.PrefabGroupStore;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

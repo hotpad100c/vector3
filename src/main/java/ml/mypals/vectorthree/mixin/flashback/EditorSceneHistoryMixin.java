@@ -1,11 +1,11 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
-import ml.mypals.vectorthree.clips.ClipProject;
+import ml.mypals.vectorthree.fb.clips.ClipProject;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.EditorSceneHistory;
 import com.moulberry.flashback.state.EditorSceneHistoryAction;
 import com.moulberry.flashback.state.EditorSceneHistoryEntry;
-import ml.mypals.vectorthree.prefab.PrefabHistory;
+import ml.mypals.vectorthree.fb.prefab.PrefabHistory;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -14,18 +14,23 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 // Undo steps position back then applies entries[position]; redo applies entries[position] then steps forward.
 @Mixin(value = EditorSceneHistory.class, remap = false)
-public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory, ml.mypals.vectorthree.flashback.HistoryWindow.HistoryView {
+public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory, ml.mypals.vectorthree.fb.editor.HistoryWindow.HistoryView, PrefabHistory.Store {
     @Shadow @Final private List<EditorSceneHistoryEntry> entries;
     @Shadow private int position;
     @Unique private int vector3$positionBefore;
     @Unique private int vector3$lastActiveId;
     @Unique private double vector3$lastPressTime;
     @Unique private String vector3$lastDescription;
+    @Unique private final Map<EditorSceneHistoryEntry, PrefabHistory.Change> vector3$changes = new IdentityHashMap<>();
 
     /*
      * Keyframe edits pushed while one widget stays held down (dragging a value) become a single step: the first
@@ -50,7 +55,19 @@ public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory, m
         vector3$lastActiveId = held ? active : 0;
         vector3$lastPressTime = pressTime;
         vector3$lastDescription = entry.description();
+        vector3$dropForgottenChanges();
     }
+
+    // Pushing cuts off the redo tail, and merging drops an entry; their remembered track fields go with them.
+    @Unique
+    private void vector3$dropForgottenChanges() {
+        if (vector3$changes.size() <= entries.size()) return;
+        Set<EditorSceneHistoryEntry> live = Collections.newSetFromMap(new IdentityHashMap<>());
+        live.addAll(entries);
+        vector3$changes.keySet().removeIf(entry -> !live.contains(entry));
+    }
+
+    @Override public Map<EditorSceneHistoryEntry, PrefabHistory.Change> vector3$prefabChanges() { return vector3$changes; }
 
     @Unique
     private static boolean vector3$onlySetsKeyframes(EditorSceneHistoryEntry entry) {
@@ -64,6 +81,7 @@ public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory, m
     @Override
     public void vector3$reset() {
         entries.clear();
+        vector3$changes.clear();
         position = 0;
     }
 

@@ -5,8 +5,8 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.moulberry.flashback.keyframe.change.KeyframeChangePlayAudio;
 import com.moulberry.flashback.keyframe.impl.AudioKeyframe;
 import com.moulberry.flashback.keyframe.types.AudioKeyframeType;
-import ml.mypals.vectorthree.clips.AudioLevel;
-import ml.mypals.vectorthree.clips.AudioTrim;
+import ml.mypals.vectorthree.core.clips.AudioLevel;
+import ml.mypals.vectorthree.core.clips.AudioTrim;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 

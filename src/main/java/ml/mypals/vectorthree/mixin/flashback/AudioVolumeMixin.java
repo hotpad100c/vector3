@@ -2,8 +2,8 @@ package ml.mypals.vectorthree.mixin.flashback;
 
 import com.mojang.blaze3d.audio.Channel;
 import com.moulberry.flashback.sound.FlashbackAudioManager;
-import ml.mypals.vectorthree.clips.AudioLevel;
-import ml.mypals.vectorthree.mixin.ChannelSourceAccessor;
+import ml.mypals.vectorthree.core.clips.AudioLevel;
+import ml.mypals.vectorthree.mixin.minecraft.ChannelSourceAccessor;
 import org.lwjgl.openal.AL10;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

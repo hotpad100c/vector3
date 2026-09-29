@@ -1,6 +1,6 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
-import ml.mypals.vectorthree.flashback.curve.SpeedCurves;
+import ml.mypals.vectorthree.fb.curve.SpeedCurves;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.impl.AudioKeyframe;
 import com.moulberry.flashback.keyframe.impl.BlockOverrideKeyframe;
@@ -13,7 +13,7 @@ import com.moulberry.flashback.keyframe.impl.TickrateKeyframe;
 import com.moulberry.flashback.keyframe.impl.TimeOfDayKeyframe;
 import com.moulberry.flashback.keyframe.impl.TimelapseKeyframe;
 import com.moulberry.flashback.keyframe.impl.TrackEntityKeyframe;
-import ml.mypals.vectorthree.prefab.PrefabGroups;
+import ml.mypals.vectorthree.fb.prefab.PrefabGroups;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -27,6 +27,6 @@ public class KeyframeCopyGroupMixin {
     private void vector3$copyGroup(CallbackInfoReturnable<Keyframe> cir) {
         PrefabGroups.tag(cir.getReturnValue(), PrefabGroups.groupOf((Keyframe) (Object) this));
         SpeedCurves.set(cir.getReturnValue(), SpeedCurves.of((Keyframe) (Object) this));
-        ml.mypals.vectorthree.flashback.channel.ChannelMasks.set(cir.getReturnValue(), ml.mypals.vectorthree.flashback.channel.ChannelMasks.of((Keyframe) (Object) this));
+        ml.mypals.vectorthree.fb.channel.ChannelMasks.set(cir.getReturnValue(), ml.mypals.vectorthree.fb.channel.ChannelMasks.of((Keyframe) (Object) this));
     }
 }

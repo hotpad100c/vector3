@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.moulberry.flashback.screen.select_replay.ReplaySelectionList;
 import com.moulberry.flashback.screen.select_replay.SelectReplayScreen;
-import ml.mypals.vectorthree.clips.EmptyProject;
+import ml.mypals.vectorthree.fb.clips.EmptyProject;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;

@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
 import com.moulberry.flashback.keyframe.Keyframe;
-import ml.mypals.vectorthree.flashback.channel.ChannelMasks;
+import ml.mypals.vectorthree.fb.channel.ChannelMasks;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 

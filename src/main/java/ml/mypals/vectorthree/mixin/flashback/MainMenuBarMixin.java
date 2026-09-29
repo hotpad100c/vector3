@@ -1,17 +1,17 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
-import ml.mypals.vectorthree.clips.ClipsWindow;
+import ml.mypals.vectorthree.fb.clips.ClipsWindow;
 import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.editor.ui.windows.MainMenuBar;
 import com.moulberry.flashback.editor.ui.windows.WindowType;
 import imgui.moulberry90.ImGui;
-import ml.mypals.vectorthree.flashback.PropertiesWindow;
-import ml.mypals.vectorthree.flashback.HelpWindow;
-import ml.mypals.vectorthree.flashback.HistoryWindow;
-import ml.mypals.vectorthree.flashback.TrackManagerWindow;
-import ml.mypals.vectorthree.camera.CameraPreview;
-import ml.mypals.vectorthree.flashback.ShapeManagerWindow;
-import ml.mypals.vectorthree.prefab.PrefabBasketWindow;
+import ml.mypals.vectorthree.fb.editor.PropertiesWindow;
+import ml.mypals.vectorthree.fb.editor.HelpWindow;
+import ml.mypals.vectorthree.fb.editor.HistoryWindow;
+import ml.mypals.vectorthree.fb.editor.TrackManagerWindow;
+import ml.mypals.vectorthree.fb.camera.CameraPreview;
+import ml.mypals.vectorthree.fb.shape.ShapeManagerWindow;
+import ml.mypals.vectorthree.fb.prefab.PrefabBasketWindow;
 import net.minecraft.client.resources.language.I18n;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -47,7 +47,7 @@ public class MainMenuBarMixin {
         ClipsWindow.renderMenuItem();
         CameraPreview.renderMenuItem();
         ImGui.separator();
-        ml.mypals.vectorthree.flashback.PacketCompat.renderMenuItem();
+        ml.mypals.vectorthree.fb.editor.PacketCompat.renderMenuItem();
         HistoryWindow.renderMenuItem();
         TrackManagerWindow.renderMenuItem();
         ImGui.endMenu();

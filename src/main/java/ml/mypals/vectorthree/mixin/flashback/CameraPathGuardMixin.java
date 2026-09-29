@@ -1,11 +1,11 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import ml.mypals.vectorthree.core.Mod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.moulberry.flashback.state.EditorState;
 import com.moulberry.flashback.visuals.CameraPath;
-import ml.mypals.vectorthree.Vector3;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -27,7 +27,7 @@ public class CameraPathGuardMixin {
         } catch (NullPointerException exception) {
             if (!vector3$reported) {
                 vector3$reported = true;
-                Vector3.LOGGER.warn("Skipped Flashback's camera path: a camera keyframe gave no position ({})", args, exception);
+                Mod.LOGGER.warn("Skipped Flashback's camera path: a camera keyframe gave no position ({})", args, exception);
             }
         }
     }

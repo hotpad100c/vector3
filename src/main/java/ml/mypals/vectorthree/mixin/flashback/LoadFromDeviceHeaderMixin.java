@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
 import com.moulberry.flashback.screen.select_replay.ReplaySelectionEntry;
-import ml.mypals.vectorthree.clips.EmptyProject;
+import ml.mypals.vectorthree.fb.clips.EmptyProject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.WidgetSprites;

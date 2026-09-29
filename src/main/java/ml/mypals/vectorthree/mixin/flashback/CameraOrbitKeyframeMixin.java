@@ -7,7 +7,7 @@ import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
 import com.moulberry.flashback.spline.CatmullRom;
 import com.moulberry.flashback.spline.Hermite;
 import imgui.moulberry90.ImGui;
-import ml.mypals.vectorthree.camera.orbit.OrbitTilt;
+import ml.mypals.vectorthree.core.camera.orbit.OrbitTilt;
 import net.minecraft.client.resources.language.I18n;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;

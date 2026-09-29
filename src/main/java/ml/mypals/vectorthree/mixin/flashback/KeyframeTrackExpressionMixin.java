@@ -5,9 +5,9 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.moulberry.flashback.keyframe.change.KeyframeChange;
 import com.moulberry.flashback.state.KeyframeTrack;
 import com.moulberry.flashback.state.RealTimeMapping;
-import ml.mypals.vectorthree.expression.ExpressionBinding;
-import ml.mypals.vectorthree.expression.ExpressionBindings;
-import ml.mypals.vectorthree.expression.ExpressionRuntime;
+import ml.mypals.vectorthree.core.expression.ExpressionBinding;
+import ml.mypals.vectorthree.fb.expression.ExpressionBindings;
+import ml.mypals.vectorthree.fb.expression.ExpressionRuntime;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 

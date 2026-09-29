@@ -1,8 +1,8 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
 import com.moulberry.flashback.visuals.ReplayVisuals;
-import ml.mypals.vectorthree.camera.shake.ShakeHolder;
-import ml.mypals.vectorthree.camera.shake.ShakeParams;
+import ml.mypals.vectorthree.core.camera.shake.ShakeHolder;
+import ml.mypals.vectorthree.core.camera.shake.ShakeParams;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 

@@ -1,8 +1,8 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
 import com.moulberry.flashback.keyframe.Keyframe;
-import ml.mypals.vectorthree.flashback.curve.CurveHolder;
-import ml.mypals.vectorthree.flashback.curve.SpeedCurve;
+import ml.mypals.vectorthree.core.curve.CurveHolder;
+import ml.mypals.vectorthree.core.curve.SpeedCurve;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 

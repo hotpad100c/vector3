@@ -5,7 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializationContext;
 import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
-import ml.mypals.vectorthree.camera.orbit.OrbitTilt;
+import ml.mypals.vectorthree.core.camera.orbit.OrbitTilt;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;

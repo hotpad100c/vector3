@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
 import com.moulberry.flashback.Flashback;
-import ml.mypals.vectorthree.clips.ClipProject;
+import ml.mypals.vectorthree.fb.clips.ClipProject;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
