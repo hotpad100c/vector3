@@ -93,12 +93,13 @@ public final class VectorIcons {
 
         // The atlas keeps pointing into the config until it is built, so it lives until the next rebuild.
         if (lastConfig != null) lastConfig.destroy();
-        lastConfig = new ImFontConfig();
-        lastConfig.setMergeMode(true);
-        lastConfig.setOversampleH(2);
-        lastConfig.setOversampleV(2);
-        lastConfig.setGlyphOffset(0, (int) (5 * ReplayUI.getUiScale()));
-        atlas.addFontFromMemoryTTF(bytes, (int) (20 * ReplayUI.getUiScale()), lastConfig, ranges.buildRanges());
+        ImFontConfig config = new ImFontConfig();
+        lastConfig = config;
+        config.setMergeMode(true);
+        config.setOversampleH(2);
+        config.setOversampleV(2);
+        config.setGlyphOffset(0, (int) (5 * ReplayUI.getUiScale()));
+        atlas.addFontFromMemoryTTF(bytes, (int) (20 * ReplayUI.getUiScale()), config, ranges.buildRanges());
     }
 
     private static byte @Nullable [] readFont() {

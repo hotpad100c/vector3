@@ -55,8 +55,9 @@ public final class ExpressionUi {
     /** Ends the editor; lists every expression of the track, including those whose widget isn't shown now. */
     public static void end() {
         drawing = false;
-        if (track == null || !ExpressionBindings.any(track)) return;
-        List<ExpressionBinding> all = ExpressionBindings.of(track);
+        KeyframeTrack current = track;
+        if (current == null || !ExpressionBindings.any(current)) return;
+        List<ExpressionBinding> all = ExpressionBindings.of(current);
         ImGui.separator();
         if (!ImGui.collapsingHeader(I18n.get("vector3.expression.list", all.size()) + "###vector3_expressions")) return;
         if (ImGui.smallButton(I18n.get("vector3.expression.editor.tab.globals") + "...")) ExpressionEditor.openGlobals();
@@ -68,7 +69,7 @@ public final class ExpressionUi {
             ImGui.text(shownLabel(key) + component(binding.component(), color));
             ImGui.sameLine();
             float button = ImGui.getFrameHeight() + ImGui.getStyle().getItemSpacingX();
-            if (CodeEditor.preview("##source", binding.source(), text, -button)) open(track, binding, text, key, color);
+            if (CodeEditor.preview("##source", binding.source(), text, -button)) open(current, binding, text, key, color);
             if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.expression.editor.open"));
             ImGui.sameLine();
             if (ImGui.button("x", ImGui.getFrameHeight(), ImGui.getFrameHeight())) remove(binding);
@@ -171,29 +172,30 @@ public final class ExpressionUi {
     /** Called from the properties right-click menu; true if it added anything. */
     public static boolean menu(String key) {
         Row row = ROWS.get(key);
-        if (track == null || row == null || row.kind() == Kind.BUTTON) return false;
-        String widget = WidgetKeys.stable(key, References.namespace(track.keyframeType));
+        KeyframeTrack current = track;
+        if (current == null || row == null || row.kind() == Kind.BUTTON) return false;
+        String widget = WidgetKeys.stable(key, References.namespace(current.keyframeType));
         int size = row.value() instanceof float[] floats ? floats.length : row.value() instanceof int[] ints ? ints.length : 1;
         String initial = row.value() instanceof String ? "{value}" : "value";
         if (size > 1) {
             if (ImGui.beginMenu(I18n.get("vector3.expression.add"))) {
                 if (ImGui.menuItem(I18n.get("vector3.expression.add_all"), "", false,
-                        ExpressionBindings.find(track, widget, ExpressionBinding.ALL) == null)) {
+                        ExpressionBindings.find(current, widget, ExpressionBinding.ALL) == null)) {
                     add(key, row, widget, ExpressionBinding.ALL, initial);
                 }
                 for (int i = 0; i < size; i++) {
                     if (ImGui.menuItem(component(i, row.color()).substring(1), "", false,
-                            ExpressionBindings.find(track, widget, i) == null)) {
+                            ExpressionBindings.find(current, widget, i) == null)) {
                         add(key, row, widget, i, initial);
                     }
                 }
                 ImGui.endMenu();
             }
         } else if (ImGui.menuItem(I18n.get("vector3.expression.add"), "", false,
-                ExpressionBindings.find(track, widget, ExpressionBinding.ALL) == null)) {
+                ExpressionBindings.find(current, widget, ExpressionBinding.ALL) == null)) {
             add(key, row, widget, ExpressionBinding.ALL, initial);
         }
-        for (ExpressionBinding binding : ExpressionBindings.of(track)) {
+        for (ExpressionBinding binding : ExpressionBindings.of(current)) {
             if (!binding.widget().equals(widget)) continue;
             if (ImGui.menuItem(I18n.get("vector3.expression.remove") + component(binding.component(), row.color()))) remove(binding);
         }
@@ -265,12 +267,13 @@ public final class ExpressionUi {
     }
 
     private static void refresh() {
-        if (track == null) {
+        KeyframeTrack current = track;
+        if (current == null) {
             byLabel = Map.of();
             return;
         }
         Map<String, List<ExpressionBinding>> next = new HashMap<>();
-        for (ExpressionBinding binding : ExpressionBindings.of(track)) {
+        for (ExpressionBinding binding : ExpressionBindings.of(current)) {
             for (String label : WidgetKeys.labels(binding.widget())) {
                 next.computeIfAbsent(label, key -> new ArrayList<>()).add(binding);
             }

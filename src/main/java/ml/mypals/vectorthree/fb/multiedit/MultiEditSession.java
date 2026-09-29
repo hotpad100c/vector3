@@ -196,7 +196,7 @@ public final class MultiEditSession {
             s.capture.put(key, WidgetValues.snapshot(container));
             return false;
         }
-        if (s.computed != null) return computed(key, container, kind);
+        if (s.computed != null) return computed(s.computed, key, container, kind);
         Change edit = s.injects.get(key);
         if (edit == null) return false;
         if (s.hits != null) s.hits.add(key);
@@ -204,8 +204,8 @@ public final class MultiEditSession {
         return WidgetValues.inject(edit, container, kind);
     }
 
-    private static Boolean computed(String key, @Nullable Object container, Kind kind) {
-        UnaryOperator<Object> op = kind == Kind.BUTTON ? null : s.computed.get(key);
+    private static Boolean computed(Map<String, UnaryOperator<Object>> operations, String key, @Nullable Object container, Kind kind) {
+        UnaryOperator<Object> op = kind == Kind.BUTTON ? null : operations.get(key);
         Object after = op == null ? null : op.apply(WidgetValues.snapshot(container));
         if (op != null && s.hits != null) s.hits.add(key);
         if (after == null) return false;

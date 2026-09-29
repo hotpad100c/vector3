@@ -111,16 +111,17 @@ public final class Eyedropper {
                 : target instanceof String shapeId ? shapeBounds(shapeId) : null;
         if (target instanceof String shapeId) ShapeTrackRegistry.previewHighlight(shapeId);
         if (bounds == null) return;
-        if (box == null) {
-            box = ShapeGenerator.generateBoxWireframe()
+        BoxWireframeShape shape = box;
+        if (shape == null) {
+            box = shape = ShapeGenerator.generateBoxWireframe()
                     .aabb(Vec3.ZERO, new Vec3(1, 1, 1))
                     .edgeWidth(1.5f)
                     .color(BOX_COLOR)
                     .seeThrough(true)
                     .build(Shape.RenderingType.BATCH);
-            ShapeManagers.addShape(BOX_ID, box);
+            ShapeManagers.addShape(BOX_ID, shape);
         }
-        box.forceSetCorners(new Vec3(bounds.minX, bounds.minY, bounds.minZ), new Vec3(bounds.maxX, bounds.maxY, bounds.maxZ));
+        shape.forceSetCorners(new Vec3(bounds.minX, bounds.minY, bounds.minZ), new Vec3(bounds.maxX, bounds.maxY, bounds.maxZ));
         boxFrame = ImGui.getFrameCount();
     }
 

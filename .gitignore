@@ -43,3 +43,4 @@ replay_*.log
 
 HANDOFF.md
 suggestion.md
+/config/pmd.xml

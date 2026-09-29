@@ -1,6 +1,8 @@
 plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
+	/*id 'pmd'
+	id 'com.github.spotbugs' version '6.4.8'*/
 }
 
 configurations {
@@ -110,3 +112,25 @@ publishing {
 		// retrieving dependencies.
 	}
 }
+
+// Static analysis, run by hand: ./gradlew pmdMain spotbugsMain (reports in build/reports). Never fails the build.
+pmd {
+	toolVersion = '7.17.0'
+	ignoreFailures = true
+	consoleOutput = false
+	ruleSets = []
+	ruleSetFiles = files('config/pmd.xml')
+}
+spotbugs {
+	ignoreFailures = true
+	effort = 'default'
+	reportLevel = 'high'
+}
+tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+	reports {
+		xml.required = true
+		html.required = true
+	}
+}
+tasks.named('pmdTest') { enabled = false }
+tasks.named('spotbugsTest') { enabled = false }

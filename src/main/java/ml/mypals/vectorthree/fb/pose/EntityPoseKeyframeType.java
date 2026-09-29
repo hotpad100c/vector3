@@ -53,7 +53,6 @@ public final class EntityPoseKeyframeType extends CustomKeyframeType<EntityPose>
         if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.entity_pose.mode.tooltip"));
         if (edited.entity() == null) return edited;
 
-        Minecraft minecraft = Minecraft.getInstance();
         Entity entity = ShapeEntities.resolve(edited.entity());
         Map<String, EntityPose.Limb> rest = EntityPoses.restPose(entity);
 

@@ -134,7 +134,8 @@ public final class ExpressionEditor {
     private static void expressionTab() {
         KeyframeTrack current = track;
         ExpressionBinding binding = current == null ? null : ExpressionBindings.find(current, widget, component);
-        if (current == null || binding == null || editor == null) {
+        CodeEditor.State source = editor;
+        if (current == null || binding == null || source == null) {
             ImGui.textDisabled(I18n.get("vector3.expression.editor.removed"));
             return;
         }
@@ -153,23 +154,23 @@ public final class ExpressionEditor {
                     status == null ? null : status.own());
             previewAge = 0;
         }
-        ExprError compile = ExpressionRuntime.check(editor.text(), template);
+        ExprError compile = ExpressionRuntime.check(source.text(), template);
         int errorAt = compile != null ? compile.position()
                 : status != null && status.error() != null ? status.position() : -1;
-        if (CodeEditor.render("##vector3_expression_source", editor, template, ImGui.getContentRegionAvailX(), 6, preview, errorAt)) {
-            ExpressionBinding next = binding.withSource(editor.text());
+        if (CodeEditor.render("##vector3_expression_source", source, template, ImGui.getContentRegionAvailX(), 6, preview, errorAt)) {
+            ExpressionBinding next = binding.withSource(source.text());
             edit(scene -> ExpressionBindings.put(current, widget, component, next));
             preview = null;
         }
         result(compile, status);
-        suggestions(editor);
+        suggestions(source);
 
         if (ImGui.beginTable("##vector3_expression_info", 2, ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV)) {
             ImGui.tableNextRow();
             ImGui.tableNextColumn();
             variables(status);
             ImGui.tableNextColumn();
-            snippets(editor);
+            snippets(source);
             ImGui.endTable();
         }
     }

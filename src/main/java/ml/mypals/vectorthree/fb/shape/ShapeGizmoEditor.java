@@ -795,7 +795,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
 
     /** Ctrl snaps whatever the drag changed: positions/points and sizes/scale to 0.5, rotation to 15°. */
     private ShapeState drag(RayModelIntersection.Ray ray, Camera camera) {
-        ShapeState result = dragUnsnapped(ray, camera);
+        ShapeState result = dragUnsnapped(ray);
         return result != null && InputHelper.isCtrlDownRaw() ? snapChanged(result) : result;
     }
 
@@ -831,7 +831,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         return positive ? Math.max(step, snapped) : snapped;
     }
 
-    private ShapeState dragUnsnapped(RayModelIntersection.Ray ray, Camera camera) {
+    private ShapeState dragUnsnapped(RayModelIntersection.Ray ray) {
         if (dragging.operation() == Operation.MOVE_FREE
                 || dragging.operation() == Operation.POINT && dragging.axis() == Axis.NONE) {
             Vec3 current = intersectPlane(ray, dragOrigin, dragPlaneNormal);
