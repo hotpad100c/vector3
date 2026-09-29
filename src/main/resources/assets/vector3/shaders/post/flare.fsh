@@ -25,9 +25,11 @@ float disc(vec2 uv, vec2 center, float radius) {
 void main() {
     vec4 scene = texture(InSampler, texCoord);
     float visibility = visibleSun() * Sun.z;
-    vec3 source = texture(InSampler, Sun.xy).rgb;
+    // The moon's disc isn't bright enough to gate on, so it flares in a fixed cool white.
+    bool moon = Sun.w > 0.5;
+    vec3 source = moon ? vec3(0.72, 0.82, 1.0) : texture(InSampler, Sun.xy).rgb;
     float brightness = max(max(source.r, source.g), source.b);
-    float activation = smoothstep(Flare.y, Flare.y + 0.12, brightness);
+    float activation = moon ? 1.0 : smoothstep(Flare.y, Flare.y + 0.12, brightness);
     if (visibility * activation < 0.001) { fragColor = scene; return; }
 
     vec2 sun = Sun.xy;

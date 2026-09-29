@@ -15,7 +15,9 @@ import ml.mypals.vectorthree.flashback.fade.effects.PixelationSettings;
 import ml.mypals.vectorthree.flashback.fade.effects.LensSettings;
 import ml.mypals.vectorthree.flashback.fade.effects.AdvancedGradingSettings;
 import ml.mypals.vectorthree.flashback.fade.effects.AdditionalEffects;
+import ml.mypals.vectorthree.flashback.fade.effects.BlurSettings;
 import ml.mypals.vectorthree.flashback.fade.effects.FlareSettings;
+import ml.mypals.vectorthree.flashback.fade.effects.GodRaysSettings;
 import ml.mypals.vectorthree.flashback.fade.effects.ExposureSettings;
 import ml.mypals.vectorthree.flashback.fade.effects.MotionBlurSettings;
 import ml.mypals.vectorthree.flashback.fade.effects.PaniniSettings;
@@ -79,7 +81,7 @@ public final class BuiltInChannels {
             for (Keyframe keyframe : keyframes) {
                 if (!(keyframe instanceof ml.mypals.vectorthree.flashback.custom.CustomKeyframe<?> custom)
                         || !(custom.value instanceof ScreenVFX value)) continue;
-                switch (value.effect()) {
+                for (String effect : value.effects()) switch (effect) {
                     case ScreenVFX.GRADE -> channels.addAll(List.of("exposure", "contrast", "saturation", "temperature",
                             "tint", "hue", "tonemap", "mixer_red", "mixer_green", "mixer_blue", "lift", "gamma", "gain"));
                     case ScreenVFX.BLOOM -> channels.addAll(List.of("bloom_intensity", "bloom_threshold", "bloom_soft_knee",
@@ -100,8 +102,10 @@ public final class BuiltInChannels {
                     case ScreenVFX.PANINI -> channels.addAll(PaniniSettings.CHANNELS);
                     case ScreenVFX.AO -> channels.addAll(OcclusionSettings.CHANNELS);
                     case ScreenVFX.SSR -> channels.addAll(ReflectionSettings.CHANNELS);
+                    case ScreenVFX.GOD_RAYS -> channels.addAll(GodRaysSettings.CHANNELS);
+                    case ScreenVFX.BLUR -> channels.addAll(BlurSettings.CHANNELS);
                     case ScreenVFX.FADE -> channels.addAll(List.of("colour", "opacity"));
-                    default -> channels.addAll(super.channels(keyframes));
+                    default -> { }
                 }
             }
             if (channels.contains("exposure")) {
@@ -159,6 +163,8 @@ public final class BuiltInChannels {
             for (String channel : PaniniSettings.CHANNELS) labels.put("vector3.panini." + channel.substring(7), channel);
             for (String channel : OcclusionSettings.CHANNELS) labels.put("vector3.ao." + channel.substring(3), channel);
             for (String channel : ReflectionSettings.CHANNELS) labels.put("vector3.ssr." + channel.substring(4), channel);
+            for (String channel : GodRaysSettings.CHANNELS) labels.put("vector3.rays." + channel.substring(5), channel);
+            for (String channel : BlurSettings.CHANNELS) labels.put("vector3.blur." + channel.substring(5), channel);
             return labels;
         }
 
@@ -209,6 +215,9 @@ public final class BuiltInChannels {
                 case "panini_distance", "panini_crop" -> "vector3.panini." + channel.substring(7);
                 case "ao_intensity", "ao_radius", "ao_bias", "ao_samples" -> "vector3.ao." + channel.substring(3);
                 case "ssr_intensity", "ssr_distance", "ssr_thickness", "ssr_steps" -> "vector3.ssr." + channel.substring(4);
+                case "blur_radius", "blur_amount", "blur_clear", "blur_feather" -> "vector3.blur." + channel.substring(5);
+                case "rays_intensity", "rays_length", "rays_decay", "rays_samples", "rays_tint", "rays_falloff",
+                        "rays_sky", "rays_bright", "rays_threshold" -> "vector3.rays." + channel.substring(5);
                 default -> "vector3.dof." + channel.substring(4);
             };
             return I18n.get(key);

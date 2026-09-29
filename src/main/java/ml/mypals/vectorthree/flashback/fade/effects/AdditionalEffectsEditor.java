@@ -31,6 +31,14 @@ public final class AdditionalEffectsEditor {
                 ReflectionSettings edited = ReflectionEditor.edit(value.ssr());
                 return edited == value.ssr() ? value : value.withSsr(edited);
             }
+            case ScreenVFX.GOD_RAYS -> {
+                GodRaysSettings edited = GodRaysEditor.edit(value.rays());
+                return edited == value.rays() ? value : value.withRays(edited);
+            }
+            case ScreenVFX.BLUR -> {
+                BlurSettings edited = BlurEditor.edit(value.blur());
+                return edited == value.blur() ? value : value.withBlur(edited);
+            }
             default -> { return value; }
         }
     }

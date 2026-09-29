@@ -46,17 +46,15 @@ public final class ScreenVFXRenderer {
     }
 
     private static boolean usesDepth(ScreenVFX value) {
-        return value.effect().equals(ScreenVFX.DOF) || value.effect().equals(ScreenVFX.FLARE)
-                || value.effect().equals(ScreenVFX.MOTION_BLUR)
-                || value.effect().equals(ScreenVFX.AO) || value.effect().equals(ScreenVFX.SSR)
-                || value.effect().equals(ScreenVFX.LEGACY) && value.dofStrength() > 0;
+        return value.has(ScreenVFX.DOF) || value.has(ScreenVFX.FLARE) || value.has(ScreenVFX.GOD_RAYS)
+                || value.has(ScreenVFX.MOTION_BLUR) || value.has(ScreenVFX.AO) || value.has(ScreenVFX.SSR);
     }
 
     public static void renderEffects() {
         try {
-            if (current.stream().noneMatch(value -> value.effect().equals(ScreenVFX.AUTO_EXPOSURE)))
+            if (current.stream().noneMatch(value -> value.has(ScreenVFX.AUTO_EXPOSURE)))
                 AutoExposureEffect.clear();
-            if (current.stream().noneMatch(value -> value.effect().equals(ScreenVFX.MOTION_BLUR)))
+            if (current.stream().noneMatch(value -> value.has(ScreenVFX.MOTION_BLUR)))
                 MotionBlurEffect.clear();
             render();
         } finally {
@@ -70,29 +68,29 @@ public final class ScreenVFXRenderer {
         if (main.width <= 0 || main.height <= 0) return;
         boolean overlay = Vector3.FOCUS_GIZMO.overlayActive() && !CameraPreview.isRendering();
         for (ScreenVFX value : current) {
-            switch (value.effect()) {
-                case ScreenVFX.GRADE -> ColorGradingEffect.render(main, value.grading());
-                case ScreenVFX.BLOOM -> BloomEffect.render(main, value.bloom());
-                case ScreenVFX.DOF -> DepthOfFieldEffect.render(main, value, overlay);
-                case ScreenVFX.VIGNETTE -> VignetteEffect.render(main, value);
-                case ScreenVFX.LUT -> LutEffect.render(main, value);
-                case ScreenVFX.GRAIN -> GrainEffect.render(main, value.grain());
-                case ScreenVFX.PIXELATION -> PixelationEffect.render(main, value.pixelation());
-                case ScreenVFX.LENS -> LensEffect.render(main, value.lens());
-                case ScreenVFX.FLARE -> FlareEffect.render(main, value.additional().flare());
-                case ScreenVFX.AUTO_EXPOSURE -> AutoExposureEffect.render(main, value.additional().exposure());
-                case ScreenVFX.MOTION_BLUR -> MotionBlurEffect.render(main, value.additional().motion());
-                case ScreenVFX.PANINI -> PaniniEffect.render(main, value.additional().panini());
-                case ScreenVFX.AO -> OcclusionEffect.render(main, value.additional().ao());
-                case ScreenVFX.SSR -> ReflectionEffect.render(main, value.additional().ssr());
-                case ScreenVFX.LEGACY -> {
-                    if (value.dofStrength() > 0) DepthOfFieldEffect.render(main, value, overlay);
-                    ColorGradingEffect.render(main, value.grading());
-                    VignetteEffect.render(main, value);
-                    LutEffect.render(main, value);
-                }
-                default -> { }
-            }
+            for (String effect : value.effects()) render(main, value, effect, overlay);
+        }
+    }
+
+    private static void render(RenderTarget main, ScreenVFX value, String effect, boolean overlay) {
+        switch (effect) {
+            case ScreenVFX.GRADE -> ColorGradingEffect.render(main, value.grading());
+            case ScreenVFX.BLOOM -> BloomEffect.render(main, value.bloom());
+            case ScreenVFX.DOF -> DepthOfFieldEffect.render(main, value, overlay);
+            case ScreenVFX.VIGNETTE -> VignetteEffect.render(main, value);
+            case ScreenVFX.LUT -> LutEffect.render(main, value);
+            case ScreenVFX.GRAIN -> GrainEffect.render(main, value.grain());
+            case ScreenVFX.PIXELATION -> PixelationEffect.render(main, value.pixelation());
+            case ScreenVFX.LENS -> LensEffect.render(main, value.lens());
+            case ScreenVFX.BLUR -> BlurEffect.render(main, value.additional().blur());
+            case ScreenVFX.FLARE -> FlareEffect.render(main, value.additional().flare());
+            case ScreenVFX.GOD_RAYS -> GodRaysEffect.render(main, value.additional().rays());
+            case ScreenVFX.AUTO_EXPOSURE -> AutoExposureEffect.render(main, value.additional().exposure());
+            case ScreenVFX.MOTION_BLUR -> MotionBlurEffect.render(main, value.additional().motion());
+            case ScreenVFX.PANINI -> PaniniEffect.render(main, value.additional().panini());
+            case ScreenVFX.AO -> OcclusionEffect.render(main, value.additional().ao());
+            case ScreenVFX.SSR -> ReflectionEffect.render(main, value.additional().ssr());
+            default -> { }
         }
     }
 
@@ -100,6 +98,6 @@ public final class ScreenVFXRenderer {
         if (detachesMainView()) return;
         RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
         for (ScreenVFX value : current)
-            if (value.applies(ScreenVFX.FADE)) FadeEffect.render(main, value);
+            if (value.has(ScreenVFX.FADE)) FadeEffect.render(main, value);
     }
 }

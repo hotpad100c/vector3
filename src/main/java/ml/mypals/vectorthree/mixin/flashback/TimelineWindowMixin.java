@@ -1948,8 +1948,7 @@ public abstract class TimelineWindowMixin {
         Keyframe keyframe = editorScene.keyframeTracks.get(trackIndex).keyframesByTick.get(tick);
         if (keyframe instanceof CustomKeyframe<?> custom && custom.type() == ScreenVFXKeyframeType.INSTANCE
                 && custom.value instanceof ScreenVFX value
-                && (value.effect().equals(ScreenVFX.DOF)
-                || value.effect().equals(ScreenVFX.LEGACY) && value.dofStrength() > 0)) {
+                && value.has(ScreenVFX.DOF)) {
             @SuppressWarnings("unchecked") CustomKeyframe<ScreenVFX> focus = (CustomKeyframe<ScreenVFX>) custom;
             Vector3.FOCUS_GIZMO.select(focus);
         } else Vector3.FOCUS_GIZMO.clearSelection();
