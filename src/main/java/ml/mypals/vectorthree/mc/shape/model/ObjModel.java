@@ -27,6 +27,8 @@ import java.util.Optional;
  * beside it.
  */
 final class ObjModel {
+    static final String ROOT = "root";
+
     /** A texture either on disk or in a resource pack. */
     record TextureRef(@Nullable Path file, @Nullable Identifier resource) {
         NativeImage read() throws IOException {
@@ -81,14 +83,30 @@ final class ObjModel {
 
     record Corner(int position, int uv, int normal) {}
 
-    /** Corners {@code [first, first + count)} use {@code material}. */
-    record Range(Material material, int first, int count) {}
+    /** Corners {@code [first, first + count)} use {@code material} and belong to part {@code part}. */
+    record Range(Material material, int first, int count, int part) {}
+
+    /** An {@code o} / {@code g} group: its parent part (-1 for none) and the centre of its own faces' bounds. */
+    record Part(String name, int parent, Vector3f center) {}
+
+    private record Group(Material material, int part) {}
+
+    private static final class PartBuilder {
+        final String name;
+        String parent;
+        final Vector3f min = new Vector3f(Float.MAX_VALUE), max = new Vector3f(-Float.MAX_VALUE);
+
+        PartBuilder(String name) {
+            this.name = name;
+        }
+    }
 
     final List<Vec3> positions = new ArrayList<>();
     final List<float[]> uvs = new ArrayList<>();
     final List<Vector3f> normals = new ArrayList<>();
     final List<Corner> corners = new ArrayList<>();
     final List<Range> ranges = new ArrayList<>();
+    final List<Part> parts = new ArrayList<>();
 
     private record Location(@Nullable Path file, @Nullable Identifier resource) {
         static Location of(String source) {
@@ -131,8 +149,13 @@ final class ObjModel {
         ObjModel model = new ObjModel();
         Location location = Location.of(source);
         Map<String, Material> materials = new LinkedHashMap<>();
-        Map<Material, List<Corner>> byMaterial = new LinkedHashMap<>();
-        List<Corner> current = byMaterial.computeIfAbsent(Material.DEFAULT, material -> new ArrayList<>());
+        Map<Group, List<Corner>> byGroup = new LinkedHashMap<>();
+        Map<String, PartBuilder> partMap = new LinkedHashMap<>();
+        partMap.put(ROOT, new PartBuilder(ROOT));
+        Material material = Material.DEFAULT;
+        int part = 0;
+        PartBuilder bounds = partMap.get(ROOT);
+        List<Corner> current = byGroup.computeIfAbsent(new Group(material, part), key -> new ArrayList<>());
         try (BufferedReader reader = reader(location)) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -147,8 +170,17 @@ final class ObjModel {
                     case "mtllib" -> {
                         for (int i = 1; i < parts.length; i++) readMaterials(location.sibling(parts[i]), materials);
                     }
-                    case "usemtl" -> current = byMaterial.computeIfAbsent(
-                            materials.getOrDefault(rest(line), Material.DEFAULT), material -> new ArrayList<>());
+                    case "usemtl" -> {
+                        material = materials.getOrDefault(rest(line), Material.DEFAULT);
+                        current = byGroup.computeIfAbsent(new Group(material, part), key -> new ArrayList<>());
+                    }
+                    case "o", "g" -> {
+                        String[] names = rest(line).split("\s+");
+                        if (names.length == 0 || names[0].isEmpty()) names = new String[]{ROOT};
+                        part = declare(partMap, names);
+                        bounds = new ArrayList<>(partMap.values()).get(part);
+                        current = byGroup.computeIfAbsent(new Group(material, part), key -> new ArrayList<>());
+                    }
                     case "f" -> {
                         if (parts.length < 4) continue;
                         Corner first = model.corner(parts[1]);
@@ -158,18 +190,50 @@ final class ObjModel {
                             current.add(first);
                             current.add(b);
                             current.add(c);
+                            for (Corner corner : new Corner[]{first, b, c}) {
+                                Vec3 at = model.positions.get(corner.position());
+                                bounds.min.min(new Vector3f((float) at.x, (float) at.y, (float) at.z));
+                                bounds.max.max(new Vector3f((float) at.x, (float) at.y, (float) at.z));
+                            }
                         }
                     }
                     default -> {}
                 }
             }
         }
-        for (Map.Entry<Material, List<Corner>> entry : byMaterial.entrySet()) {
+        for (Map.Entry<Group, List<Corner>> entry : byGroup.entrySet()) {
             if (entry.getValue().isEmpty()) continue;
-            model.ranges.add(new Range(entry.getKey(), model.corners.size(), entry.getValue().size()));
+            model.ranges.add(new Range(entry.getKey().material(), model.corners.size(), entry.getValue().size(),
+                    entry.getKey().part()));
             model.corners.addAll(entry.getValue());
         }
+        List<String> names = new ArrayList<>(partMap.keySet());
+        for (PartBuilder builder : partMap.values()) {
+            Vector3f center = builder.min.x > builder.max.x ? new Vector3f()
+                    : builder.min.add(builder.max, new Vector3f()).mul(0.5f);
+            model.parts.add(new Part(builder.name, builder.parent == null ? -1 : names.indexOf(builder.parent), center));
+        }
         return model;
+    }
+
+    // "g a b c" nests a > b > c, and "arm/hand" is "hand" under "arm". Returns the innermost part's index; the
+    // first parent given to a part stays.
+    private static int declare(Map<String, PartBuilder> parts, String[] names) {
+        String parent = null;
+        for (String group : names) {
+            String[] path = group.split("/");
+            StringBuilder full = new StringBuilder();
+            for (String segment : path) {
+                if (segment.isEmpty()) continue;
+                if (!full.isEmpty()) full.append('/');
+                String before = full.isEmpty() ? parent : full.toString();
+                full.append(segment);
+                PartBuilder builder = parts.computeIfAbsent(full.toString(), PartBuilder::new);
+                if (builder.parent == null && before != null && !before.equals(full.toString())) builder.parent = before;
+                parent = full.toString();
+            }
+        }
+        return parent == null ? 0 : new ArrayList<>(parts.keySet()).indexOf(parent);
     }
 
     // A missing or broken MTL only loses its materials; the geometry still loads. Many OBJs name an MTL they

@@ -5,6 +5,7 @@ import ml.mypals.vectorthree.mc.pose.EntityPoses;
 
 import ml.mypals.vectorthree.fb.Editors;
 import ml.mypals.vectorthree.mc.shape.entity.ShapeEntities;
+import ml.mypals.vectorthree.mc.shape.model.TexturedObjShape;
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImInt;
@@ -53,10 +54,13 @@ public final class EntityPoseKeyframeType extends CustomKeyframeType<EntityPose>
         if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.entity_pose.mode.tooltip"));
         if (edited.entity() == null) return edited;
 
+        TexturedObjShape obj = ShapeEntities.objShape(edited.entity());
         Entity entity = ShapeEntities.resolve(edited.entity());
-        Map<String, EntityPose.Limb> rest = EntityPoses.restPose(entity);
+        Map<String, EntityPose.Limb> rest = new LinkedHashMap<>();
+        if (obj != null) obj.partNames().forEach(name -> rest.put(name, EntityPose.Limb.NONE));
+        else rest.putAll(EntityPoses.restPose(entity));
 
-        Map<String, EntityPose.Limb> snapshot = EntityPoses.takeSnapshot(edited.entity());
+        Map<String, EntityPose.Limb> snapshot = obj != null ? null : EntityPoses.takeSnapshot(edited.entity());
         if (snapshot != null) {
             // Captured values are absolute; in additive mode the captured rotations start from zero instead.
             boolean zeroed = edited.mode() == EntityPose.Mode.ADDITIVE;
@@ -64,11 +68,13 @@ public final class EntityPoseKeyframeType extends CustomKeyframeType<EntityPose>
             snapshot.forEach((name, limb) -> captured.put(name, zeroed ? EntityPose.Limb.NONE.withRotate(true) : limb));
             edited = edited.withParts(captured);
         }
-        ImGui.beginDisabled(entity == null || EntityPoses.snapshotPending(edited.entity()));
-        if (ImGui.button(I18n.get("vector3.entity_pose.capture"))) EntityPoses.requestSnapshot(edited.entity());
-        ImGui.endDisabled();
-        if (ImGui.isItemHovered(imgui.moulberry90.flag.ImGuiHoveredFlags.AllowWhenDisabled)) {
-            ImGui.setTooltip(I18n.get(entity == null ? "vector3.entity_pose.not_loaded" : "vector3.entity_pose.capture.tooltip"));
+        if (obj == null) {
+            ImGui.beginDisabled(entity == null || EntityPoses.snapshotPending(edited.entity()));
+            if (ImGui.button(I18n.get("vector3.entity_pose.capture"))) EntityPoses.requestSnapshot(edited.entity());
+            ImGui.endDisabled();
+            if (ImGui.isItemHovered(imgui.moulberry90.flag.ImGuiHoveredFlags.AllowWhenDisabled)) {
+                ImGui.setTooltip(I18n.get(entity == null ? "vector3.entity_pose.not_loaded" : "vector3.entity_pose.capture.tooltip"));
+            }
         }
 
         // The entity's own parts when it is loaded; otherwise whatever the keyframe already has.

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import ml.mypals.vectorthree.mc.shape.model.TexturedObjShape;
 
 /**
  * Entity shapes either spawn their own entity or project one already in the world. Either way the shape has its own
@@ -51,7 +52,8 @@ public final class ShapeEntities {
     public static List<Entry> entries() {
         List<Entry> entries = new ArrayList<>();
         for (String shapeId : ShapeTrackRegistry.shapeIds()) {
-            if ("entity".equals(ShapeTrackRegistry.typeOf(shapeId))) entries.add(new Entry(shapeId, uuidOf(shapeId)));
+            String type = ShapeTrackRegistry.typeOf(shapeId);
+            if ("entity".equals(type) || "obj".equals(type)) entries.add(new Entry(shapeId, uuidOf(shapeId)));
         }
         return entries;
     }
@@ -60,6 +62,12 @@ public final class ShapeEntities {
         if (uuid == null) return null;
         for (Entry entry : entries()) if (entry.uuid().equals(uuid)) return entry.shapeId();
         return null;
+    }
+
+    /** The OBJ shape a pose keyframe's target UUID names, if it is one. */
+    public static @Nullable TexturedObjShape objShape(@Nullable UUID uuid) {
+        String shapeId = shapeOf(uuid);
+        return shapeId != null && ShapeTrackRegistry.shape(shapeId) instanceof TexturedObjShape obj ? obj : null;
     }
 
     /** A loaded world entity, or the entity an entity shape draws (its own, or the one it projects). */

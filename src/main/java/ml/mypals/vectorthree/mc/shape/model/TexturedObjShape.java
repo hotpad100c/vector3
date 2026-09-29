@@ -23,7 +23,11 @@ import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
 import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.transform.shapeTransformers.DefaultTransformer;
+import ml.mypals.vectorthree.core.pose.EntityPose;
+import ml.mypals.vectorthree.mc.camera.PreviewPass;
 import ml.mypals.vectorthree.mc.compat.IrisCompat;
+import ml.mypals.vectorthree.mc.pose.EntityPoses;
+import ml.mypals.vectorthree.mc.shape.entity.ShapeEntities;
 import ml.mypals.vectorthree.mc.render.IrisBypassTarget;
 import ml.mypals.vectorthree.mc.render.ScreenLayer;
 import ml.mypals.vectorthree.core.shape.ShapeState;
@@ -39,6 +43,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -51,9 +56,11 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.OptionalDouble;
 
 /**
@@ -69,6 +76,8 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     public static final String MODE = "vector3:obj_mode";
     public static final String TEXTURE = "vector3:obj_texture";
     public static final String LIGHTING = "vector3:obj_lighting";
+    /** Pivot overrides for posing: {@code part=x,y,z;part=x,y,z}. */
+    public static final String PIVOTS = "vector3:obj_pivots";
     private static final String DEFAULT_MODEL = "ryansrenderingkit:models/monkey.obj";
     private static final Identifier WHITE = Mod.id("obj/white");
     private record TextureKey(ObjModel.TextureRef texture, @Nullable ObjModel.TextureRef normal,
@@ -99,6 +108,8 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     private final Mode mode;
     private final @Nullable String texturePath;
     private final boolean lighting;
+    private final String shapeId;
+    private Map<String, Vector3f> pivots;
     private ObjModel model;
     private GpuBuffer gpuVertices;
     private GpuBuffer gpuIndices;
@@ -120,14 +131,57 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         return state.blockProperties() != null && "true".equals(state.blockProperties().get(LIGHTING));
     }
 
-    public TexturedObjShape(String modelPath, Mode mode, @Nullable String texturePath, boolean lighting, Color color,
-            boolean seeThrough) {
+    public static Map<String, Vector3f> pivots(@Nullable Map<String, String> properties) {
+        Map<String, Vector3f> result = new LinkedHashMap<>();
+        String text = properties == null ? null : properties.get(PIVOTS);
+        if (text == null) return result;
+        for (String entry : text.split(";")) {
+            int equals = entry.lastIndexOf('=');
+            String[] xyz = equals < 0 ? new String[0] : entry.substring(equals + 1).split(",");
+            if (xyz.length != 3) continue;
+            try {
+                result.put(entry.substring(0, equals), new Vector3f(Float.parseFloat(xyz[0]), Float.parseFloat(xyz[1]),
+                        Float.parseFloat(xyz[2])));
+            } catch (NumberFormatException ignored) {
+                // A malformed entry only loses that pivot.
+            }
+        }
+        return result;
+    }
+
+    public static String encodePivots(Map<String, Vector3f> pivots) {
+        StringBuilder text = new StringBuilder();
+        pivots.forEach((name, pivot) -> text.append(text.isEmpty() ? "" : ";").append(name).append('=')
+                .append(pivot.x).append(',').append(pivot.y).append(',').append(pivot.z));
+        return text.toString();
+    }
+
+    public void setPivots(Map<String, Vector3f> pivots) {
+        this.pivots = pivots;
+    }
+
+    public List<String> partNames() {
+        return model.parts.stream().map(ObjModel.Part::name).toList();
+    }
+
+    /** The part's pivot: the override if there is one, else the centre of its faces. */
+    public Vector3f pivotOf(String part) {
+        Vector3f override = pivots.get(part);
+        if (override != null) return new Vector3f(override);
+        for (ObjModel.Part candidate : model.parts) if (candidate.name().equals(part)) return new Vector3f(candidate.center());
+        return new Vector3f();
+    }
+
+    public TexturedObjShape(String shapeId, @Nullable Map<String, String> properties, String modelPath, Mode mode,
+            @Nullable String texturePath, boolean lighting, Color color, boolean seeThrough) {
         super(Shape.RenderingType.BATCH, color, seeThrough);
         this.transformer = new DefaultTransformer(this, Vec3.ZERO);
         this.transformFunction = transformer -> {};
         this.mode = mode;
         this.texturePath = texturePath;
         this.lighting = lighting;
+        this.shapeId = shapeId;
+        this.pivots = pivots(properties);
         String source = modelPath == null || modelPath.isBlank() ? DEFAULT_MODEL : modelPath;
         try {
             model = ObjModel.load(source);
@@ -267,7 +321,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
                 sequential.requestIndexCount(model.corners.size());
                 sequential.resizeToRequestedIndexCount();
             }
-            prepareDraws(new Matrix4f(RenderSystem.getModelViewMatrixCopy()));
+            prepareDraws(new Matrix4f(RenderSystem.getModelViewMatrixCopy()), true);
             PREPARED.add(this);
         } catch (Exception exception) {
             failed = true;
@@ -276,18 +330,79 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         }
     }
 
-    private void prepareDraws(Matrix4f base) {
+    private void prepareDraws(Matrix4f base, boolean publishFrames) {
         PoseStack poseStack = new PoseStack();
         beforeDraw(poseStack, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(true), true);
         Matrix4f pose = new Matrix4f(poseStack.last().pose());
-        Matrix4f modelView = base.mul(pose);
-        if (mode == Mode.MATERIALS) {
-            for (ObjModel.Range range : model.ranges)
-                addDraw(modelView, pose, range.material(), range.first(), range.count());
-        } else {
-            addDraw(modelView, pose, mode == Mode.TEXTURE ? chosenMaterial() : ObjModel.Material.DEFAULT, 0,
-                    model.corners.size());
+        Matrix4f[] world = partMatrices(pose, publishFrames);
+        ObjModel.Material chosen = mode == Mode.TEXTURE ? chosenMaterial() : ObjModel.Material.DEFAULT;
+        if (world == null && mode != Mode.MATERIALS) {
+            addDraw(new Matrix4f(base).mul(pose), pose, chosen, 0, model.corners.size());
+            return;
         }
+        for (ObjModel.Range range : model.ranges) {
+            Matrix4f partPose = world == null ? pose : new Matrix4f(pose).mul(world[range.part()]);
+            addDraw(new Matrix4f(base).mul(partPose), partPose, mode == Mode.MATERIALS ? range.material() : chosen,
+                    range.first(), range.count());
+        }
+    }
+
+    // Each part's matrix in model space, or null when nothing poses the shape. A part turns about its pivot (plus
+    // its offset) inside its parent's frame; the poses stack in track order like an entity's.
+    private @Nullable Matrix4f[] partMatrices(Matrix4f pose, boolean publishFrames) {
+        UUID uuid = ShapeEntities.uuidOf(shapeId);
+        List<EntityPose> poses = EntityPoses.get(uuid);
+        boolean watched = publishFrames && EntityPoses.isWatched(uuid) && !PreviewPass.isRendering()
+                && !IrisCompat.isRenderingShadowPass();
+        if (poses.isEmpty() && !watched) return null;
+        int count = model.parts.size();
+        Map<String, Integer> index = new HashMap<>();
+        for (int i = 0; i < count; i++) index.put(model.parts.get(i).name(), i);
+        float[][] rotation = new float[count][3], offset = new float[count][3];
+        for (EntityPose entityPose : poses) {
+            boolean absolute = entityPose.mode() == EntityPose.Mode.ABSOLUTE;
+            for (Map.Entry<String, EntityPose.Limb> entry : entityPose.parts().entrySet()) {
+                Integer at = index.get(entry.getKey());
+                if (at == null) continue;
+                EntityPose.Limb limb = entry.getValue();
+                if (limb.rotate()) {
+                    float[] target = {limb.xRot(), limb.yRot(), limb.zRot()};
+                    for (int k = 0; k < 3; k++) rotation[at][k] = absolute ? target[k] : rotation[at][k] + target[k];
+                }
+                if (limb.move()) {
+                    float[] target = {limb.x(), limb.y(), limb.z()};
+                    for (int k = 0; k < 3; k++) offset[at][k] = absolute ? target[k] : offset[at][k] + target[k];
+                }
+            }
+        }
+        Matrix4f[] world = new Matrix4f[count];
+        Map<String, EntityPoses.Frame> frames = watched ? new LinkedHashMap<>() : null;
+        Vec3 camera = Minecraft.getInstance().gameRenderer.mainCamera().position();
+        boolean[] visiting = new boolean[count];
+        for (int i = 0; i < count; i++) world(i, world, visiting, rotation, offset, pose, frames, camera);
+        if (watched) EntityPoses.publishFrames(uuid, frames);
+        return world;
+    }
+
+    private Matrix4f world(int i, Matrix4f[] world, boolean[] visiting, float[][] rotation, float[][] offset,
+            Matrix4f pose, @Nullable Map<String, EntityPoses.Frame> frames, Vec3 camera) {
+        if (world[i] != null) return world[i];
+        ObjModel.Part part = model.parts.get(i);
+        int parentIndex = part.parent();
+        visiting[i] = true;
+        Matrix4f parent = parentIndex < 0 || visiting[parentIndex] ? new Matrix4f()
+                : world(parentIndex, world, visiting, rotation, offset, pose, frames, camera);
+        visiting[i] = false;
+        Vector3f pivot = pivotOf(part.name());
+        float x = rotation[i][0] * Mth.DEG_TO_RAD, y = rotation[i][1] * Mth.DEG_TO_RAD, z = rotation[i][2] * Mth.DEG_TO_RAD;
+        world[i] = new Matrix4f(parent).translate(pivot.x + offset[i][0], pivot.y + offset[i][1], pivot.z + offset[i][2])
+                .rotateZYX(z, y, x).translate(-pivot.x, -pivot.y, -pivot.z);
+        if (frames != null) {
+            frames.put(part.name(), EntityPoses.frame(new Matrix4f(pose).mul(parent),
+                    new Vector3f(pivot.x + offset[i][0], pivot.y + offset[i][1], pivot.z + offset[i][2]),
+                    rotation[i], offset[i], camera));
+        }
+        return world[i];
     }
 
     private boolean onScreenLayer() {
@@ -300,7 +415,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         if (failed || gpuVertices == null || baseColor.getAlpha() == 0) return;
         try {
             frameEntity = false;
-            prepareDraws(ScreenLayer.basePose());
+            prepareDraws(ScreenLayer.basePose(), false);
             var target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "vector3_obj_screen",
                     target.getColorTextureView(), Optional.empty(), target.hasDepth() ? target.getDepthTextureView() : null,

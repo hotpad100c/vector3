@@ -84,6 +84,33 @@ public final class EntityPoses {
         watched = entity;
     }
 
+    public static boolean isWatched(UUID entity) {
+        return entity.equals(watched);
+    }
+
+    public static void publishFrames(UUID entity, Map<String, Frame> frames) {
+        if (entity.equals(watched)) watchedFrames = frames;
+    }
+
+    /**
+     * A part's frame for a model that is not a vanilla one: {@code parentMatrix} takes the part's parent space to
+     * camera-relative world, {@code pivot} is where the part turns (in that space), rotations in degrees, offsets in
+     * the parent's units.
+     */
+    public static Frame frame(Matrix4f parentMatrix, Vector3f pivot, float[] rotation, float[] offset, Vec3 camera) {
+        Vector3f at = parentMatrix.transformPosition(new Vector3f(pivot));
+        Quaternionf z = new Quaternionf().rotationZ(rotation[2] * Mth.DEG_TO_RAD);
+        Quaternionf zy = new Quaternionf(z).rotateY(rotation[1] * Mth.DEG_TO_RAD);
+        return new Frame(new Vec3(at.x + camera.x, at.y + camera.y, at.z + camera.z),
+                worldAxis(parentMatrix, zy.transform(new Vector3f(1, 0, 0))),
+                worldAxis(parentMatrix, z.transform(new Vector3f(0, 1, 0))),
+                worldAxis(parentMatrix, new Vector3f(0, 0, 1)),
+                parentMatrix.determinant3x3() < 0,
+                rotation[0], rotation[1], rotation[2],
+                worldStep(parentMatrix, 16, 0, 0), worldStep(parentMatrix, 0, 16, 0), worldStep(parentMatrix, 0, 0, 16),
+                offset[0], offset[1], offset[2]);
+    }
+
     public static Map<String, Frame> watchedFrames() {
         return watchedFrames;
     }

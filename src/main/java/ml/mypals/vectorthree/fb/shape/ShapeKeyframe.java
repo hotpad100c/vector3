@@ -273,6 +273,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         String objTexturePath = TexturedObjShape.texturePath(state);
         ImString objTexture = new ImString(objTexturePath == null ? "" : objTexturePath, 1024);
         ImBoolean objLighting = new ImBoolean(TexturedObjShape.lighting(state));
+        Map<String, org.joml.Vector3f> objPivots = TexturedObjShape.pivots(state.blockProperties());
         ImString imageFile = new ImString(state.shapeType().equals("image") && state.model() != null
                 ? state.model() : "", 1024);
         ImString videoFile = new ImString(state.shapeType().equals("video") && state.model() != null
@@ -423,6 +424,28 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                 }
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.obj_lighting"), objLighting);
                 if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.keyframe.obj_lighting.tooltip"));
+                if (!multi && ShapeTrackRegistry.shape(state.shapeId()) instanceof TexturedObjShape objShape
+                        && objShape.partNames().size() > 1 && ImGui.treeNode(I18n.get("vector3.keyframe.obj_pivots"))) {
+                    if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.keyframe.obj_pivots.tooltip"));
+                    for (String part : objShape.partNames()) {
+                        org.joml.Vector3f pivot = objShape.pivotOf(part);
+                        float[] xyz = {pivot.x, pivot.y, pivot.z};
+                        ImGui.pushID(part);
+                        if (ImGui.dragFloat3(part, xyz, 0.01f)) {
+                            objPivots.put(part, new org.joml.Vector3f(xyz[0], xyz[1], xyz[2]));
+                            changed = true;
+                        }
+                        if (objPivots.containsKey(part)) {
+                            ImGui.sameLine();
+                            if (ImGui.smallButton(I18n.get("vector3.keyframe.obj_pivot_reset"))) {
+                                objPivots.remove(part);
+                                changed = true;
+                            }
+                        }
+                        ImGui.popID();
+                    }
+                    ImGui.treePop();
+                }
             }
             case "image" -> {
                 changed |= ImGui.inputText(I18n.get("vector3.keyframe.image_file"), imageFile);
@@ -612,10 +635,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                     .withBlockProperties(selectedType[0].equals("entity")
                             ? (projectWorld[0] ? ShapeEntities.worldSource(projectedEntity[0]) : Map.of())
                             : selectedType[0].equals("block") ? blockProperties
-                            : selectedType[0].equals("obj") ? Map.of(
-                                    TexturedObjShape.MODE, TexturedObjShape.Mode.values()[objMode.get()].id,
-                                    TexturedObjShape.TEXTURE, objTexture.get(),
-                                    TexturedObjShape.LIGHTING, Boolean.toString(objLighting.get()))
+                            : selectedType[0].equals("obj") ? objProperties(objMode.get(), objTexture.get(),
+                                    objLighting.get(), objPivots)
                             : state.blockProperties())
                     .withParticle(selectedType[0].equals("particle") ? particle[0] : state.particle())
                     .withScreen(screen[0] && layerCapable)
@@ -674,5 +695,15 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
             ImGui.endCombo();
         }
         return changed;
+    }
+
+    private static Map<String, String> objProperties(int mode, String texture, boolean lighting,
+            Map<String, org.joml.Vector3f> pivots) {
+        Map<String, String> properties = new java.util.HashMap<>(Map.of(
+                TexturedObjShape.MODE, TexturedObjShape.Mode.values()[mode].id,
+                TexturedObjShape.TEXTURE, texture,
+                TexturedObjShape.LIGHTING, Boolean.toString(lighting)));
+        if (!pivots.isEmpty()) properties.put(TexturedObjShape.PIVOTS, TexturedObjShape.encodePivots(pivots));
+        return properties;
     }
 }
