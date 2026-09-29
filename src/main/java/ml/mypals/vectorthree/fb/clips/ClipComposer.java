@@ -1,7 +1,5 @@
 package ml.mypals.vectorthree.fb.clips;
 
-import ml.mypals.vectorthree.core.clips.ClipRef;
-
 import com.moulberry.flashback.io.ReplayCombiner;
 import net.minecraft.core.RegistryAccess;
 
@@ -10,58 +8,48 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.DoubleConsumer;
 
 /**
- * Builds a project's working replay from its clips: each clip is cut down to the Flashback chunks it touches, and
- * the cut archives are joined end to end with Flashback's own ReplayCombiner, which remaps the chunk caches.
+ * Grows a project's working replay: each new source is appended whole, with Flashback's own ReplayCombiner (which
+ * remaps the chunk caches). What is already in the working replay is never rebuilt, and nothing is cut, so clips can
+ * later be trimmed back out to their full source without composing again.
  */
 public final class ClipComposer {
     private ClipComposer() {}
 
-    /** Where each clip lands, worked out from the archives' metadata alone. */
-    public static List<ClipRef> layout(List<ClipRef> clips) throws IOException {
-        List<ClipRef> placed = new ArrayList<>(clips.size());
-        int position = 0;
-        for (ClipRef clip : clips) {
-            ReplayArchive.Info info = ReplayArchive.read(Path.of(clip.source()));
-            if (info == null) throw new IOException("Cannot read clip source " + clip.source());
-            int in = Math.clamp(clip.in(), 0, info.totalTicks()), out = Math.clamp(clip.out(), in, info.totalTicks());
-            // Composing cuts the chunks to exactly in..out, so nothing of the clip is left to skip.
-            int length = Math.max(1, out - in);
-            placed.add(clip.withRange(in, in + length).placed(position, in, length));
-            position += length;
+    /** Where each new source starts in the grown replay, in the order they are appended. */
+    public static Map<String, Integer> layout(int workingTicks, List<String> sources) throws IOException {
+        Map<String, Integer> starts = new LinkedHashMap<>();
+        int position = workingTicks;
+        for (String source : sources) {
+            if (starts.containsKey(source)) continue;
+            ReplayArchive.Info info = ReplayArchive.read(Path.of(source));
+            if (info == null) throw new IOException("Cannot read clip source " + source);
+            starts.put(source, position);
+            position += Math.max(1, info.totalTicks());
         }
-        return placed;
+        return starts;
     }
 
-    /** Writes the working replay for {@code clips} (already laid out) to {@code output}, keeping {@code id}. */
-    public static void compose(List<ClipRef> clips, UUID id, String name, Path output, RegistryAccess registries,
-            DoubleConsumer progress) throws Exception {
+    /** Writes {@code working} followed by {@code sources} to {@code output}, keeping {@code id}. */
+    public static void compose(Path working, List<String> sources, UUID id, String name, Path output,
+            RegistryAccess registries, DoubleConsumer progress) throws Exception {
         Path work = Files.createTempDirectory(output.getParent(), ".vector3_compose");
-        int steps = clips.size() * 2 - 1, done = 0;
+        List<String> unique = new ArrayList<>(new java.util.LinkedHashSet<>(sources));
         try {
-            Path joined = null;
-            for (int i = 0; i < clips.size(); i++) {
-                ClipRef clip = clips.get(i);
-                Path source = Path.of(clip.source());
-                ReplayArchive.Info info = ReplayArchive.read(source);
-                if (info == null) throw new IOException("Cannot read clip source " + clip.source());
-                Path cut = work.resolve("clip" + i + ".zip");
-                ReplayArchive.writeRange(source, ReplayArchive.span(info, clip.in(), clip.out()), clip.in(), clip.out(), cut);
-                progress.accept(++done / (double) steps);
-                if (joined == null) {
-                    joined = cut;
-                } else {
-                    Path next = work.resolve("joined" + i + ".zip");
-                    ReplayCombiner.combine(registries, name, joined, cut, next);
-                    joined = next;
-                    progress.accept(++done / (double) steps);
-                }
+            Path joined = working;
+            for (int i = 0; i < unique.size(); i++) {
+                Path next = work.resolve("joined" + i + ".zip");
+                ReplayCombiner.combine(registries, name, joined, Path.of(unique.get(i)), next);
+                joined = next;
+                progress.accept((i + 1) / (double) unique.size());
             }
-            if (joined == null) throw new IOException("A project needs at least one clip");
+            if (joined == working) throw new IOException("Nothing to append");
             ReplayArchive.editMeta(joined, meta -> {
                 meta.replayIdentifier = id;
                 meta.name = name;

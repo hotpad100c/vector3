@@ -292,6 +292,7 @@ public final class ShapeTimeline {
             Timeline.scene().push(copy.entry());
             Timeline.selected().clear();
             Timeline.selected().addAll(copy.selection());
+            GizmoMode.set(GizmoMode.MOVE);
         } else {
             EditorSceneHistoryEntry removal = ShapeCommands.delete(Timeline.scene(), shapes);
             if (removal == null) return;

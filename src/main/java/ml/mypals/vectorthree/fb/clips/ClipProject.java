@@ -19,12 +19,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
-import java.util.TreeMap;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * A replay becomes a project once it has a Clips track. Its working replay (the file that is open) is rebuilt from
@@ -165,19 +160,21 @@ public final class ClipProject {
     }
 
     /**
-     * Composes the clips in timeline order into a pending archive in the background, while the replay stays open.
-     * Once that is written the replay is left, swapped for the new archive and opened again. Other keyframes keep
-     * their ticks, so reordering clips never reshuffles them.
+     * Appends the sources of the clips that are not in the working replay yet, in the background while the replay
+     * stays open. Once the grown archive is written the replay is left, swapped for it and opened again. Clips
+     * already in the replay are never rebuilt (they are only edited on the timeline), and they keep their places.
      */
     public static void apply(EditorState editorState, EditorScene scene) throws IOException {
         Path working = openReplay;
         if (working == null || clipTrack(scene) == null || composing) return;
-        List<ClipRef> before = clips(scene);
-        if (before.isEmpty()) return;
-        List<Integer> ticks = new ArrayList<>(clipTrack(scene).keyframesByTick.keySet());
-        List<ClipRef> after = ClipComposer.layout(before);
+        List<String> sources = new ArrayList<>();
+        for (ClipRef clip : clips(scene)) if (!clip.composed()) sources.add(clip.source());
+        if (sources.isEmpty()) return;
         ReplayArchive.Info info = ReplayArchive.read(working);
         if (info == null) throw new IOException("Cannot read the open replay");
+        Map<String, Integer> starts = ClipComposer.layout(info.totalTicks(), sources);
+        Map<String, Integer> lengths = new HashMap<>();
+        for (String source : starts.keySet()) lengths.put(source, Math.max(1, ReplayArchive.read(Path.of(source)).totalTicks()));
         UUID id = info.meta().replayIdentifier;
         String name = info.meta().name;
         RegistryAccess registries = Minecraft.getInstance().level.registryAccess();
@@ -187,14 +184,14 @@ public final class ClipProject {
         Thread worker = new Thread(() -> {
             Exception failure = null;
             try {
-                ClipComposer.compose(after, id, name, pending, registries, value -> progress = value);
+                ClipComposer.compose(working, sources, id, name, pending, registries, value -> progress = value);
             } catch (Throwable throwable) {
                 failure = throwable instanceof Exception exception ? exception : new IOException(throwable);
                 Mod.LOGGER.error("Could not compose the clips into {}", working, throwable);
             }
             Exception error = failure;
             Minecraft.getInstance().execute(() -> {
-                if (error == null) swapIn(editorState, after, ticks, pending, working);
+                if (error == null) swapIn(editorState, starts, lengths, pending, working);
                 else failed(error, pending);
             });
         }, "vector3-clip-compose");
@@ -214,19 +211,22 @@ public final class ClipProject {
                 Component.translatable("vector3.clips.compose_failed"), Component.literal(String.valueOf(error.getMessage())));
     }
 
-    private static void swapIn(EditorState editorState, List<ClipRef> after, List<Integer> ticks, Path pending, Path working) {
+    private static void swapIn(EditorState editorState, Map<String, Integer> starts, Map<String, Integer> lengths,
+            Path pending, Path working) {
         long stamp = editorState.acquireWrite();
         try {
             EditorScene scene = editorState.getCurrentScene(stamp);
             KeyframeTrack track = clipTrack(scene);
             if (track != null) {
-                TreeMap<Integer, Keyframe> placed = new TreeMap<>();
-                // The archive is now the clips end to end, but each clip keeps its place (and the gaps) on the timeline.
-                for (int i = 0; i < after.size(); i++) {
-                    placed.put(ticks.get(i), new ClipKeyframeType.ClipKeyframe(after.get(i),
+                // The new sources now sit whole at the end of the archive; their clips keep their timeline places.
+                for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+                    if (!(entry.getValue() instanceof ClipKeyframeType.ClipKeyframe keyframe) || keyframe.value.composed()) continue;
+                    Integer start = starts.get(keyframe.value.source());
+                    if (start == null) continue;
+                    entry.setValue(new ClipKeyframeType.ClipKeyframe(
+                            keyframe.value.placed(start, 0, lengths.get(keyframe.value.source())),
                             com.moulberry.flashback.keyframe.interpolation.InterpolationType.LINEAR));
                 }
-                track.keyframesByTick = placed;
             }
             ((ClearableHistory) scene).vector3$clearHistory();
         } finally {

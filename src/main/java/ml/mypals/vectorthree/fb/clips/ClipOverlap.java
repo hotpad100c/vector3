@@ -24,17 +24,59 @@ public final class ClipOverlap {
         return Math.max(1, Math.round(keyframe.getCustomWidthInTicks()));
     }
 
-    /** Where the clips other than {@code anchors} (start ticks) must go so that none overlaps. */
+    /**
+     * Where the clips other than {@code anchors} (start ticks) must go so that none overlaps. A clip in the way goes
+     * to whichever side of the anchors its middle is on, and pushes the clips behind it along; if going left would
+     * pass the start of the timeline it goes right instead.
+     */
     public static List<Move> plan(KeyframeTrack track, Set<Integer> anchors) {
-        List<int[]> obstacles = new ArrayList<>();
+        List<int[]> fixed = new ArrayList<>();
         List<Map.Entry<Integer, Keyframe>> others = new ArrayList<>();
+        int low = Integer.MAX_VALUE, high = Integer.MIN_VALUE;
         for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
             if (!(entry.getValue() instanceof ClipKeyframeType.ClipKeyframe)) continue;
-            if (anchors.contains(entry.getKey())) obstacles.add(new int[]{entry.getKey(), entry.getKey() + length(entry.getValue())});
-            else others.add(entry);
+            if (anchors.contains(entry.getKey())) {
+                int end = entry.getKey() + length(entry.getValue());
+                fixed.add(new int[]{entry.getKey(), end});
+                low = Math.min(low, entry.getKey());
+                high = Math.max(high, end);
+            } else {
+                others.add(entry);
+            }
         }
         List<Move> moves = new ArrayList<>();
+        if (fixed.isEmpty()) return moves;
+        double middle = (low + high) / 2.0;
+        List<Map.Entry<Integer, Keyframe>> left = new ArrayList<>(), right = new ArrayList<>();
         for (Map.Entry<Integer, Keyframe> entry : others) {
+            (entry.getKey() + length(entry.getValue()) / 2.0 < middle ? left : right).add(entry);
+        }
+        List<int[]> obstacles = new ArrayList<>(fixed);
+        List<Map.Entry<Integer, Keyframe>> leftovers = new ArrayList<>();
+        for (int i = left.size() - 1; i >= 0; i--) {
+            Map.Entry<Integer, Keyframe> entry = left.get(i);
+            int length = length(entry.getValue()), position = entry.getKey();
+            boolean pushed = true;
+            while (pushed && position >= 0) {
+                pushed = false;
+                for (int[] obstacle : obstacles) {
+                    if (obstacle[0] < position + length && obstacle[1] > position) {
+                        position = obstacle[0] - length;
+                        pushed = true;
+                    }
+                }
+            }
+            if (position < 0) {
+                leftovers.add(entry);
+                continue;
+            }
+            obstacles.add(new int[]{position, position + length});
+            if (position != entry.getKey()) moves.add(new Move(entry.getKey(), position, entry.getValue()));
+        }
+        List<Map.Entry<Integer, Keyframe>> forward = new ArrayList<>(leftovers);
+        forward.addAll(right);
+        forward.sort(java.util.Comparator.comparingInt(Map.Entry::getKey));
+        for (Map.Entry<Integer, Keyframe> entry : forward) {
             int length = length(entry.getValue()), position = entry.getKey();
             boolean pushed = true;
             while (pushed) {

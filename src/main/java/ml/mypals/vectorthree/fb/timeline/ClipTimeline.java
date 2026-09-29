@@ -55,26 +55,67 @@ public final class ClipTimeline {
     }
     static int clipsEnd;
 
-    // Its start or end snaps onto the nearest other clip's boundary or the playhead.
+    static int snapGuide = -1;
+
+    // The dragged clips' outer edges snap onto the nearest edge of a clip that isn't being dragged, or the playhead.
     public static int snappedClipDelta(int delta, int pivot) {
-        if (pivot >= 0 || Timeline.selected().size() != 1) return delta;
-        SelectedKeyframes selected = Timeline.selected().getFirst();
-        if (selected.keyframeTicks().size() != 1) return delta;
-        if (selected.type() != ClipKeyframeType.INSTANCE) {
-            int tick = selected.keyframeTicks().iterator().nextInt();
-            int threshold = Math.max(1, Timeline.tickAt(12) - Timeline.tickAt(0));
-            int start = tick + delta, snapped = nearestBeat(start, tick);
-            return snapped != Integer.MIN_VALUE && Math.abs(snapped - start) <= threshold ? Math.max(-tick, snapped - tick) : delta;
-        }
-        int from = selected.keyframeTicks().iterator().nextInt();
-        if (!(Timeline.scene().keyframeTracks.get(selected.trackIndex()).keyframesByTick.get(from)
-                instanceof ClipKeyframeType.ClipKeyframe clip)) return delta;
+        snapGuide = -1;
+        if (pivot >= 0 || Timeline.selected().isEmpty()) return delta;
         int threshold = Math.max(1, Timeline.tickAt(12) - Timeline.tickAt(0));
-        int start = from + delta, length = clip.value.length();
-        int toStart = nearer(ClipProject.snap(Timeline.scene(), start, from), TimelineWindow.getCursorTick(), start) - start;
-        int toEnd = nearer(ClipProject.snap(Timeline.scene(), start + length, from), TimelineWindow.getCursorTick(), start + length) - (start + length);
-        int nudge = Math.abs(toStart) <= Math.abs(toEnd) ? toStart : toEnd;
-        return Math.abs(nudge) <= threshold ? Math.max(-from, delta + nudge) : delta;
+        java.util.Set<Integer> dragged = new java.util.HashSet<>();
+        int first = Integer.MAX_VALUE, last = Integer.MIN_VALUE;
+        for (SelectedKeyframes selected : Timeline.selected()) {
+            if (selected.type() != ClipKeyframeType.INSTANCE) continue;
+            KeyframeTrack track = Timeline.scene().keyframeTracks.get(selected.trackIndex());
+            for (int tick : selected.keyframeTicks()) {
+                if (!(track.keyframesByTick.get(tick) instanceof ClipKeyframeType.ClipKeyframe clip)) continue;
+                dragged.add(tick);
+                first = Math.min(first, tick);
+                last = Math.max(last, tick + clip.value.length());
+            }
+        }
+        if (dragged.isEmpty()) return beatSnap(delta, threshold);
+        java.util.List<Integer> targets = new java.util.ArrayList<>(java.util.List.of(0, TimelineWindow.getCursorTick()));
+        for (KeyframeTrack track : Timeline.scene().keyframeTracks) {
+            if (track.keyframeType != ClipKeyframeType.INSTANCE) continue;
+            for (java.util.Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+                if (dragged.contains(entry.getKey()) || !(entry.getValue() instanceof ClipKeyframeType.ClipKeyframe clip)) continue;
+                targets.add(entry.getKey());
+                targets.add(entry.getKey() + clip.value.length());
+            }
+        }
+        int best = 0, edge = -1;
+        boolean found = false;
+        for (int target : targets) {
+            for (int moving : new int[]{first + delta, last + delta}) {
+                int nudge = target - moving;
+                if (Math.abs(nudge) <= threshold && (!found || Math.abs(nudge) < Math.abs(best))) {
+                    best = nudge;
+                    edge = target;
+                    found = true;
+                }
+            }
+        }
+        if (!found) return delta;
+        snapGuide = edge;
+        return Math.max(-first, delta + best);
+    }
+
+    private static int beatSnap(int delta, int threshold) {
+        if (Timeline.selected().size() != 1 || Timeline.selected().getFirst().keyframeTicks().size() != 1) return delta;
+        int tick = Timeline.selected().getFirst().keyframeTicks().iterator().nextInt();
+        int start = tick + delta, snapped = nearestBeat(start, tick);
+        return snapped != Integer.MIN_VALUE && Math.abs(snapped - start) <= threshold ? Math.max(-tick, snapped - tick) : delta;
+    }
+
+    /** A line at the tick the dragged clips just snapped to. */
+    public static void drawSnapGuide() {
+        if (snapGuide < 0 || !ImGui.isMouseDown(0)) {
+            snapGuide = -1;
+            return;
+        }
+        float x = Timeline.x() + Timeline.xOf(snapGuide);
+        ImGui.getForegroundDrawList().addLine(x, Timeline.y(), x, Timeline.y() + Timeline.height(), 0xFF40D0FF, 2);
     }
 
     /** The timeline tick of the audio beat nearest {@code tick} (ignoring the audio keyframe at {@code ignore}), or MIN_VALUE. */
@@ -280,6 +321,7 @@ public final class ClipTimeline {
     }
 
     public static void handleClips() {
+        drawSnapGuide();
         // Ctrl+B cuts every clip and audio keyframe under the playhead.
         if (!ImGui.getIO().getWantTextInput() && ImGui.getIO().getKeyCtrl() && ImGui.isKeyPressed(ImGuiKey.B, false)) {
             int cursor = TimelineWindow.getCursorTick();
