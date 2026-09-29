@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.expression.lang;
 
+import java.util.List;
 import java.util.Locale;
 
 /** What an expression evaluates to: a number, text, a vector, or a handle with members (a track, an entity...). */
@@ -19,6 +20,15 @@ public sealed interface Value permits Value.Num, Value.Str, Value.Vec, Value.Obj
             throw new ExprError("cannot index " + describe());
         }
 
+        default Value call(String name, Value[] args) {
+            throw new ExprError(describe() + " has no " + name + "()");
+        }
+
+        /** Member names, for completion; methods end with "()". */
+        default List<String> members() {
+            return List.of();
+        }
+
         String describe();
     }
 
@@ -36,6 +46,16 @@ public sealed interface Value permits Value.Num, Value.Str, Value.Vec, Value.Obj
 
     static Str text(String value) {
         return new Str(value);
+    }
+
+    /** A short type name for editors: number, text, vec3, or what an object is. */
+    default String type() {
+        return switch (this) {
+            case Num ignored -> "number";
+            case Str ignored -> "text";
+            case Vec vec -> "vec" + vec.values.length;
+            case Obj obj -> obj.describe();
+        };
     }
 
     default double number() {

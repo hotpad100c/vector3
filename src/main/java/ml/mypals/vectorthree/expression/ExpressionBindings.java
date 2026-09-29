@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.expression;
 
 import com.moulberry.flashback.state.KeyframeTrack;
+import ml.mypals.vectorthree.expression.lang.Value;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -19,8 +20,9 @@ public final class ExpressionBindings {
     }
 
     /** {@code error} is null when it ran; {@code missing} when its widget wasn't in the editor this time. */
-    public record Status(@Nullable String error, int position, @Nullable String result, boolean missing) {
-        static final Status MISSING = new Status(null, -1, null, true);
+    public record Status(@Nullable String error, int position, @Nullable Value result, boolean missing,
+            Map<String, Value> lets, @Nullable Value own) {
+        static final Status MISSING = new Status(null, -1, null, true, Map.of(), null);
     }
 
     private static final Map<KeyframeTrack, Map<ExpressionBinding, Status>> STATUS = new WeakHashMap<>();

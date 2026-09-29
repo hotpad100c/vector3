@@ -19,5 +19,7 @@ public class EditorStateManagerMixin {
         Vector3.PREFABS.clear();
         Vector3.EDITOR_CAMERA.reset();
         ShapeTrackRegistry.clear();
+        ml.mypals.vectorthree.expression.ExpressionEditor.reset();
+        ml.mypals.vectorthree.expression.Globals.reset();
     }
 }

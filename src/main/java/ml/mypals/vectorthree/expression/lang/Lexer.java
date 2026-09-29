@@ -13,7 +13,7 @@ final class Lexer {
     }
 
     private static final String[] OPERATORS = {"==", "!=", "<=", ">=", "&&", "||",
-            "+", "-", "*", "/", "%", "^", "(", ")", "[", "]", ",", ".", "?", ":", "<", ">", "!"};
+            "+", "-", "*", "/", "%", "^", "(", ")", "[", "]", ",", ".", "?", ":", "<", ">", "!", "=", ";"};
 
     private Lexer() {}
 
@@ -24,6 +24,8 @@ final class Lexer {
             char c = source.charAt(i);
             if (Character.isWhitespace(c)) {
                 i++;
+            } else if (c == '/' && i + 1 < length && source.charAt(i + 1) == '/') {
+                while (i < length && source.charAt(i) != '\n') i++;
             } else if (Character.isDigit(c) || c == '.' && i + 1 < length && Character.isDigit(source.charAt(i + 1))) {
                 int start = i;
                 while (i < length && (Character.isDigit(source.charAt(i)) || source.charAt(i) == '.')) i++;

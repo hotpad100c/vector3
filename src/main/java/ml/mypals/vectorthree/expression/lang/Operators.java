@@ -79,6 +79,11 @@ final class Operators {
         };
     }
 
+    static Value call(Value target, String name, Value[] args) {
+        if (target instanceof Value.Obj obj) return obj.call(name, args);
+        throw new ExprError(target.text() + " has no " + name + "()");
+    }
+
     static int component(String name) {
         return switch (name) {
             case "x", "r" -> 0;

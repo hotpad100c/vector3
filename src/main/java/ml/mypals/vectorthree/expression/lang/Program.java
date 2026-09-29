@@ -1,28 +1,36 @@
 package ml.mypals.vectorthree.expression.lang;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
- * A compiled expression. Text parameters use templates instead: literal text with {expressions} in braces
- * ("Score: {round(time * 10)}"), where {{ and }} are literal braces.
+ * A compiled expression: {@code let name = ...;} statements, then the result. Text parameters use templates instead:
+ * literal text with {expressions} in braces ("Score: {round(time * 10)}"), where {{ and }} are literal braces; a let
+ * in one {...} can be used in the later ones, and a {...} of only lets shows nothing.
  */
 public final class Program {
     private final Parser.Expr expr;
     private final boolean usesValue;
+    private final Map<String, Integer> locals;
 
-    private Program(Parser.Expr expr, boolean usesValue) {
+    private Program(Parser.Expr expr, boolean usesValue, Map<String, Integer> locals) {
         this.expr = expr;
         this.usesValue = usesValue;
+        this.locals = locals;
     }
 
     public static Program expression(String source) {
-        Parser parser = Parser.of(source);
-        Parser.Expr expr = parser.parseAll();
-        return new Program(expr, parser.usesValue);
+        Map<String, Integer> locals = new LinkedHashMap<>();
+        Parser parser = Parser.of(source, locals);
+        Parser.Expr expr = parser.parseProgram(false);
+        return new Program(expr, parser.usesValue, locals);
     }
 
     public static Program template(String source) {
+        Map<String, Integer> locals = new LinkedHashMap<>();
         List<Parser.Expr> parts = new ArrayList<>();
         boolean usesValue = false;
         StringBuilder literal = new StringBuilder();
@@ -54,8 +62,8 @@ public final class Program {
             }
             int offset = i + 1;
             try {
-                Parser parser = Parser.of(source.substring(offset, end));
-                Parser.Expr inner = parser.parseAll();
+                Parser parser = Parser.of(source.substring(offset, end), locals);
+                Parser.Expr inner = parser.parseProgram(true);
                 usesValue |= parser.usesValue;
                 parts.add(scope -> {
                     try {
@@ -76,13 +84,13 @@ public final class Program {
         Parser.Expr[] all = parts.toArray(Parser.Expr[]::new);
         if (all.length == 1) {
             Parser.Expr only = all[0];
-            return new Program(scope -> Value.text(only.eval(scope).text()), usesValue);
+            return new Program(scope -> Value.text(only.eval(scope).text()), usesValue, locals);
         }
         return new Program(scope -> {
             StringBuilder builder = new StringBuilder();
             for (Parser.Expr part : all) builder.append(part.eval(scope).text());
             return Value.text(builder.toString());
-        }, usesValue);
+        }, usesValue, locals);
     }
 
     private static int closing(String source, int from) {
@@ -92,6 +100,8 @@ public final class Program {
             if (quote != 0) {
                 if (c == '\\') i++;
                 else if (c == quote) quote = 0;
+            } else if (c == '/' && i + 1 < source.length() && source.charAt(i + 1) == '/') {
+                while (i + 1 < source.length() && source.charAt(i + 1) != '\n') i++;
             } else if (c == '"' || c == '\'') {
                 quote = c;
             } else if (c == '}') {
@@ -102,7 +112,12 @@ public final class Program {
     }
 
     public Value eval(Scope scope) {
-        return expr.eval(scope);
+        return expr.eval(new Frame(scope, locals.size()));
+    }
+
+    /** The names its lets define, in order. */
+    public Set<String> locals() {
+        return locals.keySet();
     }
 
     public boolean usesValue() {

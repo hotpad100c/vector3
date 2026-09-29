@@ -91,6 +91,16 @@ public final class ExpressionRuntime {
         return ACTIVE.contains(track);
     }
 
+    /** What the track evaluates to at {@code tick} with its expressions left out. */
+    static @Nullable KeyframeChange withoutExpressions(KeyframeTrack track, float tick) {
+        if (!ACTIVE.add(track)) return track.createKeyframeChange(tick, null);
+        try {
+            return track.createKeyframeChange(tick, null);
+        } finally {
+            ACTIVE.remove(track);
+        }
+    }
+
     public static @Nullable ExprError check(String source, boolean template) {
         return compile(source, template).error();
     }
@@ -171,25 +181,35 @@ public final class ExpressionRuntime {
         for (ExpressionBinding binding : bindings) {
             Compiled compiled = compile(binding.source(), before instanceof String);
             if (compiled.error() != null) {
-                report(track, binding, compiled.error());
+                report(track, binding, compiled.error(), Map.of());
                 continue;
             }
+            Map<String, Value> lets = new java.util.HashMap<>();
+            Value own = own(before, binding.component());
             try {
-                Value result = compiled.program().eval(new TrackScope(tick, own(before, binding.component()), self));
+                Value result = compiled.program().eval(new TrackScope(tick, own, self, lets));
                 after = write(after, binding.component(), result);
-                ExpressionBindings.report(track, binding, new ExpressionBindings.Status(null, -1, result.text(), false));
+                ExpressionBindings.report(track, binding, new ExpressionBindings.Status(null, -1, result, false, lets, own));
                 wrote = true;
             } catch (ExprError error) {
-                report(track, binding, error);
+                report(track, binding, error, lets);
             } catch (StackOverflowError error) {
-                report(track, binding, new ExprError("too deeply nested"));
+                report(track, binding, new ExprError("too deeply nested"), lets);
             }
         }
         return wrote ? after : null;
     }
 
-    private static void report(KeyframeTrack track, ExpressionBinding binding, ExprError error) {
-        ExpressionBindings.report(track, binding, new ExpressionBindings.Status(error.getMessage(), error.position(), null, false));
+    private static void report(KeyframeTrack track, ExpressionBinding binding, ExprError error, Map<String, Value> lets) {
+        ExpressionBindings.report(track, binding,
+                new ExpressionBindings.Status(error.getMessage(), error.position(), null, false, lets, null));
+    }
+
+    /** The compiled program, cached; throws its parse error. */
+    static Program program(String source, boolean template) {
+        Compiled compiled = compile(source, template);
+        if (compiled.error() != null) throw compiled.error();
+        return compiled.program();
     }
 
     private static Compiled compile(String source, boolean template) {
@@ -273,7 +293,23 @@ public final class ExpressionRuntime {
         return value;
     }
 
-    private record TrackScope(float at, @Nullable Value own, References.@Nullable SelfRef driven) implements Scope {
+    private record TrackScope(float at, @Nullable Value own, References.@Nullable SelfRef driven,
+            Map<String, Value> lets) implements Scope {
+        @Override
+        public Value global(String name) {
+            return Globals.get(name, at);
+        }
+
+        @Override
+        public List<String> globalNames() {
+            return Globals.names();
+        }
+
+        @Override
+        public void let(String name, Value value) {
+            lets.put(name, value);
+        }
+
         @Override
         public double tick() {
             return at;

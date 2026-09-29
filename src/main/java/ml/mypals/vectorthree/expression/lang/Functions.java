@@ -126,7 +126,9 @@ public final class Functions {
         add("num", 1, 1, (scope, a) -> Value.of(a[0].number()));
 
         add("track", 1, 1, (scope, a) -> scope.track(a[0].text()));
-        add("entity", 1, 1, (scope, a) -> scope.entity(a[0].text()));
+        add("entity", 1, 1, (scope, a) -> a[0] instanceof Value.Obj obj && obj.describe().startsWith("entity")
+                ? obj : scope.entity(uuidText(a[0])));
+        add("uuid", 1, 1, (scope, a) -> Value.text(uuidText(a[0])));
     }
 
     private Functions() {}
@@ -145,6 +147,16 @@ public final class Functions {
 
     private static void math(String name, DoubleUnaryOperator op) {
         add(name, 1, 1, (scope, a) -> map(a[0], op));
+    }
+
+    /** Text as is; four ints (how saved data stores a UUID, e.g. nbt.leash.UUID) as the UUID they make. */
+    static String uuidText(Value value) {
+        if (!(value instanceof Value.Vec vec)) return value.text();
+        double[] v = vec.values();
+        if (v.length != 4) throw new ExprError("a UUID is text or 4 whole numbers, got a vector of " + v.length);
+        long most = ((long) (int) v[0] << 32) | ((int) v[1] & 0xFFFFFFFFL);
+        long least = ((long) (int) v[2] << 32) | ((int) v[3] & 0xFFFFFFFFL);
+        return new java.util.UUID(most, least).toString();
     }
 
     private static Value map(Value value, DoubleUnaryOperator op) {

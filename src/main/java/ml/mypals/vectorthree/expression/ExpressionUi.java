@@ -4,7 +4,7 @@ import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.state.KeyframeTrack;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImBoolean;
-import imgui.moulberry90.type.ImString;
+import ml.mypals.vectorthree.expression.editor.CodeEditor;
 import ml.mypals.vectorthree.expression.lang.ExprError;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.multiedit.MultiEditSession;
@@ -36,8 +36,6 @@ public final class ExpressionUi {
     private static boolean drawing;
     private static Map<String, List<ExpressionBinding>> byLabel = Map.of();
     private static final Map<String, Row> ROWS = new LinkedHashMap<>();
-    private static final Map<String, ImString> BUFFERS = new HashMap<>();
-    private static @Nullable KeyframeTrack buffersTrack;
 
     private ExpressionUi() {}
 
@@ -48,10 +46,6 @@ public final class ExpressionUi {
         changed = keyframesChanged;
         drawing = editing != null;
         ROWS.clear();
-        if (editing != buffersTrack) {
-            BUFFERS.clear();
-            buffersTrack = editing;
-        }
         refresh();
     }
 
@@ -62,14 +56,19 @@ public final class ExpressionUi {
         List<ExpressionBinding> all = ExpressionBindings.of(track);
         ImGui.separator();
         if (!ImGui.collapsingHeader(I18n.get("vector3.expression.list", all.size()) + "###vector3_expressions")) return;
+        if (ImGui.smallButton(I18n.get("vector3.expression.editor.tab.globals") + "...")) ExpressionEditor.openGlobals();
         for (ExpressionBinding binding : all) {
             ImGui.pushID("vector3_expression_list_" + binding.widget() + "_" + binding.component());
-            String label = shownLabel(WidgetKeys.label(binding.widget()));
-            ImGui.text(label + component(binding.component(), false));
+            String key = WidgetKeys.label(binding.widget());
+            Row row = ROWS.get(key);
+            boolean text = row != null && row.value() instanceof String, color = row != null && row.color();
+            ImGui.text(shownLabel(key) + component(binding.component(), color));
             ImGui.sameLine();
-            ImGui.textDisabled(binding.source().replace('\n', ' '));
+            float button = ImGui.getFrameHeight() + ImGui.getStyle().getItemSpacingX();
+            if (CodeEditor.preview("##source", binding.source(), text, -button)) open(track, binding, text, key, color);
+            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.expression.editor.open"));
             ImGui.sameLine();
-            if (ImGui.smallButton("x")) remove(binding);
+            if (ImGui.button("x", ImGui.getFrameHeight(), ImGui.getFrameHeight())) remove(binding);
             ImGui.popID();
         }
     }
@@ -116,20 +115,9 @@ public final class ExpressionUi {
         ImGui.textDisabled("fx" + component(binding.component(), color));
         if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get(text ? "vector3.expression.help_text" : "vector3.expression.help"));
         ImGui.sameLine();
-        ImString buffer = BUFFERS.computeIfAbsent(binding.widget() + "|" + binding.component(), ignored -> {
-            ImString created = new ImString(binding.source(), Math.max(256, binding.source().length() * 2));
-            created.inputData.isResizable = true;
-            return created;
-        });
         float buttons = ImGui.getFrameHeight() * 2 + ImGui.getStyle().getItemSpacingX() * 2;
-        boolean edited;
-        if (text) {
-            edited = ImGui.inputTextMultiline("##source", buffer, -buttons, ImGui.getTextLineHeight() * 3 + 8);
-        } else {
-            ImGui.setNextItemWidth(-buttons);
-            edited = ImGui.inputText("##source", buffer);
-        }
-        if (edited) replace(binding, binding.withSource(buffer.get()));
+        if (CodeEditor.preview("##source", binding.source(), text, -buttons)) open(current, binding, text, key, color);
+        if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.expression.editor.open"));
         ImGui.sameLine();
         ImBoolean enabled = new ImBoolean(binding.enabled());
         if (ImGui.checkbox("##enabled", enabled)) replace(binding, binding.withEnabled(enabled.get()));
@@ -140,6 +128,10 @@ public final class ExpressionUi {
         status(current, ExpressionBindings.find(current, binding.widget(), binding.component()), text);
         ImGui.unindent();
         ImGui.popID();
+    }
+
+    private static void open(KeyframeTrack current, ExpressionBinding binding, boolean text, String key, boolean color) {
+        ExpressionEditor.open(current, binding, text, shownLabel(key) + component(binding.component(), color));
     }
 
     private static void status(KeyframeTrack current, @Nullable ExpressionBinding binding, boolean text) {
@@ -160,7 +152,7 @@ public final class ExpressionUi {
         } else if (status.error() != null) {
             error(status.error(), status.position());
         } else if (status.result() != null) {
-            String result = status.result().replace('\n', ' ');
+            String result = status.result().text().replace('\n', ' ');
             ImGui.textDisabled("= " + (result.length() > 80 ? result.substring(0, 80) + "..." : result));
         }
     }
@@ -184,19 +176,19 @@ public final class ExpressionUi {
             if (ImGui.beginMenu(I18n.get("vector3.expression.add"))) {
                 if (ImGui.menuItem(I18n.get("vector3.expression.add_all"), "", false,
                         ExpressionBindings.find(track, widget, ExpressionBinding.ALL) == null)) {
-                    add(widget, ExpressionBinding.ALL, initial);
+                    add(key, row, widget, ExpressionBinding.ALL, initial);
                 }
                 for (int i = 0; i < size; i++) {
                     if (ImGui.menuItem(component(i, row.color()).substring(1), "", false,
                             ExpressionBindings.find(track, widget, i) == null)) {
-                        add(widget, i, initial);
+                        add(key, row, widget, i, initial);
                     }
                 }
                 ImGui.endMenu();
             }
         } else if (ImGui.menuItem(I18n.get("vector3.expression.add"), "", false,
                 ExpressionBindings.find(track, widget, ExpressionBinding.ALL) == null)) {
-            add(widget, ExpressionBinding.ALL, initial);
+            add(key, row, widget, ExpressionBinding.ALL, initial);
         }
         for (ExpressionBinding binding : ExpressionBindings.of(track)) {
             if (!binding.widget().equals(widget)) continue;
@@ -240,14 +232,15 @@ public final class ExpressionUi {
         return track.keyframeType.name();
     }
 
-    private static void add(String widget, int component, String source) {
+    private static void add(String key, Row row, String widget, int component, String source) {
         KeyframeTrack current = track;
         if (current == null) return;
         upgrade.run();
-        ExpressionBindings.put(current, widget, component, new ExpressionBinding(widget, component, source, true));
-        BUFFERS.remove(widget + "|" + component);
+        ExpressionBinding binding = new ExpressionBinding(widget, component, source, true);
+        ExpressionBindings.put(current, widget, component, binding);
         refresh();
         changed.run();
+        open(current, binding, row.value() instanceof String, key, row.color());
     }
 
     private static void replace(ExpressionBinding before, ExpressionBinding after) {
@@ -264,7 +257,6 @@ public final class ExpressionUi {
         if (current == null) return;
         upgrade.run();
         ExpressionBindings.put(current, binding.widget(), binding.component(), null);
-        BUFFERS.remove(binding.widget() + "|" + binding.component());
         refresh();
         changed.run();
     }

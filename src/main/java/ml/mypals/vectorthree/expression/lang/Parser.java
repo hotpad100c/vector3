@@ -5,6 +5,8 @@ import ml.mypals.vectorthree.expression.lang.Lexer.Token;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /** Recursive descent straight into closures. Names are resolved here, so unknown functions fail at parse time. */
 final class Parser {
@@ -12,24 +14,65 @@ final class Parser {
         Value eval(Scope scope);
     }
 
+    static final Set<String> RESERVED = Set.of("let", "pi", "e", "true", "false", "time", "tick", "value", "camera",
+            "self", "global");
+
     private final List<Token> tokens;
+    // Shared by the parts of a template, so a let in one {...} is visible in the later ones.
+    private final Map<String, Integer> locals;
     private int index;
     boolean usesValue;
 
-    private Parser(List<Token> tokens) {
+    private Parser(List<Token> tokens, Map<String, Integer> locals) {
         this.tokens = tokens;
+        this.locals = locals;
     }
 
-    static Parser of(String source) {
-        return new Parser(Lexer.tokenize(source));
+    static Parser of(String source, Map<String, Integer> locals) {
+        return new Parser(Lexer.tokenize(source), locals);
     }
 
-    Expr parseAll() {
-        if (peek().kind() == Kind.END) throw new ExprError("empty expression", 0);
-        Expr expr = ternary();
+    /**
+     * {@code let name = expression;} statements, then the result. With {@code allowEmpty} (a template's part) the
+     * result may be left out, and the part then only defines locals.
+     */
+    Expr parseProgram(boolean allowEmpty) {
+        List<Expr> statements = new ArrayList<>();
+        while (peek().kind() == Kind.IDENT && peek().text().equals("let")) {
+            next();
+            Token name = next();
+            if (name.kind() != Kind.IDENT) throw new ExprError("expected a name after let", name.position());
+            if (RESERVED.contains(name.text())) throw new ExprError(name.text() + " is a reserved name", name.position());
+            expect("=");
+            Expr init = ternary();
+            expect(";");
+            int slot = locals.computeIfAbsent(name.text(), key -> locals.size());
+            String local = name.text();
+            statements.add(scope -> {
+                Value value = init.eval(scope);
+                Frame.locals(scope)[slot] = value;
+                scope.let(local, value);
+                return value;
+            });
+        }
+        Expr result = null;
+        if (peek().kind() != Kind.END) {
+            result = ternary();
+        } else if (!allowEmpty) {
+            throw new ExprError(statements.isEmpty() ? "empty expression" : "missing the result after the lets", peek().position());
+        }
         Token rest = peek();
-        if (rest.kind() != Kind.END) throw new ExprError("unexpected '" + rest.text() + "'", rest.position());
-        return expr;
+        if (rest.kind() != Kind.END) {
+            throw new ExprError("unexpected '" + rest.text() + "'" + (rest.is("=") ? " (a let needs \"let name = ...;\")" : ""),
+                    rest.position());
+        }
+        if (statements.isEmpty() && result != null) return result;
+        Expr[] lets = statements.toArray(Expr[]::new);
+        Expr last = result;
+        return scope -> {
+            for (Expr let : lets) let.eval(scope);
+            return last == null ? Value.text("") : last.eval(scope);
+        };
     }
 
     private Token peek() {
@@ -163,7 +206,12 @@ final class Parser {
                 Token name = next();
                 if (name.kind() != Kind.IDENT) throw new ExprError("expected a name after '.'", name.position());
                 Expr target = expr;
-                expr = located(name.position(), scope -> Operators.member(target.eval(scope), name.text()));
+                if (accept("(")) {
+                    Expr[] args = arguments();
+                    expr = located(name.position(), scope -> Operators.call(target.eval(scope), name.text(), evaluate(args, scope)));
+                } else {
+                    expr = located(name.position(), scope -> Operators.member(target.eval(scope), name.text()));
+                }
             } else if (accept("[")) {
                 Expr target = expr, at = ternary();
                 expect("]");
@@ -216,7 +264,16 @@ final class Parser {
             }
             case "camera" -> { return located(token.position(), Scope::camera); }
             case "self" -> { return located(token.position(), Scope::self); }
+            case "global" -> { return GlobalsRef::new; }
             default -> {
+                Integer slot = locals.get(name);
+                if (slot != null) {
+                    return located(token.position(), scope -> {
+                        Value value = Frame.locals(scope)[slot];
+                        if (value == null) throw new ExprError(name + " is used before its let");
+                        return value;
+                    });
+                }
                 // A bare name is a track: Cube.position.y is track("Cube").position.y.
                 return located(token.position(), scope -> scope.track(name));
             }
@@ -227,22 +284,29 @@ final class Parser {
         Functions.Fn fn = Functions.get(name.text());
         if (fn == null) throw new ExprError("unknown function " + name.text() + "()", name.position());
         expect("(");
+        Expr[] compiled = arguments();
+        if (compiled.length < fn.min() || fn.max() >= 0 && compiled.length > fn.max()) {
+            String expected = fn.min() == fn.max() ? Integer.toString(fn.min())
+                    : fn.max() < 0 ? "at least " + fn.min() : fn.min() + " to " + fn.max();
+            throw new ExprError(name.text() + "() takes " + expected + " arguments, got " + compiled.length, name.position());
+        }
+        return located(name.position(), scope -> fn.body().call(scope, evaluate(compiled, scope)));
+    }
+
+    /** The arguments after an opening parenthesis, through the closing one. */
+    private Expr[] arguments() {
         List<Expr> args = new ArrayList<>();
         if (!peek().is(")")) {
             do args.add(ternary()); while (accept(","));
         }
         expect(")");
-        if (args.size() < fn.min() || fn.max() >= 0 && args.size() > fn.max()) {
-            String expected = fn.min() == fn.max() ? Integer.toString(fn.min())
-                    : fn.max() < 0 ? "at least " + fn.min() : fn.min() + " to " + fn.max();
-            throw new ExprError(name.text() + "() takes " + expected + " arguments, got " + args.size(), name.position());
-        }
-        Expr[] compiled = args.toArray(Expr[]::new);
-        return located(name.position(), scope -> {
-            Value[] values = new Value[compiled.length];
-            for (int i = 0; i < compiled.length; i++) values[i] = compiled[i].eval(scope);
-            return fn.body().call(scope, values);
-        });
+        return args.toArray(Expr[]::new);
+    }
+
+    private static Value[] evaluate(Expr[] args, Scope scope) {
+        Value[] values = new Value[args.length];
+        for (int i = 0; i < args.length; i++) values[i] = args[i].eval(scope);
+        return values;
     }
 
     private static Expr located(int position, Expr expr) {

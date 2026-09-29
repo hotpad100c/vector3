@@ -6,6 +6,10 @@ import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.EditorSceneHistoryEntry;
 import com.moulberry.flashback.state.KeyframeTrack;
+import ml.mypals.vectorthree.expression.GlobalVariable;
+import ml.mypals.vectorthree.expression.Globals;
+import ml.mypals.vectorthree.flashback.HistoryWindow;
+import ml.mypals.vectorthree.flashback.PlaybackRange;
 import ml.mypals.vectorthree.flashback.ShapeKeyframe;
 import ml.mypals.vectorthree.prefab.PrefabGroupStore;
 import ml.mypals.vectorthree.prefab.PrefabGroupHolder;
@@ -24,11 +28,17 @@ import java.util.function.Consumer;
 
 @Mixin(EditorScene.class)
 public class EditorSceneMixin implements PrefabGroupHolder.Scene, ClipProject.ClearableHistory,
-        ml.mypals.vectorthree.flashback.HistoryWindow.SceneHistory, ml.mypals.vectorthree.flashback.PlaybackRange.Holder {
+        HistoryWindow.SceneHistory, PlaybackRange.Holder,
+        Globals.Holder {
     @Final
     @Shadow public List<KeyframeTrack> keyframeTracks;
     @Unique private PrefabGroupStore vector3$prefabGroups;
     @Unique private boolean vector3$loopPlayback;
+    // Saved with the scene by Flashback's reflective Gson.
+    @Unique private GlobalVariable[] vector3$globals;
+
+    @Override public GlobalVariable[] vector3$globals() { return vector3$globals; }
+    @Override public void vector3$setGlobals(GlobalVariable[] globals) { vector3$globals = globals; }
     @Shadow @Final private EditorSceneHistory history;
 
     @Override

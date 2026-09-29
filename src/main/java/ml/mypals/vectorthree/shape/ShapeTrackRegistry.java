@@ -756,6 +756,12 @@ public final class ShapeTrackRegistry {
         rotation[2] = (float) Math.toDegrees(euler.z);
     }
 
+    /** Where a shape in this state sits in the world: its parent or mount, then its own position, rotation and scale. */
+    public static Matrix4f worldTransform(ShapeState state) {
+        return parentTransform(state).mul(localTransform(state.x(), state.y(), state.z(),
+                state.pitch(), state.yaw(), state.roll(), state.scaleX(), state.scaleY(), state.scaleZ()));
+    }
+
      public static Matrix4f worldTransformOrIdentity(String shapeId) {
         return worldTransform(shapeId, new java.util.HashSet<>());
     }

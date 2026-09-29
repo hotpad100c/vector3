@@ -1,10 +1,13 @@
 package ml.mypals.vectorthree.expression;
 
 import com.moulberry.flashback.state.EditorScene;
+import com.moulberry.flashback.state.EditorState;
+import com.moulberry.flashback.state.EditorStateManager;
 import com.moulberry.flashback.state.KeyframeTrack;
+import ml.mypals.vectorthree.expression.lang.Value;
+import ml.mypals.vectorthree.mixin.flashback.EditorStateAccessor;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -13,12 +16,12 @@ import java.util.Map;
 /** One pass of applying keyframes: the scene expressions can look tracks up in, and what they already read. */
 public final class EvalContext {
     private static final ArrayDeque<EvalContext> STACK = new ArrayDeque<>();
-    private static WeakReference<EditorScene> lastScene = new WeakReference<>(null);
 
     final float tick;
     @Nullable EditorScene scene;
-    final Map<KeyframeTrack, Map<String, Object>> captures = new IdentityHashMap<>();
+    final Map<KeyframeTrack, References.Snapshot> captures = new IdentityHashMap<>();
     final Map<String, KeyframeTrack> tracks = new HashMap<>();
+    final Map<String, Value> globals = new HashMap<>();
 
     private EvalContext(float tick) {
         this.tick = tick;
@@ -33,7 +36,6 @@ public final class EvalContext {
     }
 
     public static void scene(EditorScene scene) {
-        lastScene = new WeakReference<>(scene);
         EvalContext current = STACK.peek();
         if (current != null) current.scene = scene;
     }
@@ -42,8 +44,11 @@ public final class EvalContext {
         return STACK.peek();
     }
 
+    /** The scene being applied, else the open replay's (the export's while exporting); null with no replay open. */
     static @Nullable EditorScene currentScene() {
         EvalContext current = STACK.peek();
-        return current != null && current.scene != null ? current.scene : lastScene.get();
+        if (current != null && current.scene != null) return current.scene;
+        EditorState state = EditorStateManager.getCurrent();
+        return state == null ? null : ((EditorStateAccessor) state).vector3$currentScene();
     }
 }

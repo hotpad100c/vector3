@@ -80,6 +80,7 @@
 		"flashback.KeyframeTrackRepeatMixin",
 		"flashback.KeyframeTrackExpressionMixin",
 		"flashback.EditorStateExpressionMixin",
+		"flashback.EditorStateAccessor",
 		"flashback.KeyframeTrackShakeMixin",
 		"flashback.KeyframeTypeAdapterMixin",
 		"flashback.MainMenuBarMixin",

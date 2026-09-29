@@ -1,5 +1,7 @@
 package ml.mypals.vectorthree.expression.lang;
 
+import java.util.List;
+
 /** Where an expression runs: the time, the parameter's own keyframed value, and the other things it can read. */
 public interface Scope {
     double tick();
@@ -15,6 +17,18 @@ public interface Scope {
     /** The parameters of the track being driven, before its expressions. */
     default Value self() {
         throw new ExprError("self is not available here");
+    }
+
+    default Value global(String name) {
+        throw new ExprError("there are no global variables here");
+    }
+
+    default List<String> globalNames() {
+        return List.of();
+    }
+
+    /** Called when a let binds {@code name}, so editors can show what each local held. */
+    default void let(String name, Value value) {
     }
 
     /** A scope with only a time, for tests and previews. */

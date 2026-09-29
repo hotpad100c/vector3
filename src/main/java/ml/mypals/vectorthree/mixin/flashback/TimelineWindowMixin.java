@@ -10,6 +10,7 @@ import ml.mypals.vectorthree.flashback.channel.ChannelRows;
 import ml.mypals.vectorthree.flashback.channel.ChannelSpec;
 import ml.mypals.vectorthree.flashback.channel.Channels;
 import ml.mypals.vectorthree.expression.ExpressionBindings;
+import ml.mypals.vectorthree.expression.ExpressionEditor;
 import ml.mypals.vectorthree.expression.ExpressionUi;
 import com.moulberry.flashback.keyframe.types.AudioKeyframeType;
 import ml.mypals.vectorthree.clips.Trimming;
@@ -1507,6 +1508,7 @@ public abstract class TimelineWindowMixin {
         ml.mypals.vectorthree.flashback.HelpWindow.render();
         ml.mypals.vectorthree.flashback.HistoryWindow.render();
         ml.mypals.vectorthree.flashback.TrackManagerWindow.render();
+        ExpressionEditor.render();
         Vector3.PREFABS.renderPanel();
         if (ShapeTimelineSelection.consumeRefresh()) vector3$refreshKeyframes = true;
         if (editorState == null) return;
