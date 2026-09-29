@@ -19,6 +19,7 @@ import ml.mypals.vectorthree.fb.channel.Channels;
 import ml.mypals.vectorthree.fb.curve.SpeedCurveEditor;
 import ml.mypals.vectorthree.fb.curve.SpeedCurves;
 import ml.mypals.vectorthree.fb.editor.PropertiesWindow;
+import ml.mypals.vectorthree.fb.editor.PropertyFilter;
 import ml.mypals.vectorthree.fb.expression.ExpressionUi;
 import ml.mypals.vectorthree.fb.multiedit.MultiEditSession;
 import ml.mypals.vectorthree.fb.multiedit.MultiPropertiesPage;
@@ -83,6 +84,7 @@ public final class PropertiesPanel {
             renderCurvePage();
             return;
         }
+        PropertyFilter.draw();
         PropertySelection.beginFrame(java.util.Objects.hash(Timeline.selected(), Timeline.editingTrack(), Timeline.editingTick()));
         if (MultiSelection.count(Timeline.selected()) > 1) {
             ExpressionUi.begin(null, () -> {}, () -> {});
@@ -99,7 +101,7 @@ public final class PropertiesPanel {
             }
             ExpressionUi.begin(channelTrack != null && channelTrack.keyframesByTick.containsKey(Timeline.editingTick()) ? channelTrack : null,
                     () -> Timeline.upgradeToSceneWrite(), () -> Timeline.keyframesChanged());
-            MultiEditSession.display("single", List.of(), key -> true, false, () -> original.run());
+            MultiEditSession.display("single", List.of(), PropertyFilter::matches, false, () -> original.run());
             if (channelButtons) {
                 ImGui.popItemWidth();
                 ChannelTimeline.channelButtons(channelTrack, ChannelRows.end());

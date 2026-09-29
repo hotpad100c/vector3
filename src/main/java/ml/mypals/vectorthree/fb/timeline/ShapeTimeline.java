@@ -78,6 +78,7 @@ public final class ShapeTimeline {
         Editors.POSE_GIZMO.frame();
         shapeShortcuts();
         Editors.GIZMO_EDITOR.frame();
+        ml.mypals.vectorthree.fb.camera.MotionPaths.frame();
         TrackTimeline.handlePrefabs();
         if (ShapeManagerWindow.isEditorMode()) Editors.EDITOR_CAMERA.frame();
         followPlayhead();

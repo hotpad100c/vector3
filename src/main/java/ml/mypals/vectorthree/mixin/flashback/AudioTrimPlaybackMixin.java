@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.moulberry.flashback.keyframe.change.KeyframeChangePlayAudio;
 import com.moulberry.flashback.keyframe.impl.AudioKeyframe;
 import com.moulberry.flashback.keyframe.types.AudioKeyframeType;
+import ml.mypals.vectorthree.core.clips.AudioEnvelope;
 import ml.mypals.vectorthree.core.clips.AudioLevel;
 import ml.mypals.vectorthree.core.clips.AudioTrim;
 import org.spongepowered.asm.mixin.Mixin;
@@ -21,7 +22,12 @@ public class AudioTrimPlaybackMixin {
         float media = seconds * level.vector3$pitch();
         if (trim.vector3$audioLength() >= 0 && media * 20 >= trim.vector3$audioLength()) return null;
         KeyframeChangePlayAudio change = original.call(keyframe, startTick, media + trim.vector3$audioIn() / 20f);
-        if (change != null) ((AudioLevel) change).vector3$setLevel(level.vector3$volume(), level.vector3$pitch());
+        if (change != null) {
+            AudioEnvelope envelope = (AudioEnvelope) keyframe;
+            float gain = AudioEnvelope.gain(envelope.vector3$fadeIn(), envelope.vector3$fadeOut(), seconds * 20,
+                    keyframe.getCustomWidthInTicks());
+            ((AudioLevel) change).vector3$setLevel(level.vector3$volume() * gain, level.vector3$pitch());
+        }
         return change;
     }
 }

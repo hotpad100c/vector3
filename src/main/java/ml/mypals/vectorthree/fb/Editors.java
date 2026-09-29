@@ -27,6 +27,7 @@ public final class Editors {
         FOCUS_GIZMO.clear();
         POSE_GIZMO.clear();
         PREFABS.clear();
+        ml.mypals.vectorthree.fb.camera.MotionPaths.clear();
         EDITOR_CAMERA.reset();
     }
 }

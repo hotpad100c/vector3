@@ -93,7 +93,8 @@ public final class MultiPropertiesPage {
         ImGui.pushID("vector3_multi_section_" + section);
         MultiEditSession.Change change;
         try {
-            change = MultiEditSession.display("section" + section, captures, shown, true,
+            change = MultiEditSession.display("section" + section, captures,
+                    key -> shown.test(key) && ml.mypals.vectorthree.fb.editor.PropertyFilter.matches(key), true,
                     () -> primary.working.renderEditKeyframe(primary.update()));
         } finally {
             ImGui.popID();

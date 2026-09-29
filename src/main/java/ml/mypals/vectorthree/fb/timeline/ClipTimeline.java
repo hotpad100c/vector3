@@ -1,5 +1,8 @@
 package ml.mypals.vectorthree.fb.timeline;
 
+import ml.mypals.vectorthree.core.clips.AudioEnvelope;
+import ml.mypals.vectorthree.core.clips.AudioLevel;
+import ml.mypals.vectorthree.core.clips.AudioTrim;
 import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
 import com.moulberry.flashback.keyframe.Keyframe;
@@ -54,7 +57,13 @@ public final class ClipTimeline {
     public static int snappedClipDelta(int delta, int pivot) {
         if (pivot >= 0 || Timeline.selected().size() != 1) return delta;
         SelectedKeyframes selected = Timeline.selected().getFirst();
-        if (selected.type() != ClipKeyframeType.INSTANCE || selected.keyframeTicks().size() != 1) return delta;
+        if (selected.keyframeTicks().size() != 1) return delta;
+        if (selected.type() != ClipKeyframeType.INSTANCE) {
+            int tick = selected.keyframeTicks().iterator().nextInt();
+            int threshold = Math.max(1, Timeline.tickAt(12) - Timeline.tickAt(0));
+            int start = tick + delta, snapped = nearestBeat(start, tick);
+            return snapped != Integer.MIN_VALUE && Math.abs(snapped - start) <= threshold ? Math.max(-tick, snapped - tick) : delta;
+        }
         int from = selected.keyframeTicks().iterator().nextInt();
         if (!(Timeline.scene().keyframeTracks.get(selected.trackIndex()).keyframesByTick.get(from)
                 instanceof ClipKeyframeType.ClipKeyframe clip)) return delta;
@@ -64,6 +73,26 @@ public final class ClipTimeline {
         int toEnd = nearer(ClipProject.snap(Timeline.scene(), start + length, from), TimelineWindow.getCursorTick(), start + length) - (start + length);
         int nudge = Math.abs(toStart) <= Math.abs(toEnd) ? toStart : toEnd;
         return Math.abs(nudge) <= threshold ? Math.max(-from, delta + nudge) : delta;
+    }
+
+    /** The timeline tick of the audio beat nearest {@code tick} (ignoring the audio keyframe at {@code ignore}), or MIN_VALUE. */
+    public static int nearestBeat(int tick, int ignore) {
+        int best = Integer.MIN_VALUE;
+        for (KeyframeTrack track : Timeline.scene().keyframeTracks) {
+            if (track.keyframeType != AudioKeyframeType.INSTANCE) continue;
+            for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
+                if (entry.getKey() == ignore || !(entry.getValue() instanceof AudioEnvelope envelope)) continue;
+                AudioTrim trim = (AudioTrim) entry.getValue();
+                float pitch = ((AudioLevel) entry.getValue()).vector3$pitch();
+                for (int beat : envelope.vector3$beats()) {
+                    if (beat < trim.vector3$audioIn() || trim.vector3$audioLength() >= 0
+                            && beat > trim.vector3$audioIn() + trim.vector3$audioLength()) continue;
+                    int at = entry.getKey() + Math.round((beat - trim.vector3$audioIn()) / pitch);
+                    if (best == Integer.MIN_VALUE || Math.abs(at - tick) < Math.abs(best - tick)) best = at;
+                }
+            }
+        }
+        return best;
     }
 
     public static int nearer(int a, int b, int tick) {
@@ -145,6 +174,10 @@ public final class ClipTimeline {
             for (int boundary : new int[]{entry.getKey(), entry.getKey() + Math.round(width)}) {
                 if (Math.abs(boundary - tick) < Math.abs(best - tick)) best = boundary;
             }
+        }
+        if (track.keyframeType == AudioKeyframeType.INSTANCE) {
+            int beat = nearestBeat(tick, ignore);
+            if (beat != Integer.MIN_VALUE && Math.abs(beat - tick) < Math.abs(best - tick)) best = beat;
         }
         return nearer(best, TimelineWindow.getCursorTick(), tick);
     }

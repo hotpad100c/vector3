@@ -46,6 +46,7 @@ public class MainMenuBarMixin {
         PrefabBasketWindow.renderMenuItem();
         ClipsWindow.renderMenuItem();
         CameraPreview.renderMenuItem();
+        ml.mypals.vectorthree.fb.camera.MotionPaths.renderMenu();
         ImGui.separator();
         ml.mypals.vectorthree.fb.editor.PacketCompat.renderMenuItem();
         HistoryWindow.renderMenuItem();
