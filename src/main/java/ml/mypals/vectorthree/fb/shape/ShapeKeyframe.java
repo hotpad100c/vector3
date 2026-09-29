@@ -27,6 +27,7 @@ import ml.mypals.vectorthree.core.shape.blast.BlastSettings;
 import ml.mypals.vectorthree.mc.shape.entity.ShapeEntities;
 import ml.mypals.vectorthree.core.shape.particle.ParticleSettings;
 import ml.mypals.vectorthree.mc.text.SdfFont;
+import ml.mypals.vectorthree.core.shape.text.TextAnimation;
 import ml.mypals.vectorthree.core.shape.text.TextSettings;
 import ml.mypals.vectorthree.mc.shape.media.VideoShape;
 import ml.mypals.vectorthree.mc.shape.model.TexturedObjShape;
@@ -259,6 +260,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         float[] glowStrength = {currentText.glowStrengthOrDefault()};
         float[] glowSpread = {currentText.glowSpreadOrDefault()};
         float[] outlineWidth = {currentText.outlineWidthOrDefault()};
+        int[] inAnimation = {currentText.inStyle().ordinal()};
+        int[] outAnimation = {currentText.outStyle().ordinal()};
         ImBoolean glowFollowsText = new ImBoolean(currentText.glowColor() == null);
         int glowArgb = currentText.glowColor() == null ? state.color() : currentText.glowColor();
         float[] glowColor = {((glowArgb >>> 16) & 255) / 255.0f, ((glowArgb >>> 8) & 255) / 255.0f,
@@ -356,6 +359,10 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
             case "text" -> {
                 changed |= ImGui.inputTextMultiline(I18n.get("vector3.keyframe.text"), textValue, 420, 100);
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.hold_text"), holdText);
+                if (!holdText.get()) {
+                    changed |= animationCombo(I18n.get("vector3.keyframe.text_in"), inAnimation);
+                    changed |= animationCombo(I18n.get("vector3.keyframe.text_out"), outAnimation);
+                }
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.shadow"), textShadow);
                 changed |= ImGui.checkbox(I18n.get("vector3.keyframe.outline"), textOutline);
                 if (textOutline.get()) {
@@ -574,7 +581,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                                     glowStrength[0], glowFollowsText.get() ? null
                                             : (Math.round(glowColor[3] * 255) << 24) | (Math.round(glowColor[0] * 255) << 16)
                                             | (Math.round(glowColor[1] * 255) << 8) | Math.round(glowColor[2] * 255),
-                                    glowSpread[0], outlineWidth[0])
+                                    glowSpread[0], outlineWidth[0],
+                                    TextAnimation.values()[inAnimation[0]].id(), TextAnimation.values()[outAnimation[0]].id())
                             : state.text(),
                     parentId[0],
                     seeThrough.get(), visible.get(), outline.get(), outlineArgb, playAudio.get(),
@@ -651,5 +659,20 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
 
     private static <T extends Comparable<T>> List<String> propertyValues(Property<T> property) {
         return property.getPossibleValues().stream().map(property::getName).toList();
+    }
+
+    private static boolean animationCombo(String label, int[] selected) {
+        boolean changed = false;
+        if (ImGui.beginCombo(label, I18n.get("vector3.text_animation." + TextAnimation.values()[selected[0]].id()))) {
+            for (TextAnimation animation : TextAnimation.values()) {
+                if (ImGui.selectable(I18n.get("vector3.text_animation." + animation.id()) + "##" + label,
+                        animation.ordinal() == selected[0])) {
+                    selected[0] = animation.ordinal();
+                    changed = true;
+                }
+            }
+            ImGui.endCombo();
+        }
+        return changed;
     }
 }

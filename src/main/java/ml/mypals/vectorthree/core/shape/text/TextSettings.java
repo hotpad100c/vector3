@@ -2,7 +2,8 @@ package ml.mypals.vectorthree.core.shape.text;
 
 public record TextSettings(String value, boolean holdText, boolean shadow,
         boolean outline, String billboard, String font,
-        boolean glow, boolean outlineGlow, Float glowStrength, Integer glowColor, Float glowSpread, Float outlineWidth) {
+        boolean glow, boolean outlineGlow, Float glowStrength, Integer glowColor, Float glowSpread, Float outlineWidth,
+        String inAnimation, String outAnimation) {
     public static final float DEFAULT_GLOW_STRENGTH = 1.5f;
     public static final float MAX_GLOW_STRENGTH = 63 / 8f;
     public static final float DEFAULT_GLOW_SPREAD = 1.5f;
@@ -12,7 +13,7 @@ public record TextSettings(String value, boolean holdText, boolean shadow,
     public static final float MAX_OUTLINE_WIDTH = 4f;
 
     public TextSettings(String value, boolean holdText, boolean shadow, boolean outline, String billboard, String font) {
-        this(value, holdText, shadow, outline, billboard, font, false, false, null, null, null, null);
+        this(value, holdText, shadow, outline, billboard, font, false, false, null, null, null, null, null, null);
     }
 
     public static TextSettings defaults() {
@@ -21,14 +22,18 @@ public record TextSettings(String value, boolean holdText, boolean shadow,
 
     public TextSettings withValue(String value) {
         return new TextSettings(value, holdText, shadow, outline, billboard, fontOrDefault(),
-                glow, outlineGlow, glowStrength, glowColor, glowSpread, outlineWidth);
+                glow, outlineGlow, glowStrength, glowColor, glowSpread, outlineWidth, inAnimation, outAnimation);
     }
 
     private TextSettings withGlow(boolean glow, boolean outlineGlow, Float glowStrength, Integer glowColor, Float glowSpread,
             Float outlineWidth) {
         return new TextSettings(value, holdText, shadow, outline, billboard, font, glow, outlineGlow, glowStrength,
-                glowColor, glowSpread, outlineWidth);
+                glowColor, glowSpread, outlineWidth, inAnimation, outAnimation);
     }
+
+    public TextAnimation inStyle() { return TextAnimation.of(inAnimation); }
+
+    public TextAnimation outStyle() { return TextAnimation.of(outAnimation); }
 
     public String fontOrDefault() { return font == null || font.isBlank() ? "minecraft:default" : font; }
 
@@ -57,15 +62,15 @@ public record TextSettings(String value, boolean holdText, boolean shadow,
                 .withGlow(to.glow, to.outlineGlow, strength, glowColor, spread, outlineWidth);
 
         int common = sharedPrefixLength(from.value, to.value);
-        int erase = visibleLength(from.value) - common;
-        int type = visibleLength(to.value) - common;
+        int erase = TextAnimation.length(from.value) - common;
+        int type = TextAnimation.length(to.value) - common;
         int steps = (int) Math.floor((erase + type) * Math.clamp(amount, 0.0, 1.0));
-        String value = steps <= erase
-                ? visiblePrefix(from.value, common + erase - steps)
-                : visiblePrefix(to.value, common + steps - erase);
+        String value = steps == 0 ? from.value
+                : steps <= erase ? from.outStyle().frame(from.value, common, erase - steps)
+                : steps - erase >= type ? to.value : to.inStyle().frame(to.value, common, steps - erase);
         return new TextSettings(value, to.holdText, to.shadow, to.outline, to.billboard,
                 amount >= 1.0 ? to.fontOrDefault() : from.fontOrDefault(), to.glow, to.outlineGlow, strength, glowColor, spread,
-                outlineWidth);
+                outlineWidth, to.inAnimation, to.outAnimation);
     }
 
     private static int lerpArgb(int from, int to, double amount) {
@@ -101,33 +106,5 @@ public record TextSettings(String value, boolean holdText, boolean shadow,
             index += 2;
         }
         return index;
-    }
-
-    private static int visibleLength(String text) {
-        int count = 0;
-        for (int i = 0; i < text.length();) {
-            if (text.charAt(i) == '§' && i + 1 < text.length()) { i += 2; continue; }
-            int codePoint = text.codePointAt(i);
-            i += Character.charCount(codePoint);
-            count++;
-        }
-        return count;
-    }
-
-    private static String visiblePrefix(String text, int count) {
-        StringBuilder result = new StringBuilder();
-        int visible = 0;
-        for (int i = 0; i < text.length() && visible < count;) {
-            if (text.charAt(i) == '§' && i + 1 < text.length()) {
-                result.append(text, i, i + 2);
-                i += 2;
-                continue;
-            }
-            int codePoint = text.codePointAt(i);
-            result.appendCodePoint(codePoint);
-            i += Character.charCount(codePoint);
-            visible++;
-        }
-        return result.toString();
     }
 }

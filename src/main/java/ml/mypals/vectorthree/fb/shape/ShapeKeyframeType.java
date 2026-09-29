@@ -86,7 +86,9 @@ public final class ShapeKeyframeType extends CustomKeyframeType<ShapeState> {
         if (state.shapeType().equals("text")) {
             if (text == null) text = TextSettings.defaults();
             else if (text.font() == null) text = new TextSettings(text.value(), text.holdText(),
-                    text.shadow(), text.outline(), text.billboard(), "minecraft:default");
+                    text.shadow(), text.outline(), text.billboard(), "minecraft:default", text.glow(), text.outlineGlow(),
+                    text.glowStrength(), text.glowColor(), text.glowSpread(), text.outlineWidth(),
+                    text.inAnimation(), text.outAnimation());
         }
         return new ShapeState(state.shapeType(), state.shapeId(), state.x(), state.y(), state.z(),
                 state.pitch(), state.yaw(), state.roll(), state.scaleX(), state.scaleY(), state.scaleZ(),
