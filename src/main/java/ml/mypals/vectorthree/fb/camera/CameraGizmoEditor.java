@@ -12,6 +12,7 @@ import ml.mypals.ryansrenderingkit.shape.line.LineShape;
 import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.fb.shape.GizmoMode;
+import ml.mypals.vectorthree.fb.shape.GizmoTypedInput;
 import ml.mypals.vectorthree.fb.shape.ShapeGizmoEditor;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -134,7 +135,10 @@ public final class CameraGizmoEditor {
     }
 
     public void frame() {
-        if (!ReplayUI.isActive() || keyframe == null) return;
+        if (!ReplayUI.isActive() || keyframe == null) {
+            typedInput.frame(false, null);
+            return;
+        }
         if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
             if (preview != null) commit.accept(preview);
@@ -144,6 +148,7 @@ public final class CameraGizmoEditor {
             return;
         }
 
+        typedInput.frame(ShapeGizmoEditor.mouseInViewport(), dragging == null ? typedTarget : null);
         Pose pose = preview != null ? preview : Pose.of(keyframe);
         ensureShapes();
         layout(pose);
@@ -349,4 +354,54 @@ public final class CameraGizmoEditor {
         return new Vector3f((float) Math.toDegrees(euler.x), (float) Math.toDegrees(euler.y),
                 (float) Math.toDegrees(euler.z));
     }
+
+    private final GizmoTypedInput typedInput = new GizmoTypedInput();
+    private Pose typedStart;
+
+    private final GizmoTypedInput.Target typedTarget = new GizmoTypedInput.Target() {
+        @Override public Object identity() { return keyframe; }
+
+        @Override
+        public void begin() {
+            typedStart = preview != null ? preview : Pose.of(keyframe);
+        }
+
+        @Override
+        public void preview(GizmoMode mode, GizmoTypedInput.Axis axis, double value) {
+            Pose start = typedStart;
+            if (axis == GizmoTypedInput.Axis.NONE || mode == GizmoMode.SCALE) return;
+            Pose result;
+            if (mode == GizmoMode.MOVE) {
+                Vector3d position = new Vector3d(start.position());
+                switch (axis) {
+                    case X -> position.x += value;
+                    case Y -> position.y += value;
+                    default -> position.z += value;
+                }
+                result = start.with(position, start.yaw(), start.pitch(), start.roll());
+            } else {
+                // X turns the pitch, Y the yaw and Z the roll, like the rings.
+                result = switch (axis) {
+                    case X -> start.with(start.position(), start.yaw(),
+                            (float) Math.clamp(start.pitch() + value, -90, 90), start.roll());
+                    case Y -> start.with(start.position(), (float) (start.yaw() + value), start.pitch(), start.roll());
+                    default -> start.with(start.position(), start.yaw(), start.pitch(), (float) (start.roll() + value));
+                };
+            }
+            preview = result;
+            layout(result);
+        }
+
+        @Override
+        public void restore() {
+            preview = null;
+            layout(Pose.of(keyframe));
+        }
+
+        @Override
+        public void commit() {
+            if (preview != null) commit.accept(preview);
+            preview = null;
+        }
+    };
 }

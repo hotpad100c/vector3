@@ -133,6 +133,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         }
 
         boolean inViewport = mouseInViewport();
+        typedValue(inViewport);
         Camera camera = minecraft.gameRenderer.mainCamera();
         RayModelIntersection.Ray ray;
         if (isScreenSpace()) {
@@ -1074,5 +1075,79 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 .mul(new Matrix4f(ReplayUI.lastProjectionMatrix).invert());
         return ReplayUI.getMouseLookVectorFromForwards(
                 new Vec3(projected.x, -projected.y, projected.z).normalize());
+    }
+
+    private final GizmoTypedInput typedInput = new GizmoTypedInput();
+    private ShapeState typedStart;
+    private Map<GroupTransform.Member, ShapeState> typedGroupStart;
+
+    private void typedValue(boolean inViewport) {
+        boolean editing = dragging == null && !isScreenSpace() && (grouped() || keyframe != null);
+        typedInput.frame(inViewport, editing ? typedTarget : null);
+    }
+
+    private final GizmoTypedInput.Target typedTarget = new GizmoTypedInput.Target() {
+        @Override public Object identity() { return grouped() ? group : keyframe; }
+
+        @Override
+        public void begin() {
+            typedStart = keyframe == null ? null : keyframe.value;
+            typedGroupStart = grouped() ? currentGroupStates() : null;
+        }
+
+        @Override
+        public void preview(GizmoMode mode, GizmoTypedInput.Axis axis, double value) {
+            if (typedGroupStart != null) {
+                Vec3 pivot = groupPivot();
+                Map<GroupTransform.Member, ShapeState> states = transformGroup(typedGroupStart,
+                        start -> typedTransform(start, pivot, mode, axis, value));
+                groupPreview = states;
+                previewState = states.get(group.getFirst());
+                previewGroup(states);
+            } else if (typedStart != null) {
+                previewState = typedTransform(typedStart, center(typedStart), mode, axis, value);
+                ShapeTrackRegistry.apply(previewState);
+            }
+            refreshTyped();
+        }
+
+        @Override
+        public void restore() {
+            if (typedGroupStart != null) previewGroup(typedGroupStart);
+            else if (typedStart != null) ShapeTrackRegistry.apply(typedStart);
+            groupPreview = null;
+            previewState = null;
+            refreshTyped();
+        }
+
+        @Override
+        public void commit() {
+            if (groupPreview != null) groupCommit.accept(groupPreview);
+            else if (previewState != null) commit.accept(previewState);
+            groupPreview = null;
+            previewState = null;
+        }
+    };
+
+    private void refreshTyped() {
+        ShapeState shown = previewState != null ? previewState : typedStart;
+        if (shown == null) return;
+        updateHandles(shown);
+        updateAabbMarker(shown);
+        updateAreaSelectionMarker(shown);
+        if (typedGroupStart != null) updateGroupMarkers();
+    }
+
+    private ShapeState typedTransform(ShapeState start, Vec3 pivot, GizmoMode mode, GizmoTypedInput.Axis typed, double value) {
+        Axis axis = Axis.valueOf(typed.name());
+        int index = index(axis);
+        Vec3 worldAxis = axis == Axis.NONE ? null : axis(axis);
+        return switch (mode) {
+            case MOVE -> axis == Axis.NONE ? start : GroupTransform.move(start,
+                    (localSpace ? localAxis(start, axis) : worldAxis).scale(value));
+            case ROTATE -> axis == Axis.NONE ? start : GroupTransform.rotate(start, pivot, worldAxis, index, value, localSpace);
+            case SCALE -> GroupTransform.scale(start, pivot, worldAxis, index, Math.max(0.001, value), localSpace);
+            default -> start;
+        };
     }
 }

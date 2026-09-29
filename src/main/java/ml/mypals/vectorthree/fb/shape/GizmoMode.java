@@ -11,6 +11,7 @@ public enum GizmoMode {
     MOVE, ROTATE, SCALE, GEOMETRY;
 
     private static GizmoMode current = MOVE;
+    private static GizmoMode pressedNow;
     private static final Set<Integer> held = new HashSet<>();
 
     public static GizmoMode current() {
@@ -27,9 +28,16 @@ public enum GizmoMode {
         boolean scale = pressed(InputConstants.KEY_B);
         boolean rotate = pressed(InputConstants.KEY_R);
         boolean geometry = pressed(InputConstants.KEY_M);
+        pressedNow = null;
         if (blocked || ImGui.getIO().getWantTextInput() || ImGui.isAnyItemActive()) return;
         GizmoMode requested = move ? MOVE : scale ? SCALE : rotate ? ROTATE : geometry ? GEOMETRY : null;
+        pressedNow = requested;
         if (requested != null) current = requested;
+    }
+
+    /** The mode key pressed this frame (G, B or R starts a typed value like G X 5), or null. */
+    public static GizmoMode pressedThisFrame() {
+        return pressedNow;
     }
 
     private static boolean pressed(int key) {

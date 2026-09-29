@@ -26,11 +26,11 @@ import java.util.function.Consumer;
 public class EditorSceneHistoryMixin implements ClipProject.ResettableHistory, ml.mypals.vectorthree.fb.editor.HistoryWindow.HistoryView, PrefabHistory.Store {
     @Shadow @Final private List<EditorSceneHistoryEntry> entries;
     @Shadow private int position;
-    @Unique private int vector3$positionBefore;
-    @Unique private int vector3$lastActiveId;
-    @Unique private double vector3$lastPressTime;
-    @Unique private String vector3$lastDescription;
-    @Unique private final Map<EditorSceneHistoryEntry, PrefabHistory.Change> vector3$changes = new IdentityHashMap<>();
+    @Unique private transient int vector3$positionBefore;
+    @Unique private transient int vector3$lastActiveId;
+    @Unique private transient double vector3$lastPressTime;
+    @Unique private transient String vector3$lastDescription;
+    @Unique private transient final Map<EditorSceneHistoryEntry, PrefabHistory.Change> vector3$changes = new IdentityHashMap<>();
 
     /*
      * Keyframe edits pushed while one widget stays held down (dragging a value) become a single step: the first

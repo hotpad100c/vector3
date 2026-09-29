@@ -69,6 +69,10 @@ public final class ShapeTimeline {
         TrackManagement.useScene(Timeline.scene());
         // Gizmos draw with the see-through managers even when no shape was ever applied.
         ShapeTrackRegistry.fixSeeThroughPipelines();
+        // A text field keeps the keyboard until something else takes it; a click in the viewport should.
+        if ((ImGui.isMouseClicked(0) || ImGui.isMouseClicked(1) || ImGui.isMouseClicked(2)) && ShapeGizmoEditor.mouseInViewport()) {
+            imgui.moulberry90.internal.ImGui.clearActiveID();
+        }
         GizmoMode.pollShortcuts(Editors.ORBIT_GIZMO.isDragging() || Editors.CAMERA_GIZMO.isDragging()
                 || Editors.POSE_GIZMO.isDragging() || Editors.GIZMO_EDITOR.isDragging() || Editors.PREFABS.isDragging());
         Editors.ORBIT_GIZMO.frame();

@@ -13,6 +13,7 @@ import ml.mypals.ryansrenderingkit.shape.model.ObjModelShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.fb.custom.CustomKeyframe;
 import ml.mypals.vectorthree.fb.shape.GizmoMode;
+import ml.mypals.vectorthree.fb.shape.GizmoTypedInput;
 import ml.mypals.vectorthree.fb.shape.ShapeGizmoEditor;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -154,6 +155,7 @@ public final class PoseGizmoEditor {
             return;
         }
         if (part != null && !frames.containsKey(part)) part = null;
+        typedInput.frame(ShapeGizmoEditor.mouseInViewport(), dragging == null && part != null ? typedTarget : null);
         if (markers.size() != frames.size()) rebuildMarkers();
         layout(frames);
 
@@ -388,5 +390,59 @@ public final class PoseGizmoEditor {
     private static Vector3f eulerDegrees(Quaternionf rotation) {
         Vector3f euler = rotation.getEulerAnglesXYZ(new Vector3f());
         return new Vector3f((float) Math.toDegrees(euler.x), (float) Math.toDegrees(euler.y), (float) Math.toDegrees(euler.z));
+    }
+
+    private final GizmoTypedInput typedInput = new GizmoTypedInput();
+
+    private final GizmoTypedInput.Target typedTarget = new GizmoTypedInput.Target() {
+        @Override public Object identity() { return keyframe; }
+
+        @Override public void begin() {}
+
+        @Override
+        public void preview(GizmoMode mode, GizmoTypedInput.Axis axis, double value) {
+            EntityPoses.Frame frame = part == null ? null : frames.get(part);
+            if (frame == null || axis == GizmoTypedInput.Axis.NONE || mode == GizmoMode.SCALE) return;
+            // The value is added to what the part has when typing starts, like a drag.
+            if (mode == GizmoMode.MOVE) {
+                EntityPose start = enabledOffset(keyframe.value, frame);
+                EntityPose.Limb limb = start.parts().get(part);
+                float x = limb.x(), y = limb.y(), z = limb.z();
+                switch (axis) {
+                    case X -> x += (float) value;
+                    case Y -> y += (float) value;
+                    default -> z += (float) value;
+                }
+                show(start.withPart(part, limb.withOffset(x, y, z)));
+            } else {
+                EntityPose start = enabledPart(keyframe.value, frame);
+                EntityPose.Limb limb = start.parts().get(part);
+                float x = limb.xRot(), y = limb.yRot(), z = limb.zRot();
+                switch (axis) {
+                    case X -> x += (float) value;
+                    case Y -> y += (float) value;
+                    default -> z += (float) value;
+                }
+                show(start.withPart(part, limb.withRotation(x, y, z)));
+            }
+        }
+
+        @Override
+        public void restore() {
+            EntityPoses.clearPreview(entity());
+            preview = null;
+        }
+
+        @Override
+        public void commit() {
+            if (preview != null) commit.accept(preview);
+            EntityPoses.clearPreview(entity());
+            preview = null;
+        }
+    };
+
+    private void show(EntityPose replacement) {
+        preview = replacement;
+        EntityPoses.preview(replacement.entity(), keyframe.value, replacement);
     }
 }
