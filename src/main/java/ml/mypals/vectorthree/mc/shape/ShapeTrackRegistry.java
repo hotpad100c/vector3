@@ -267,6 +267,7 @@ public final class ShapeTrackRegistry {
         SHAPES.clear();
         SHAPE_TYPES.clear();
         LAST_STATES.clear();
+        PARTICLE_GIZMO_WORLD.clear();
         previewHighlightId = null;
         ImageShape.clearTextures();
         TexturedObjShape.clearTextures();
@@ -339,6 +340,11 @@ public final class ShapeTrackRegistry {
         shape.forceSetWorldPosition(new Vec3(state.x(), state.y(), state.z()));
         shape.forceSetWorldRotation(new Vector3f(state.pitch(), state.yaw(), state.roll()));
         shape.forceSetWorldScale(new Vec3(state.scaleX(), state.scaleY(), state.scaleZ()));
+        if (state.shapeType().equals("particle")) {
+            shape.forceSetWorldPosition(Vec3.ZERO);
+            shape.forceSetWorldRotation(new Vector3f());
+            shape.forceSetWorldScale(new Vec3(1, 1, 1));
+        }
         if (shape instanceof AreaShape area) area.updateTransform(state);
         updateGeometry(shape, state);
         if (shape instanceof VideoShape video) video.setPlayback(state.videoStartTick(),
@@ -371,7 +377,7 @@ public final class ShapeTrackRegistry {
         } else {
             shape.seeThrough = state.seeThrough();
         }
-        applyParent(shape, state.mount() != null ? null : state.parentShapeId());
+        applyParent(shape, state.mount() != null || state.shapeType().equals("particle") ? null : state.parentShapeId());
         shape.syncLastToTarget();
         Color color = new Color(state.color(), true);
         shape.setBaseColor(state.shapeType().equals("particle") ? ParticleEmitters.GIZMO_COLOR : color);
@@ -389,7 +395,7 @@ public final class ShapeTrackRegistry {
         syncWireframe(shape, state, previous);
         LAST_STATES.put(state.shapeId(), state);
         if (state.mount() != null) MOUNTED.add(state.shapeId()); else MOUNTED.remove(state.shapeId());
-        if (state.mount() != null) placeMounted(state, shape);
+        if (state.mount() != null && !state.shapeType().equals("particle")) placeMounted(state, shape);
         if (state.visible() && !WireframeSettings.orDefault(state.wireframe()).hideFaces() && hiddenByMount(state.shapeId())) {
             shape.disable();
         }
@@ -420,6 +426,7 @@ public final class ShapeTrackRegistry {
             ShapeState state = LAST_STATES.get(shapeId);
             Shape shape = SHAPES.get(shapeId);
             if (state == null || state.mount() == null || shape == null) MOUNTED.remove(shapeId);
+            else if (state.shapeType().equals("particle")) refreshParticleGizmo(shapeId);
             else placeMounted(state, shape);
         }
         for (Map.Entry<String, Shape> entry : SHAPES.entrySet()) {
@@ -519,13 +526,38 @@ public final class ShapeTrackRegistry {
             line.forceSetLineWidth(state.lineWidth());
         }
         if (shape instanceof StripLineShape strip && state.shapeType().equals("particle")) {
-            strip.setVertexes(ParticleEmitters.gizmoPath(state));
+            bakeParticleGizmo(strip, state);
         } else if (shape instanceof StripLineShape strip) {
             strip.setVertexes(points(state));
             strip.forceSetLineWidth(state.lineWidth());
         }
         if (shape instanceof ArrowShape arrow)
             arrow.forceSet(point(state, 0), point(state, 1), state.lineWidth(), (float) state.sizeX());
+    }
+
+    private static final Map<String, Matrix4f> PARTICLE_GIZMO_WORLD = new java.util.HashMap<>();
+
+    /** The emitter outline in world space; the shape's own transform is left at identity. */
+    private static void bakeParticleGizmo(StripLineShape strip, ShapeState state) {
+        Matrix4f world = worldTransform(state);
+        PARTICLE_GIZMO_WORLD.put(state.shapeId(), world);
+        strip.setVertexes(ParticleEmitters.gizmoPath(state).stream().map(v -> {
+            Vector3f p = world.transformPosition((float) v.x, (float) v.y, (float) v.z, new Vector3f());
+            return new Vec3(p.x, p.y, p.z);
+        }).toList());
+        // RRK draws a strip's vertices relative to its centre, so the shape sits at that centre, unrotated and unscaled.
+        strip.forceSetWorldPosition(strip.calculateShapeCenterPos());
+        strip.forceSetWorldRotation(new Vector3f());
+        strip.forceSetWorldScale(new Vec3(1, 1, 1));
+        strip.syncLastToTarget();
+    }
+
+    /** A parent may have moved after this shape was last applied; called every frame for emitters. */
+    public static void refreshParticleGizmo(String shapeId) {
+        ShapeState state = LAST_STATES.get(shapeId);
+        if (state == null || !(SHAPES.get(shapeId) instanceof StripLineShape strip)) return;
+        if (worldTransform(state).equals(PARTICLE_GIZMO_WORLD.get(shapeId))) return;
+        bakeParticleGizmo(strip, state);
     }
 
     /** Vanilla-content shapes, which can either be shaded by the shader pack or drawn in the bypass pass. */

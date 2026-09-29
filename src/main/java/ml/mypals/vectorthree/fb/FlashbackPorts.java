@@ -14,6 +14,12 @@ import ml.mypals.vectorthree.core.port.Ports;
 import ml.mypals.vectorthree.core.port.ReplayClock;
 import ml.mypals.vectorthree.core.port.ShapeEditing;
 import ml.mypals.vectorthree.core.port.Splines;
+import com.moulberry.flashback.state.EditorScene;
+import com.moulberry.flashback.state.KeyframeTrack;
+import ml.mypals.vectorthree.core.shape.ShapeState;
+import ml.mypals.vectorthree.fb.shape.ShapeKeyframe;
+import ml.mypals.vectorthree.fb.shape.ShapeKeyframeType;
+import ml.mypals.vectorthree.fb.shape.ShapeReparent;
 import net.minecraft.resources.Identifier;
 import ml.mypals.vectorthree.core.port.ViewPolicy;
 import ml.mypals.vectorthree.fb.camera.CameraPreview;
@@ -117,6 +123,34 @@ public final class FlashbackPorts {
         public boolean screenSpace() { return Editors.GIZMO_EDITOR.isScreenSpace(); }
 
         public boolean ownsScreenOverlay(Identifier id) { return Editors.GIZMO_EDITOR.ownsScreenOverlay(id); }
+
+        public @Nullable ShapeState stateAt(String shapeId, double tick) {
+            return readScene(scene -> ShapeReparent.stateAt(scene, shapeId, (float) tick));
+        }
+
+        public int lastKeyframeTick(String shapeId) {
+            Integer last = readScene(scene -> {
+                for (KeyframeTrack track : scene.keyframeTracks) {
+                    if (track.keyframeType != ShapeKeyframeType.INSTANCE || track.keyframesByTick.isEmpty()) continue;
+                    if (track.keyframesByTick.firstEntry().getValue() instanceof ShapeKeyframe first
+                            && first.value.shapeId().equals(shapeId)) return track.keyframesByTick.lastKey();
+                }
+                return null;
+            });
+            return last == null ? -1 : last;
+        }
+
+        // Not from inside applyKeyframes: the scene's lock isn't reentrant.
+        private static <T> @Nullable T readScene(java.util.function.Function<EditorScene, T> read) {
+            EditorState editorState = EditorStateManager.getCurrent();
+            if (editorState == null) return null;
+            long stamp = editorState.acquireRead();
+            try {
+                return read.apply(editorState.getCurrentScene(stamp));
+            } finally {
+                editorState.release(stamp);
+            }
+        }
     }
 
     private static final class SplineImpl implements Splines {

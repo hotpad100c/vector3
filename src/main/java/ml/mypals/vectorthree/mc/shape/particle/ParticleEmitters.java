@@ -15,6 +15,7 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
@@ -42,6 +43,8 @@ public final class ParticleEmitters {
     private static final class Emitter {
         double tick = Double.NaN;
         double carry;
+        double previewTick = Double.NaN;
+        double previewStart;
         Vec3 pivot;
         final List<Live> live = new ArrayList<>();
     }
@@ -58,6 +61,9 @@ public final class ParticleEmitters {
         EMITTERS.keySet().retainAll(shapeIds);
     }
 
+    private static long previewLast;
+    private static double previewTicks;
+
     /** Once per rendered frame. */
     public static void frame() {
         Minecraft minecraft = Minecraft.getInstance();
@@ -67,20 +73,54 @@ public final class ParticleEmitters {
             return;
         }
         double tick = clock.exporting() ? clock.exportTick() : clock.partialTick();
+        long now = System.nanoTime();
+        double previewDelta = previewLast == 0 ? 0 : Math.min((now - previewLast) / 1.0e9 * 20, 5);
+        previewLast = now;
+        String selected = Ports.shapeEditing().selectedShapeId();
+        boolean anyPreview = false;
         for (String shapeId : ShapeTrackRegistry.shapeIds()) {
             if (!"particle".equals(ShapeTrackRegistry.typeOf(shapeId))) continue;
             ShapeState state = ShapeTrackRegistry.state(shapeId);
             Shape shape = ShapeTrackRegistry.shape(shapeId);
             if (state == null || shape == null) continue;
-            update(minecraft, shapeId, EMITTERS.computeIfAbsent(shapeId, id -> new Emitter()), state, shape, tick);
+            ShapeTrackRegistry.refreshParticleGizmo(shapeId);
+            Emitter emitter = EMITTERS.computeIfAbsent(shapeId, id -> new Emitter());
+            // The selected emitter plays on its own clock while the replay is paused, so it can be tuned without playing.
+            boolean preview = shapeId.equals(selected) && clock.paused() && !clock.exporting();
+            double at = tick;
+            if (preview) {
+                if (Double.isNaN(emitter.previewTick)) emitter.previewStart = emitter.previewTick = tick;
+                else emitter.previewTick += previewDelta;
+                // The preview walks along the track, so the emitter's settings interpolate as they would when playing.
+                int end = Ports.shapeEditing().lastKeyframeTick(shapeId);
+                if (end >= 0 && emitter.previewTick > end + 20) emitter.previewTick = emitter.previewStart;
+                at = emitter.previewTick;
+                ShapeState previewState = Ports.shapeEditing().stateAt(shapeId, at);
+                if (previewState != null) state = previewState;
+                anyPreview = true;
+            } else {
+                emitter.previewTick = Double.NaN;
+            }
+            update(minecraft, shapeId, emitter, state, shape, at);
+        }
+        // A paused replay doesn't tick its particles, so the preview ticks the engine itself.
+        if (anyPreview) {
+            previewTicks += previewDelta;
+            for (int i = 0; previewTicks >= 1 && i < 3; i++, previewTicks--) minecraft.particleEngine.tick();
+            previewTicks = Math.min(previewTicks, 1);
+        } else {
+            previewTicks = 0;
         }
     }
 
     private static void update(Minecraft minecraft, String shapeId, Emitter emitter, ShapeState state, Shape shape, double tick) {
         ParticleSettings settings = ParticleSettings.orDefault(state.particle());
-        Vec3 pivot = shape.transformer.getShapeWorldPivot(false);
-        Quaternionf rotation = new Quaternionf(shape.transformer.getShapeWorldRotation(false));
-        Vec3 scale = shape.transformer.getShapeWorldScale(false);
+        Matrix4f world = ShapeTrackRegistry.worldTransform(state);
+        Vector3f origin = world.getTranslation(new Vector3f());
+        Vec3 pivot = new Vec3(origin.x, origin.y, origin.z);
+        Quaternionf rotation = world.getUnnormalizedRotation(new Quaternionf()).normalize();
+        Vector3f axes = world.getScale(new Vector3f());
+        Vec3 scale = new Vec3(axes.x, axes.y, axes.z);
         double previous = emitter.tick;
         Vec3 lastPivot = emitter.pivot;
         emitter.tick = tick;

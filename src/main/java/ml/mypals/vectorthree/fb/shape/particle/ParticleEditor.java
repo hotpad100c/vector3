@@ -90,7 +90,7 @@ public final class ParticleEditor {
             float[] randomDirection = {s.randomDirection()};
             boolean edited = false;
             ImGui.setNextItemWidth(200);
-            if (ImGui.beginCombo(I18n.get("vector3.particle.shape_type"), I18n.get(kindKey(kind)))) {
+            if (ImGui.beginCombo(I18n.get("vector3.particle.shape_type") + "##particle_shape_type", I18n.get(kindKey(kind)))) {
                 for (ParticleSettings.Kind option : ParticleSettings.Kind.values()) {
                     if (ImGui.selectable(I18n.get(kindKey(option)), option == kind)) {
                         kind = option;

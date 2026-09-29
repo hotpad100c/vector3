@@ -175,13 +175,21 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         // A shape either has a parent shape or rides an entity; picking one clears the other.
         ImGui.setNextItemWidth(360);
         UUID mountEntity = mount[0] == null ? null : mount[0].entity();
-        UUID pickedMount = multi || screen[0] ? null : EntityPicker.combo(I18n.get("vector3.keyframe.mount_entity"), mountEntity);
+        UUID pickedMount = multi || screen[0] ? null : EntityPicker.combo(I18n.get("vector3.keyframe.mount_entity"), mountEntity, false, true);
         ShapeMount nextMount = mount[0];
+        if (EntityPicker.NONE.equals(pickedMount)) {
+            pickedMount = null;
+            if (mount[0] != null) {
+                ShapeTrackRegistry.convertToNewParent(state, "", position, rotation, scale);
+                nextMount = null;
+                changed = true;
+            }
+        }
         if (pickedMount != null && !pickedMount.equals(mountEntity)) {
             nextMount = mount[0] == null ? new ShapeMount(pickedMount, BodyPart.ROOT, true)
                     : new ShapeMount(pickedMount, mount[0].part(), mount[0].followRotation());
         }
-        if (mount[0] != null && !multi && !screen[0]) {
+        if (mount[0] != null && nextMount != null && !multi && !screen[0]) {
             BodyPart part = VectorCombos.bodyPart(I18n.get("flashback.body_part"), mount[0].part());
             if (part != mount[0].part()) nextMount = nextMount.withPart(part);
             String modelPart = ModelPartCombo.render(I18n.get("vector3.mount.model_part"), ShapeMounts.resolve(mount[0]), mount[0].modelPart());

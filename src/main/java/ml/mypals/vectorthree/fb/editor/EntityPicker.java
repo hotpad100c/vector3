@@ -34,6 +34,13 @@ public final class EntityPicker {
 
     /** With {@code shapes}, entity shapes are listed first: they pose as their own UUID (see ShapeEntities). */
     public static @Nullable UUID combo(String label, @Nullable UUID current, boolean shapes) {
+        return combo(label, current, shapes, false);
+    }
+
+    /** Returned by {@link #combo} with {@code allowNone} when the user picked "None". */
+    public static final UUID NONE = new UUID(0, 0);
+
+    public static @Nullable UUID combo(String label, @Nullable UUID current, boolean shapes, boolean allowNone) {
         Minecraft minecraft = Minecraft.getInstance();
         ClientLevel level = minecraft.level;
         Vec3 camera = minecraft.gameRenderer.mainCamera().position();
@@ -52,6 +59,7 @@ public final class EntityPicker {
         ImGui.setNextItemWidth(-1);
         ImGui.inputTextWithHint("##entity_filter", I18n.get("vector3.entity_picker.search"), FILTER);
         String filter = FILTER.get().trim().toLowerCase(Locale.ROOT);
+        if (allowNone && ImGui.selectable(I18n.get("vector3.entity_picker.none") + "###entity_none", current == null)) result = NONE;
 
         UUID typed = parseUuid(filter);
         if (typed != null && ImGui.selectable(I18n.get("vector3.entity_picker.use_uuid", typed))) result = typed;
