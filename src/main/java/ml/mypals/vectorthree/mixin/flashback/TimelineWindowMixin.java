@@ -59,7 +59,9 @@ public abstract class TimelineWindowMixin {
     @WrapOperation(method = {"renderInner", "handleClick"}, at = @At(value = "INVOKE",
             target = "Lcom/moulberry/flashback/playback/ReplayServer;getTotalReplayTicks()I"))
     private static int vector3$timelineCoversClips(ReplayServer server, Operation<Integer> original) {
-        return Math.max(original.call(server), ClipTimeline.end());
+        int total = Math.max(original.call(server), ClipTimeline.end());
+        // A project's timeline keeps going past its last clip (the world holds still there), a minute at a time.
+        return ml.mypals.vectorthree.fb.clips.ProjectClock.active() ? total + 1200 : total;
     }
 
     // Both the drag preview and the drop read this, so a single dragged clip visibly snaps while it moves.

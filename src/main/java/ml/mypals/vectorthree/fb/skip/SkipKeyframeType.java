@@ -45,8 +45,7 @@ public final class SkipKeyframeType extends CustomKeyframeType<Skip> {
         long stamp = editorState.acquireRead();
         try {
             EditorScene scene = editorState.getCurrentScene(stamp);
-            // Trimmed clips hide the ends of their chunk spans the same way.
-            NavigableMap<Integer, Integer> scopes = ClipProject.hiddenRanges(scene);
+            NavigableMap<Integer, Integer> scopes = new TreeMap<>();
             for (KeyframeTrack track : scene.keyframeTracks) {
                 if (track.enabled && track.keyframeType == INSTANCE) {
                     scopes.putAll(scopes(track.keyframesByTick));

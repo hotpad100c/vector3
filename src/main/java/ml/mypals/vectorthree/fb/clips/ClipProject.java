@@ -84,19 +84,9 @@ public final class ClipProject {
         return clips;
     }
 
-    /** Clips that are new, reordered, re-ranged or dragged away from where they were composed. */
+    /** Clips that are new: only they need composing, since composed clips are cut, moved and copied as views. */
     public static boolean dirty(EditorScene scene) {
-        KeyframeTrack track = clipTrack(scene);
-        if (track == null) return false;
-        int lastPlaced = -1;
-        for (Map.Entry<Integer, Keyframe> entry : track.keyframesByTick.entrySet()) {
-            if (!(entry.getValue() instanceof ClipKeyframeType.ClipKeyframe keyframe)) continue;
-            ClipRef clip = keyframe.value;
-            if (!clip.composed() || clip.placedAt() < lastPlaced || entry.getKey() != clip.visibleStart()) return true;
-            // Trimmed clips leave a skipped gap until they are composed again, cut exactly to their range.
-            if (clip.in() != clip.spanStart() || clip.out() != clip.spanStart() + clip.spanLength()) return true;
-            lastPlaced = clip.placedAt();
-        }
+        for (ClipRef clip : clips(scene)) if (!clip.composed()) return true;
         return false;
     }
 
@@ -124,30 +114,6 @@ public final class ClipProject {
             }
         }
         return best;
-    }
-
-    /**
-     * The parts of each composed chunk span no clip shows; merged into the Skip scopes. A split clip leaves two
-     * clips on one span, so the span is cut against all of them together.
-     */
-    public static NavigableMap<Integer, Integer> hiddenRanges(EditorScene scene) {
-        Map<Integer, List<ClipRef>> bySpan = new TreeMap<>();
-        for (ClipRef clip : clips(scene)) {
-            if (clip.composed()) bySpan.computeIfAbsent(clip.placedAt(), start -> new ArrayList<>()).add(clip);
-        }
-        NavigableMap<Integer, Integer> hidden = new TreeMap<>();
-        for (Map.Entry<Integer, List<ClipRef>> span : bySpan.entrySet()) {
-            List<ClipRef> clips = span.getValue();
-            clips.sort(java.util.Comparator.comparingInt(ClipRef::visibleStart));
-            int cursor = span.getKey(), end = cursor + clips.getFirst().spanLength();
-            for (ClipRef clip : clips) {
-                int from = Math.clamp(clip.visibleStart(), span.getKey(), end), to = Math.clamp(clip.visibleEnd(), from, end);
-                if (from > cursor) hidden.put(cursor, from);
-                cursor = Math.max(cursor, to);
-            }
-            if (cursor < end) hidden.put(cursor, end);
-        }
-        return hidden;
     }
 
     /** Adds a clip at {@code tick}; the first clip added to a plain replay turns the replay itself into clip one. */
@@ -208,6 +174,7 @@ public final class ClipProject {
         if (working == null || clipTrack(scene) == null || composing) return;
         List<ClipRef> before = clips(scene);
         if (before.isEmpty()) return;
+        List<Integer> ticks = new ArrayList<>(clipTrack(scene).keyframesByTick.keySet());
         List<ClipRef> after = ClipComposer.layout(before);
         ReplayArchive.Info info = ReplayArchive.read(working);
         if (info == null) throw new IOException("Cannot read the open replay");
@@ -227,7 +194,7 @@ public final class ClipProject {
             }
             Exception error = failure;
             Minecraft.getInstance().execute(() -> {
-                if (error == null) swapIn(editorState, after, pending, working);
+                if (error == null) swapIn(editorState, after, ticks, pending, working);
                 else failed(error, pending);
             });
         }, "vector3-clip-compose");
@@ -247,15 +214,16 @@ public final class ClipProject {
                 Component.translatable("vector3.clips.compose_failed"), Component.literal(String.valueOf(error.getMessage())));
     }
 
-    private static void swapIn(EditorState editorState, List<ClipRef> after, Path pending, Path working) {
+    private static void swapIn(EditorState editorState, List<ClipRef> after, List<Integer> ticks, Path pending, Path working) {
         long stamp = editorState.acquireWrite();
         try {
             EditorScene scene = editorState.getCurrentScene(stamp);
             KeyframeTrack track = clipTrack(scene);
             if (track != null) {
                 TreeMap<Integer, Keyframe> placed = new TreeMap<>();
-                for (ClipRef clip : after) {
-                    placed.put(clip.visibleStart(), new ClipKeyframeType.ClipKeyframe(clip,
+                // The archive is now the clips end to end, but each clip keeps its place (and the gaps) on the timeline.
+                for (int i = 0; i < after.size(); i++) {
+                    placed.put(ticks.get(i), new ClipKeyframeType.ClipKeyframe(after.get(i),
                             com.moulberry.flashback.keyframe.interpolation.InterpolationType.LINEAR));
                 }
                 track.keyframesByTick = placed;

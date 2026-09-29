@@ -2,6 +2,7 @@ package ml.mypals.vectorthree.fb.timeline;
 
 import ml.mypals.vectorthree.core.clips.AudioEnvelope;
 import ml.mypals.vectorthree.fb.clips.ClipOverlap;
+import ml.mypals.vectorthree.fb.clips.ProjectClock;
 import ml.mypals.vectorthree.core.clips.AudioLevel;
 import ml.mypals.vectorthree.core.clips.AudioTrim;
 import com.moulberry.flashback.editor.SelectedKeyframes;
@@ -217,7 +218,7 @@ public final class ClipTimeline {
         if (trimLeft) {
             int edge = from + delta, snapped = snapOnTrack(track, edge, trimTick);
             if (Math.abs(snapped - edge) <= threshold) edge = snapped;
-            in = Math.clamp(range.in() + edge - from, Math.max(0, range.in() - from), range.out() - 1);
+            in = Math.clamp(range.in() + edge - from, Math.max(range.floor(), range.in() - from), range.out() - 1);
             tick = from + in - range.in();
         } else {
             int edge = from + range.length() + delta, snapped = snapOnTrack(track, edge, trimTick);
@@ -310,6 +311,7 @@ public final class ClipTimeline {
         }
         clipsDirty = ClipProject.dirty(Timeline.scene());
         clipsEnd = ClipProject.end(Timeline.scene());
+        ProjectClock.refresh(Timeline.scene());
         if (ClipsWindow.consumeApplyRequest() && clipsDirty) {
             Timeline.upgradeToSceneWrite();
             try {

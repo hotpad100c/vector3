@@ -89,6 +89,7 @@
 		"flashback.ReplayReaderCompatMixin",
 		"flashback.ReplayServerPacketCompatMixin",
 		"flashback.ReplayServerSkipMixin",
+		"flashback.ReplayServerProjectTimeMixin",
 		"flashback.ReplayUIGizmoClickMixin",
 		"flashback.ReplayUIFontMixin",
 		"flashback.LoadFromDeviceHeaderMixin",

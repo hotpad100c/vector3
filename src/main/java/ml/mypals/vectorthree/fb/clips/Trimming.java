@@ -15,7 +15,12 @@ import java.nio.file.Path;
  * is in timeline ticks, so pitch is already applied; the keyframe sits at the tick where {@code in} plays.
  */
 public final class Trimming {
-    public record Range(int in, int out, int total) {
+    /** {@code floor}..{@code total} is what the media can show: a composed clip only has its own span in the archive. */
+    public record Range(int in, int out, int total, int floor) {
+        public Range(int in, int out, int total) {
+            this(in, out, total, 0);
+        }
+
         public int length() {
             return out - in;
         }
@@ -30,6 +35,10 @@ public final class Trimming {
     public static @Nullable Range range(Keyframe keyframe) {
         if (keyframe instanceof ClipKeyframeType.ClipKeyframe clip) {
             ReplayArchive.Info info = ReplayArchive.read(Path.of(clip.value.source()));
+            if (clip.value.composed()) {
+                return new Range(clip.value.in(), clip.value.out(), clip.value.spanStart() + clip.value.spanLength(),
+                        clip.value.spanStart());
+            }
             return new Range(clip.value.in(), clip.value.out(), info == null ? clip.value.out() : info.totalTicks());
         }
         if (keyframe instanceof AudioKeyframe && keyframe instanceof AudioTrim trim) {

@@ -51,11 +51,13 @@ public final class ClipKeyframeType extends CustomKeyframeType<ClipRef> {
         ImGui.text(value.label());
         ImGui.textDisabled(Path.of(value.source()).getFileName().toString());
         ReplayArchive.Info info = ReplayArchive.read(Path.of(value.source()));
-        int total = info == null ? Math.max(value.out(), 1) : info.totalTicks();
+        int total = value.composed() ? value.spanStart() + value.spanLength()
+                : info == null ? Math.max(value.out(), 1) : info.totalTicks();
+        int floor = value.composed() ? value.spanStart() : 0;
         int[] range = {value.in(), value.out()};
         ImGui.setNextItemWidth(220);
-        if (ImGui.dragInt2(I18n.get("vector3.clips.range"), range, 1, 0, total)) {
-            int in = Math.clamp(range[0], 0, total), out = Math.clamp(range[1], in, total);
+        if (ImGui.dragInt2(I18n.get("vector3.clips.range"), range, 1, floor, total)) {
+            int in = Math.clamp(range[0], floor, total), out = Math.clamp(range[1], in, total);
             value = value.withRange(in, out);
         }
         ImGui.textDisabled(I18n.get("vector3.clips.range_hint", total));
