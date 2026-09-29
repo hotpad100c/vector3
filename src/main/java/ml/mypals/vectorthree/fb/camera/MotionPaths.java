@@ -51,7 +51,7 @@ public final class MotionPaths {
 
     private record Dot(Vec3 position, boolean keyframe, Color color, int track, int tick, ObjModelShape shape) {}
 
-    private static boolean show, cameras = true, shapes = true;
+    private static boolean show = true, cameras = true, shapes = true;
     private static final int[] INTERVAL = {5};
     private static final String SESSION = UUID.randomUUID().toString();
     private static final List<Dot> dots = new ArrayList<>();

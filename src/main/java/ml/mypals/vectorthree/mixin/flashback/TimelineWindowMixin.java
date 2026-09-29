@@ -145,6 +145,11 @@ public abstract class TimelineWindowMixin {
         return timelineX - Timeline.x();
     }
 
+    @Inject(method = "releaseGrabbed", at = @At("RETURN"))
+    private static void vector3$pushClipsAside(CallbackInfo ci) {
+        ClipTimeline.pushClipsAside();
+    }
+
     @Inject(method = "handleClick", at = @At("HEAD"))
     private static void vector3$rememberSelection(CallbackInfo ci) {
         TrackTimeline.rememberSelection();

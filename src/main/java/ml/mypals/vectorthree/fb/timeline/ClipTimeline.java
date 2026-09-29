@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.fb.timeline;
 
 import ml.mypals.vectorthree.core.clips.AudioEnvelope;
+import ml.mypals.vectorthree.fb.clips.ClipOverlap;
 import ml.mypals.vectorthree.core.clips.AudioLevel;
 import ml.mypals.vectorthree.core.clips.AudioTrim;
 import com.moulberry.flashback.editor.SelectedKeyframes;
@@ -93,6 +94,26 @@ public final class ClipTimeline {
             }
         }
         return best;
+    }
+
+    /** After keyframes are dropped: clips that now overlap the dropped ones are pushed right. */
+    public static void pushClipsAside() {
+        if (Timeline.scene() == null || trimTrack >= 0) return;
+        for (int row = 0; row < Timeline.scene().keyframeTracks.size(); row++) {
+            KeyframeTrack track = Timeline.scene().keyframeTracks.get(row);
+            if (track.keyframeType != ClipKeyframeType.INSTANCE) continue;
+            java.util.Set<Integer> anchors = new java.util.HashSet<>();
+            for (SelectedKeyframes selected : Timeline.selected()) {
+                if (selected.trackIndex() == row) anchors.addAll(ClipOverlap.clipsAt(track, selected.keyframeTicks()));
+            }
+            if (anchors.isEmpty()) return;
+            var entry = ClipOverlap.entry(track, row, anchors);
+            if (entry == null) return;
+            Timeline.upgradeToSceneWrite();
+            Timeline.scene().push(entry);
+            Timeline.keyframesChanged();
+            return;
+        }
     }
 
     public static int nearer(int a, int b, int tick) {
@@ -229,6 +250,13 @@ public final class ClipTimeline {
         undo.add(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, row, from, original.copy()));
         Timeline.scene().push(new EditorSceneHistoryEntry(undo, redo, I18n.get("vector3.history.trim_clip")));
         Timeline.keyframesChanged();
+        if (track.keyframeType == ClipKeyframeType.INSTANCE) {
+            var push = ClipOverlap.entry(track, row, java.util.Set.of(to));
+            if (push != null) {
+                Timeline.scene().push(push);
+                Timeline.keyframesChanged();
+            }
+        }
     }
 
     /** The blade: the media keyframe at {@code tick} becomes two meeting at {@code at}. */

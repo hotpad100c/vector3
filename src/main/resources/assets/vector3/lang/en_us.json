@@ -496,6 +496,7 @@
   "vector3.motion_path.shapes": "Shapes",
   "vector3.motion_path.interval": "Sample every (ticks)",
   "vector3.motion_path.tooltip": "Keyframe at tick %s (right-click to select)",
+  "vector3.history.push_clips": "Push %s clips aside",
   "vector3.properties.empty": "Select a keyframe on the timeline to edit it here.",
   "vector3.curve.custom": "Custom",
   "vector3.curve.tab": "Speed curve",

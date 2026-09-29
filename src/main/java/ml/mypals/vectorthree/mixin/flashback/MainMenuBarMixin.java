@@ -30,6 +30,7 @@ public class MainMenuBarMixin {
     private static void vector3$windowMenu(CallbackInfo ci) {
         vector3$window();
         HelpWindow.renderMenu();
+        ml.mypals.vectorthree.fb.camera.MotionPaths.renderMenu();
     }
 
     @Unique
@@ -46,7 +47,6 @@ public class MainMenuBarMixin {
         PrefabBasketWindow.renderMenuItem();
         ClipsWindow.renderMenuItem();
         CameraPreview.renderMenuItem();
-        ml.mypals.vectorthree.fb.camera.MotionPaths.renderMenu();
         ImGui.separator();
         ml.mypals.vectorthree.fb.editor.PacketCompat.renderMenuItem();
         HistoryWindow.renderMenuItem();

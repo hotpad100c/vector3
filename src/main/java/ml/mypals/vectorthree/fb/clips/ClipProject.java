@@ -180,6 +180,7 @@ public final class ClipProject {
         track.keyframesByTick.put(at, new ClipKeyframeType.ClipKeyframe(
                 new ClipRef(copy.toString(), label(info, replay), 0, info.totalTicks(), -1, 0, info.totalTicks()),
                 com.moulberry.flashback.keyframe.interpolation.InterpolationType.LINEAR));
+        ClipOverlap.apply(track, java.util.Set.of(at));
     }
 
     private static String label(ReplayArchive.Info info, Path replay) {

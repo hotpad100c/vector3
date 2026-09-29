@@ -496,6 +496,7 @@
   "vector3.motion_path.shapes": "图形",
   "vector3.motion_path.interval": "采样间隔（tick）",
   "vector3.motion_path.tooltip": "第 %s tick 的关键帧（右键选中）",
+  "vector3.history.push_clips": "挤开 %s 个片段",
   "vector3.properties.empty": "在时间轴上选中一个关键帧，即可在这里编辑。",
   "vector3.curve.custom": "自定义",
   "vector3.curve.tab": "速度曲线",
