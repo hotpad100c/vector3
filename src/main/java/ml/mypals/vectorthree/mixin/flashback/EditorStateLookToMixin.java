@@ -5,7 +5,7 @@ import com.moulberry.flashback.keyframe.handler.MinecraftKeyframeHandler;
 import com.moulberry.flashback.state.EditorState;
 import ml.mypals.vectorthree.fb.camera.dolly.DollyZoomCamera;
 import ml.mypals.vectorthree.fb.camera.lookto.LookToCamera;
-import ml.mypals.vectorthree.mc.fade.ScreenVFXRenderer;
+import ml.mypals.vectorthree.mc.vfx.ScreenVFXRenderer;
 import ml.mypals.vectorthree.mc.pose.EntityPoses;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

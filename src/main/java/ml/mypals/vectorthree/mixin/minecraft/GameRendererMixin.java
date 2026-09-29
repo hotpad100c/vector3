@@ -3,7 +3,7 @@ package ml.mypals.vectorthree.mixin.minecraft;
 import ml.mypals.vectorthree.core.port.FrameHooks;
 import ml.mypals.vectorthree.mc.camera.PreviewPass;
 import com.llamalad7.mixinextras.sugar.Local;
-import ml.mypals.vectorthree.mc.fade.ScreenVFXRenderer;
+import ml.mypals.vectorthree.mc.vfx.ScreenVFXRenderer;
 import ml.mypals.vectorthree.mc.render.ScreenLayer;
 import ml.mypals.vectorthree.mc.shape.particle.ParticleEmitters;
 import net.minecraft.client.renderer.GameRenderer;

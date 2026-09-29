@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.mc.fade.effects;
+package ml.mypals.vectorthree.mc.vfx.effects;
 
 import ml.mypals.vectorthree.core.Mod;
 import com.mojang.blaze3d.pipeline.RenderTarget;

@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.mc;
 
 import ml.mypals.vectorthree.mc.compat.IrisCompat;
-import ml.mypals.vectorthree.mc.fade.ScreenVFXRenderer;
+import ml.mypals.vectorthree.mc.vfx.ScreenVFXRenderer;
 import ml.mypals.vectorthree.mc.pose.EntityPoses;
 import ml.mypals.vectorthree.mc.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.mc.text.FontOptions;

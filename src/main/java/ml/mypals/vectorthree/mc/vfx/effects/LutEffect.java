@@ -1,6 +1,4 @@
-package ml.mypals.vectorthree.mc.fade.effects;
-
-import ml.mypals.vectorthree.core.fade.effects.LensSettings;
+package ml.mypals.vectorthree.mc.vfx.effects;
 
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -11,36 +9,41 @@ import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.pipeline.UniformType;
+import ml.mypals.vectorthree.core.fade.ScreenVFX;
 import org.lwjgl.system.MemoryStack;
 
 import java.util.Optional;
 
-public final class LensEffect {
+public final class LutEffect {
     private static RenderPipeline pipeline;
-    private static GpuBuffer parameters;
-    private LensEffect() {}
+    private static GpuBuffer settings;
 
-    public static void render(RenderTarget main, LensSettings value) {
-        if (Math.abs(value.distortion()) < 0.001f && value.chromatic() < 0.001f) return;
+    private LutEffect() {}
+
+    public static void render(RenderTarget main, ScreenVFX value) {
+        if (value.lutStrength() <= 0.001f) return;
+        var lutView = EffectTextures.view(value.lut());
+        if (lutView == null) return;
         if (pipeline == null) {
-            pipeline = ScreenPass.pipeline("lens", BindGroupLayout.builder()
+            pipeline = ScreenPass.pipeline("lut", BindGroupLayout.builder()
                     .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                    .withUniform("LensSettings", UniformType.UNIFORM_BUFFER).build(), GpuFormat.RGBA8_UNORM, null);
-            parameters = RenderSystem.getDevice().createBuffer(() -> "vector3_lens_settings",
+                    .withUniform("LutSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withUniform("LutSettings", UniformType.UNIFORM_BUFFER).build(), GpuFormat.RGBA8_UNORM, null);
+            settings = RenderSystem.getDevice().createBuffer(() -> "vector3_lut_settings",
                     GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 16);
         }
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            var data = Std140Builder.onStack(stack, 16).putVec4(value.distortion(), value.chromatic(),
-                    value.centerX(), value.centerY()).get();
-            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(parameters.slice(), data);
+            var data = Std140Builder.onStack(stack, 16).putVec4(value.lutStrength(), 0, 0, 0).get();
+            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(settings.slice(), data);
         }
         RenderTarget target = ScreenPass.scratch(main);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                () -> "vector3_lens", target.getColorTextureView(), Optional.empty())) {
+                () -> "vector3_lut", target.getColorTextureView(), Optional.empty())) {
             pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
             RenderSystem.bindDefaultUniforms(pass);
             pass.setUniform("InSampler", main.getColorTextureView(), ScreenPass.linear());
-            pass.setUniform("LensSettings", parameters);
+            pass.setUniform("LutSampler", lutView, ScreenPass.linear());
+            pass.setUniform("LutSettings", settings);
             pass.draw(3, 1, 0, 0);
         }
         ScreenPass.copy(target, main);

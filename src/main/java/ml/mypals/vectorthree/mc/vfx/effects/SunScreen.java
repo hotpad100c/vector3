@@ -1,4 +1,4 @@
-package ml.mypals.vectorthree.mc.fade.effects;
+package ml.mypals.vectorthree.mc.vfx.effects;
 
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;

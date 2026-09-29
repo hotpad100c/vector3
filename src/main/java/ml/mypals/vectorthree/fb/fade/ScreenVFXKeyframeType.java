@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.fb.fade;
 
 import ml.mypals.vectorthree.core.fade.ScreenVFX;
-import ml.mypals.vectorthree.mc.fade.ScreenVFXRenderer;
+import ml.mypals.vectorthree.mc.vfx.ScreenVFXRenderer;
 
 import com.moulberry.flashback.keyframe.handler.KeyframeHandler;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
@@ -18,7 +18,7 @@ import ml.mypals.vectorthree.fb.custom.CustomKeyframeType;
 import ml.mypals.vectorthree.fb.custom.CustomKeyframe;
 import ml.mypals.vectorthree.fb.fade.effects.ColorGradingEditor;
 import ml.mypals.vectorthree.fb.fade.effects.BloomEditor;
-import ml.mypals.vectorthree.mc.fade.effects.DepthOfFieldEffect;
+import ml.mypals.vectorthree.mc.vfx.effects.DepthOfFieldEffect;
 import ml.mypals.vectorthree.fb.fade.effects.DofEditor;
 import ml.mypals.vectorthree.core.fade.effects.DofSettings;
 import ml.mypals.vectorthree.fb.fade.effects.GrainEditor;
