@@ -18,6 +18,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 // Every overload of a widget family starts with the label and its value holder, so one handler covers them all.
 @Mixin(value = ImGui.class, remap = false)
 public class ImGuiMultiEditMixin {
+    // Declared first so it runs before vector3$floats on the same widget.
+    @Inject(method = {"colorEdit3*", "colorEdit4*"}, at = @At("HEAD"))
+    private static void vector3$color(CallbackInfoReturnable<Boolean> cir) {
+        MultiEditSession.markColor();
+    }
+
     @Inject(method = {"dragFloat*", "dragFloat2*", "dragFloat3*", "dragFloat4*", "sliderFloat*", "sliderFloat2*", "sliderFloat3*",
             "sliderFloat4*", "sliderAngle*", "inputFloat2*", "inputFloat3*", "inputFloat4*", "colorEdit3*", "colorEdit4*"},
             at = @At("HEAD"), cancellable = true)

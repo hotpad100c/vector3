@@ -7,6 +7,7 @@ import imgui.moulberry90.flag.ImGuiCol;
 import imgui.moulberry90.flag.ImGuiFocusedFlags;
 import imgui.moulberry90.flag.ImGuiHoveredFlags;
 import imgui.moulberry90.flag.ImGuiKey;
+import ml.mypals.vectorthree.expression.ExpressionUi;
 import net.minecraft.client.resources.language.I18n;
 import org.jetbrains.annotations.Nullable;
 
@@ -40,6 +41,7 @@ public final class PropertySelection {
     private static boolean pressing, boxing;
     private static float startX, startY;
     private static String message;
+    private static @Nullable String menuKey;
     private static long messageUntil;
 
     private PropertySelection() {}
@@ -105,7 +107,8 @@ public final class PropertySelection {
             boxing = false;
         } else if (!ctrl && hoveredWindow && ImGui.isMouseReleased(1)) {
             Row row = rowAt(mouseX, mouseY);
-            if (row == null || SELECTED.contains(row.id())) ImGui.openPopup(MENU);
+            menuKey = row == null ? null : row.key();
+            if (row == null || SELECTED.contains(row.id()) || ExpressionUi.offers(row.key())) ImGui.openPopup(MENU);
         }
 
         boolean focused = ImGui.isWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.getIO().getWantTextInput();
@@ -114,6 +117,7 @@ public final class PropertySelection {
         if (focused && ctrl && ImGui.isKeyPressed(ImGuiKey.V, false)) paste = PropertyClipboard.get();
 
         if (ImGui.beginPopup(MENU)) {
+            if (menuKey != null && ExpressionUi.menu(menuKey)) ImGui.separator();
             if (ImGui.menuItem(I18n.get("vector3.properties.copy", selectedRows().size()), "Ctrl+C", false,
                     !SELECTED.isEmpty())) copy();
             if (ImGui.menuItem(I18n.get("vector3.properties.paste", PropertyClipboard.get().size()), "Ctrl+V", false,

@@ -2,6 +2,7 @@ package ml.mypals.vectorthree.multiedit;
 
 import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
+import ml.mypals.vectorthree.expression.ExpressionUi;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 /**
  * Drives ImGuiMultiEditMixin. A keyframe's own editor UI is run once per target without drawing (CAPTURE) to learn
@@ -28,45 +30,58 @@ public final class MultiEditSession {
 
     public record Change(String key, @Nullable Object value, boolean @Nullable [] components, @Nullable String selection) {}
 
-    private record Pending(String key, Object before, boolean locked, boolean[] mixed, Kind kind, String label) {}
+    private record Pending(String key, Object before, boolean locked, boolean[] mixed, Kind kind, String label, boolean color) {}
 
-    private static final Pending PASS = new Pending("", "", false, new boolean[0], Kind.BUTTON, "");
-    private static final Pending COMBO_ITEM = new Pending("", "", false, new boolean[0], Kind.BUTTON, "");
+    private static final Pending PASS = new Pending("", "", false, new boolean[0], Kind.BUTTON, "", false);
+    private static final Pending COMBO_ITEM = new Pending("", "", false, new boolean[0], Kind.BUTTON, "", false);
 
-    private static Mode mode = Mode.OFF;
-    private static boolean shared;
-    private static String scope = "";
-    private static final Map<String, Integer> COUNTS = new HashMap<>();
-    private static Map<String, Object> capture;
-    private static List<Map<String, Object>> captures;
-    private static Predicate<String> visible = key -> true;
-    private static final ArrayDeque<Pending> PENDING = new ArrayDeque<>();
-    private static final ArrayDeque<String> OPEN_COMBOS = new ArrayDeque<>();
-    private static int nesting;
-    private static @Nullable Change change;
-    private static Map<String, Change> injects = Map.of();
-    private static @Nullable Set<String> hits;
-    private static @Nullable Change replayCombo;
-    private static String lastSelectable;
+    // One frame per running editor pass: evaluating expressions can run a pass inside another one.
+    private static final class State {
+        Mode mode = Mode.OFF;
+        boolean shared;
+        String scope = "";
+        final Map<String, Integer> counts = new HashMap<>();
+        Map<String, Object> capture;
+        List<Map<String, Object>> captures;
+        Predicate<String> visible = key -> true;
+        final ArrayDeque<Pending> pending = new ArrayDeque<>();
+        final ArrayDeque<String> openCombos = new ArrayDeque<>();
+        int nesting;
+        @Nullable Change change;
+        Map<String, Change> injects = Map.of();
+        @Nullable Map<String, UnaryOperator<Object>> computed;
+        @Nullable Set<String> hits;
+        @Nullable Change replayCombo;
+        String lastSelectable;
+        boolean color;
+    }
+
+    private static State s = new State();
+    private static final ArrayDeque<State> OUTER = new ArrayDeque<>();
 
     private MultiEditSession() {}
 
     /** True while one editor stands for several keyframes (or runs silently for one of them). */
     public static boolean active() {
-        return shared;
+        return s.shared;
     }
 
     /** True while an editor runs without being drawn, so it must not touch anything outside its keyframe. */
     public static boolean silent() {
-        return mode == Mode.CAPTURE || mode == Mode.REPLAY;
+        return s.mode == Mode.CAPTURE || s.mode == Mode.REPLAY;
     }
 
     public static Map<String, Object> capture(Runnable render) {
-        begin(Mode.CAPTURE, true);
-        capture = new LinkedHashMap<>();
+        return capture(render, true);
+    }
+
+    /** {@code severalTargets} false: the editor reads one keyframe on its own (see {@link #active}). */
+    public static Map<String, Object> capture(Runnable render, boolean severalTargets) {
+        begin(Mode.CAPTURE, severalTargets);
+        s.capture = new LinkedHashMap<>();
         try {
             render.run();
-            return capture;
+            return s.capture;
         } finally {
             end();
         }
@@ -76,16 +91,16 @@ public final class MultiEditSession {
     public static @Nullable Change display(String rowScope, List<Map<String, Object>> targets, Predicate<String> shown,
             boolean severalTargets, Runnable render) {
         begin(Mode.DISPLAY, severalTargets);
-        scope = rowScope;
-        captures = targets;
-        visible = shown;
-        change = null;
+        s.scope = rowScope;
+        s.captures = targets;
+        s.visible = shown;
+        s.change = null;
         try {
             render.run();
-            return change;
+            return s.change;
         } finally {
-            while (!PENDING.isEmpty()) {
-                if (PENDING.pop().locked()) ImGui.endDisabled();
+            while (!s.pending.isEmpty()) {
+                if (s.pending.pop().locked()) ImGui.endDisabled();
             }
             end();
         }
@@ -96,8 +111,8 @@ public final class MultiEditSession {
         begin(Mode.REPLAY, true);
         Map<String, Change> byKey = new HashMap<>();
         for (Change edit : edits) byKey.put(edit.key(), edit);
-        injects = byKey;
-        hits = applied;
+        s.injects = byKey;
+        s.hits = applied;
         try {
             render.run();
         } finally {
@@ -105,94 +120,136 @@ public final class MultiEditSession {
         }
     }
 
+    /**
+     * Like {@link #replay}, but each widget's new value is computed from its current one (the snapshot, e.g. a
+     * float[] or a String; a combo gets its preview and answers the item to pick). A null answer leaves it alone.
+     * It edits one keyframe, so the editor shows everything it would for that keyframe alone.
+     */
+    public static void replayComputed(Map<String, UnaryOperator<Object>> edits, @Nullable Set<String> applied, Runnable render) {
+        begin(Mode.REPLAY, false);
+        s.computed = edits;
+        s.hits = applied;
+        try {
+            render.run();
+        } finally {
+            end();
+        }
+    }
+
+    /** Runs {@code body} with no editor pass active, for widgets drawn around an editor that aren't part of it. */
+    public static void suspend(Runnable body) {
+        begin(Mode.OFF, false);
+        try {
+            body.run();
+        } finally {
+            end();
+        }
+    }
+
+    /** The next widget is a colour editor. */
+    public static void markColor() {
+        s.color = true;
+    }
+
     private static void begin(Mode next, boolean severalTargets) {
-        mode = next;
-        shared = severalTargets;
-        COUNTS.clear();
-        PENDING.clear();
-        OPEN_COMBOS.clear();
-        nesting = 0;
-        replayCombo = null;
+        OUTER.push(s);
+        s = new State();
+        s.mode = next;
+        s.shared = severalTargets;
     }
 
     private static void end() {
-        mode = Mode.OFF;
-        shared = false;
-        scope = "";
-        capture = null;
-        captures = null;
-        visible = key -> true;
-        injects = Map.of();
-        hits = null;
+        s = OUTER.isEmpty() ? new State() : OUTER.pop();
     }
 
     private static String key(String label) {
-        int index = COUNTS.merge(label, 1, Integer::sum) - 1;
+        int index = s.counts.merge(label, 1, Integer::sum) - 1;
         return label + "#" + index;
     }
 
     public static void head(String label, @Nullable Object container, Kind kind, CallbackInfoReturnable<Boolean> cir) {
-        if (mode == Mode.OFF) return;
-        if (mode == Mode.DISPLAY) {
-            if (nesting > 0) {
-                nesting++;
+        boolean color = s.color;
+        s.color = false;
+        if (s.mode == Mode.OFF) return;
+        if (s.mode == Mode.DISPLAY) {
+            if (s.nesting > 0) {
+                s.nesting++;
                 return;
             }
-            if (!OPEN_COMBOS.isEmpty()) {
-                PENDING.push(PASS);
-                nesting = 1;
+            if (!s.openCombos.isEmpty()) {
+                s.pending.push(PASS);
+                s.nesting = 1;
                 return;
             }
             String key = key(label);
-            if (!visible.test(key)) {
+            if (!s.visible.test(key)) {
                 cir.setReturnValue(false);
                 return;
             }
             Object before = WidgetValues.snapshot(container);
-            boolean[] mixed = WidgetValues.mixed(key, before, captures);
-            boolean locked = WidgetValues.any(mixed) && !InputHelper.isCtrlDownRaw();
+            boolean[] mixed = WidgetValues.mixed(key, before, s.captures);
+            boolean locked = WidgetValues.any(mixed) && !InputHelper.isCtrlDownRaw()
+                    || !s.shared && ExpressionUi.locks(key, before);
             if (locked) ImGui.beginDisabled();
-            PENDING.push(new Pending(key, before, locked, mixed, kind, label));
-            nesting = 1;
+            s.pending.push(new Pending(key, before, locked, mixed, kind, label, color));
+            s.nesting = 1;
             return;
         }
         String key = key(label);
-        if (mode == Mode.CAPTURE) {
-            capture.put(key, WidgetValues.snapshot(container));
+        if (s.mode == Mode.CAPTURE) {
+            s.capture.put(key, WidgetValues.snapshot(container));
             cir.setReturnValue(false);
             return;
         }
-        Change edit = injects.get(key);
+        if (s.computed != null) {
+            computed(key, container, kind, cir);
+            return;
+        }
+        Change edit = s.injects.get(key);
         if (edit == null) {
             cir.setReturnValue(false);
             return;
         }
-        if (hits != null) hits.add(key);
-        if (kind == Kind.COMBO) replayCombo = edit;
+        if (s.hits != null) s.hits.add(key);
+        if (kind == Kind.COMBO) s.replayCombo = edit;
+        cir.setReturnValue(WidgetValues.inject(edit, container, kind));
+    }
+
+    private static void computed(String key, @Nullable Object container, Kind kind, CallbackInfoReturnable<Boolean> cir) {
+        UnaryOperator<Object> op = kind == Kind.BUTTON ? null : s.computed.get(key);
+        Object after = op == null ? null : op.apply(WidgetValues.snapshot(container));
+        if (op != null && s.hits != null) s.hits.add(key);
+        if (after == null) {
+            cir.setReturnValue(false);
+            return;
+        }
+        Change edit = kind == Kind.COMBO ? new Change(key, null, null, after.toString()) : new Change(key, after, null, null);
+        if (kind == Kind.COMBO) s.replayCombo = edit;
         cir.setReturnValue(WidgetValues.inject(edit, container, kind));
     }
 
     public static void tail(@Nullable Object container, boolean result) {
-        if (mode != Mode.DISPLAY || nesting == 0) return;
-        if (--nesting > 0) return;
-        Pending pending = PENDING.pop();
+        if (s.mode != Mode.DISPLAY || s.nesting == 0) return;
+        if (--s.nesting > 0) return;
+        Pending pending = s.pending.pop();
         if (pending == PASS) return;
         if (pending == COMBO_ITEM) {
-            if (result && change == null && !OPEN_COMBOS.isEmpty()) {
-                change = new Change(OPEN_COMBOS.peek(), null, null, lastSelectable);
+            if (result && s.change == null && !s.openCombos.isEmpty()) {
+                s.change = new Change(s.openCombos.peek(), null, null, s.lastSelectable);
             }
             return;
         }
         if (pending.locked()) ImGui.endDisabled();
         if (WidgetValues.any(pending.mixed())) MixedOverlay.draw(pending.label(), pending.mixed(), pending.kind(), pending.locked());
         Object value = pending.kind() == Kind.VALUE ? WidgetValues.snapshot(container) : pending.before();
-        if (pending.kind() != Kind.BUTTON) PropertySelection.record(scope, pending.key(), pending.kind(), value);
+        if (pending.kind() != Kind.BUTTON) PropertySelection.record(s.scope, pending.key(), pending.kind(), value);
+        if (!s.shared) ExpressionUi.row(pending.key(), pending.kind(), value, pending.color(), pending.kind() == Kind.COMBO && result);
         if (pending.kind() == Kind.COMBO) {
-            if (result) OPEN_COMBOS.push(pending.key());
+            if (result) s.openCombos.push(pending.key());
             return;
         }
-        if (!result || change != null) return;
-        change = switch (pending.kind()) {
+        if (!result || s.change != null) return;
+        s.change = switch (pending.kind()) {
             case CHECK -> new Change(pending.key(), !(Boolean) pending.before(), null, null);
             case RADIO -> new Change(pending.key(), true, null, null);
             case BUTTON -> new Change(pending.key(), null, null, null);
@@ -201,24 +258,24 @@ public final class MultiEditSession {
     }
 
     public static void selectableHead(String label, CallbackInfoReturnable<Boolean> cir) {
-        if (mode == Mode.OFF) return;
-        if (mode == Mode.DISPLAY && nesting == 0 && !OPEN_COMBOS.isEmpty()) {
-            lastSelectable = label;
-            PENDING.push(COMBO_ITEM);
-            nesting = 1;
+        if (s.mode == Mode.OFF) return;
+        if (s.mode == Mode.DISPLAY && s.nesting == 0 && !s.openCombos.isEmpty()) {
+            s.lastSelectable = label;
+            s.pending.push(COMBO_ITEM);
+            s.nesting = 1;
             return;
         }
-        if (mode == Mode.REPLAY && replayCombo != null) {
-            cir.setReturnValue(label.equals(replayCombo.selection()));
+        if (s.mode == Mode.REPLAY && s.replayCombo != null) {
+            cir.setReturnValue(label.equals(s.replayCombo.selection()));
             return;
         }
         head(label, null, Kind.BUTTON, cir);
     }
 
     public static void endComboHead(CallbackInfo ci) {
-        if (mode == Mode.DISPLAY && nesting == 0 && !OPEN_COMBOS.isEmpty()) OPEN_COMBOS.pop();
-        if (mode == Mode.REPLAY && replayCombo != null) {
-            replayCombo = null;
+        if (s.mode == Mode.DISPLAY && s.nesting == 0 && !s.openCombos.isEmpty()) s.openCombos.pop();
+        if (s.mode == Mode.REPLAY && s.replayCombo != null) {
+            s.replayCombo = null;
             ci.cancel();
         }
     }

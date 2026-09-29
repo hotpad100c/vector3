@@ -70,7 +70,9 @@ public class CustomKeyframe<T> extends Keyframe {
             ml.mypals.vectorthree.flashback.channel.ChannelMasks.markChanged(before, keyframe);
         });
         // Keyframes are otherwise only re-applied when the playhead moves.
-        ((com.moulberry.flashback.ext.MinecraftExt) net.minecraft.client.Minecraft.getInstance()).flashback$applyKeyframes();
+        if (!ml.mypals.vectorthree.expression.ExpressionRuntime.evaluating()) {
+            ((com.moulberry.flashback.ext.MinecraftExt) net.minecraft.client.Minecraft.getInstance()).flashback$applyKeyframes();
+        }
     }
 
     @Override

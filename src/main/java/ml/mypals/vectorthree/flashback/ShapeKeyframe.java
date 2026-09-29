@@ -64,7 +64,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
     public void renderEditKeyframe(Consumer<Consumer<Keyframe>> update) {
         super.renderEditKeyframe(update);
         ShapeTrackEditor current = editor;
-        if (current != null && !MultiEditSession.active()) {
+        if (current != null && !MultiEditSession.active() && !MultiEditSession.silent()) {
             current.edit(this, typed -> update.accept(keyframe -> typed.accept((ShapeKeyframe) keyframe)));
         }
     }
@@ -601,7 +601,7 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                     .withBlast(selectedType[0].equals("blast") ? blast[0] : state.blast())
                     .withVideoStartTick(selectedType[0].equals("video") ? videoStartTick.get() : state.videoStartTick())
                     .withName(nameField.get().isBlank() ? null : nameField.get());
-            ShapeTrackRegistry.apply(replacement);
+            if (!ml.mypals.vectorthree.expression.ExpressionRuntime.evaluating()) ShapeTrackRegistry.apply(replacement);
             return replacement;
         }
         return state;

@@ -9,6 +9,8 @@ import ml.mypals.vectorthree.flashback.channel.ChannelMasks;
 import ml.mypals.vectorthree.flashback.channel.ChannelRows;
 import ml.mypals.vectorthree.flashback.channel.ChannelSpec;
 import ml.mypals.vectorthree.flashback.channel.Channels;
+import ml.mypals.vectorthree.expression.ExpressionBindings;
+import ml.mypals.vectorthree.expression.ExpressionUi;
 import com.moulberry.flashback.keyframe.types.AudioKeyframeType;
 import ml.mypals.vectorthree.clips.Trimming;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -548,6 +550,7 @@ public abstract class TimelineWindowMixin {
         }
         PropertySelection.beginFrame(java.util.Objects.hash(selectedKeyframesList, editingKeyframeTrack, editingKeyframeTick));
         if (MultiSelection.count(selectedKeyframesList) > 1) {
+            ExpressionUi.begin(null, () -> {}, () -> {});
             MultiPropertiesPage.render(selectedKeyframesList, editingKeyframeTrack, editingKeyframeTick, vector3$multiHost());
         } else {
             // On a track keyed per channel, the editor is narrowed so every channel's row has room for its buttons.
@@ -559,11 +562,14 @@ public abstract class TimelineWindowMixin {
                 ChannelRows.begin();
                 ImGui.pushItemWidth(-(vector3$channelButtonsWidth() + ImGui.getFontSize() * 7));
             }
+            ExpressionUi.begin(channelTrack != null && channelTrack.keyframesByTick.containsKey(editingKeyframeTick) ? channelTrack : null,
+                    () -> upgradeToSceneWrite(), () -> vector3$keyframesChanged());
             MultiEditSession.display("single", List.of(), key -> true, false, () -> original.call(totalTicks));
             if (channelButtons) {
                 ImGui.popItemWidth();
                 vector3$channelButtons(channelTrack, ChannelRows.end());
             }
+            ExpressionUi.end();
         }
         List<PropertyClipboard.Clip> paste = PropertySelection.frame();
         if (paste != null) {
@@ -1054,6 +1060,10 @@ public abstract class TimelineWindowMixin {
             }
             if (TrackManagement.locked(editorScene.keyframeTracks.get(row))) {
                 drawList.addRectFilled(x, top, x + width, top + lineHeight, vector3$LOCKED_TINT);
+            }
+            if (ExpressionBindings.any(editorScene.keyframeTracks.get(row))) {
+                drawList.addText(x + width - ImGui.calcTextSizeX("fx") - 4, top + (lineHeight - ImGui.getTextLineHeight()) / 2,
+                        ImGui.getColorU32(imgui.moulberry90.flag.ImGuiCol.TextDisabled), "fx");
             }
         }
         vector3$drawRepeats(drawList, x, y, lineHeight);

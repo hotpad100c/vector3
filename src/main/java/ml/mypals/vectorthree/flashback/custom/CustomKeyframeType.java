@@ -79,6 +79,11 @@ public abstract class CustomKeyframeType<T> implements KeyframeType<CustomKeyfra
         return new CustomKeyframe<>(this, value, interpolation);
     }
 
+    /** A keyframe holding {@code value} (an evaluated one, say), or null when it isn't this type's value. */
+    public final @Nullable CustomKeyframe<T> keyframeOf(@Nullable Object value) {
+        return valueType.isInstance(value) ? newKeyframe(valueType.cast(value), InterpolationType.getDefault()) : null;
+    }
+
     /** The JSON field the value is saved under. */
     protected String valueField() {
         return "value";

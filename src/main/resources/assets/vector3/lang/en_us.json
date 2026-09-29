@@ -733,5 +733,18 @@
   "vector3.vfx.effect.vignette": "Vignette",
   "vector3.vfx.effect.lut": "LUT",
   "vector3.vfx.effect.fade": "Fade",
-  "vector3.vfx.effect.legacy": "Combined (older keyframe)"
+  "vector3.vfx.effect.legacy": "Combined (older keyframe)",
+  "vector3.expression.add": "Add expression",
+  "vector3.expression.add_all": "All components",
+  "vector3.expression.remove": "Remove expression",
+  "vector3.expression.copy_reference": "Copy reference",
+  "vector3.expression.copy_reference.tooltip": "Copies an expression that reads this parameter from another track's expression, e.g. Cube.position.y",
+  "vector3.expression.list": "Expressions (%d)",
+  "vector3.expression.enabled.tooltip": "Enabled: when off, the keyframed value is used",
+  "vector3.expression.disabled": "Disabled",
+  "vector3.expression.missing": "This parameter isn't shown for the current settings, so the expression does nothing right now",
+  "vector3.expression.error": "Error: %s",
+  "vector3.expression.error_at": "Error at %d: %s",
+  "vector3.expression.help": "Expression. time (seconds), tick, value (the keyframed value)\n+ - * / %% ^, == != < <= > >=, && || !, a ? b : c\nsin cos floor round(x, digits) clamp lerp smoothstep remap min max ...\nnoise(x, seed) wiggle(freq, amount, seed) rand(seed)\nvec(x, y, z) and .x .y .z / .r .g .b .a\nOther tracks: Cube.position.y or track(\"My track\").scale; this track: self.position\nentity(\"name or UUID\").x, camera.yaw, camera.fov",
+  "vector3.expression.help_text": "Text template: plain text with {expressions} in braces, e.g. Time: {floor(time)} s\n{{ and }} are literal braces. {value} is the keyframed text.\nformat(\"%%.1f\", x), pad(n, 3, \"0\"), upper, lower, substr, str(x, digits)"
 }

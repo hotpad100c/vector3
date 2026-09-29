@@ -733,5 +733,18 @@
   "vector3.vfx.effect.vignette": "暗角",
   "vector3.vfx.effect.lut": "LUT",
   "vector3.vfx.effect.fade": "淡入淡出",
-  "vector3.vfx.effect.legacy": "组合效果（旧关键帧）"
+  "vector3.vfx.effect.legacy": "组合效果（旧关键帧）",
+  "vector3.expression.add": "添加表达式",
+  "vector3.expression.add_all": "全部分量",
+  "vector3.expression.remove": "移除表达式",
+  "vector3.expression.copy_reference": "复制引用",
+  "vector3.expression.copy_reference.tooltip": "复制一段可在其他轨道的表达式里读取此参数的引用，例如 Cube.position.y",
+  "vector3.expression.list": "表达式（%d）",
+  "vector3.expression.enabled.tooltip": "启用：关闭时使用关键帧的值",
+  "vector3.expression.disabled": "已禁用",
+  "vector3.expression.missing": "当前设置下这个参数的控件没有显示，表达式暂时不起作用",
+  "vector3.expression.error": "错误：%s",
+  "vector3.expression.error_at": "第 %d 个字符处出错：%s",
+  "vector3.expression.help": "表达式。time（秒）、tick、value（关键帧上的值）\n+ - * / %% ^，== != < <= > >=，&& || !，a ? b : c\nsin cos floor round(x, 位数) clamp lerp smoothstep remap min max ……\nnoise(x, 种子) wiggle(频率, 幅度, 种子) rand(种子)\nvec(x, y, z) 以及 .x .y .z / .r .g .b .a\n其他轨道：Cube.position.y 或 track(\"我的轨道\").scale；本轨道：self.position\nentity(\"名字或 UUID\").x、camera.yaw、camera.fov",
+  "vector3.expression.help_text": "文本模板：普通文字，花括号里写表达式，例如 时间：{floor(time)} 秒\n{{ 和 }} 表示花括号本身。{value} 是关键帧上的文字。\nformat(\"%%.1f\", x)、pad(n, 3, \"0\")、upper、lower、substr、str(x, 位数)"
 }
