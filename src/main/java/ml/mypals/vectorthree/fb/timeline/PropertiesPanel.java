@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.fb.timeline;
 
 import com.moulberry.flashback.editor.SelectedKeyframes;
+import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.editor.ui.windows.TimelineWindow;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
@@ -52,7 +53,9 @@ public final class PropertiesPanel {
             Timeline.setEditingTick(-1);
         }
         int selected = MultiSelection.count(Timeline.selected());
-        if (selected > 1) return PropertiesWindow.begin(true, Long.MIN_VALUE + 1 + Timeline.selected().hashCode(), false);
+        if (selected > 1) {
+            return PropertiesWindow.begin(true, Long.MIN_VALUE + 1 + Timeline.selected().hashCode(), !curveTargets().isEmpty());
+        }
         return PropertiesWindow.begin(Timeline.editingTrack() >= 0 && Timeline.editingTick() >= 0,
                 ((long) Timeline.editingTrack() << 32) | (Timeline.editingTick() & 0xFFFFFFFFL),
                 editing != null && SpeedCurves.of(editing) != null);
@@ -72,6 +75,10 @@ public final class PropertiesPanel {
     }
 
     public static void page(int totalTicks, Runnable original) {
+        if (PropertiesWindow.isCurveTab() && MultiSelection.count(Timeline.selected()) > 1) {
+            renderMultiCurvePage();
+            return;
+        }
         if (PropertiesWindow.isCurveTab()) {
             renderCurvePage();
             return;
@@ -108,6 +115,16 @@ public final class PropertiesPanel {
             }
             int applied = MultiPropertiesPage.paste(paste, targets, Timeline.editingTrack(), Timeline.editingTick(), multiHost());
             PropertySelection.pasted(applied, paste.size());
+        }
+        List<String> reset = PropertySelection.takeReset();
+        if (reset != null) {
+            List<SelectedKeyframes> targets = Timeline.selected();
+            if (targets.isEmpty() && Timeline.editingTrack() >= 0 && Timeline.editingTrack() < Timeline.scene().keyframeTracks.size()) {
+                targets = List.of(new SelectedKeyframes(Timeline.scene().keyframeTracks.get(Timeline.editingTrack()).keyframeType,
+                        Timeline.editingTrack(), IntSet.of(Timeline.editingTick())));
+            }
+            int applied = MultiPropertiesPage.reset(reset, targets, Timeline.editingTrack(), Timeline.editingTick(), multiHost());
+            PropertySelection.resetDone(applied, reset.size());
         }
     }
 
@@ -186,6 +203,66 @@ public final class PropertiesPanel {
                     List.of(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, Timeline.editingTrack(), Timeline.editingTick(), before)),
                     List.of(new EditorSceneHistoryAction.SetKeyframe(track.keyframeType, Timeline.editingTrack(), Timeline.editingTick(), keyframe.copy())),
                     I18n.get("vector3.history.speed_curve")));
+        }
+        Timeline.keyframesChanged();
+    }
+
+    private record CurveTarget(KeyframeTrack track, int row, int tick, Keyframe keyframe) {}
+
+    private static final java.util.Map<Keyframe, SpeedCurve> CURVE_ORIGINALS = new java.util.IdentityHashMap<>();
+
+    /** The selected keyframes that already have a speed curve. */
+    private static List<CurveTarget> curveTargets() {
+        List<CurveTarget> targets = new ArrayList<>();
+        EditorScene scene = Timeline.scene();
+        if (scene == null) return targets;
+        for (SelectedKeyframes selected : Timeline.selected()) {
+            if (selected.trackIndex() >= scene.keyframeTracks.size()) continue;
+            KeyframeTrack track = scene.keyframeTracks.get(selected.trackIndex());
+            for (int tick : selected.keyframeTicks()) {
+                Keyframe keyframe = track.keyframesByTick.get(tick);
+                if (keyframe != null && SpeedCurves.of(keyframe) != null) {
+                    targets.add(new CurveTarget(track, selected.trackIndex(), tick, keyframe));
+                }
+            }
+        }
+        return targets;
+    }
+
+    // One curve editor for the whole selection: it shows the editing keyframe's curve and writes every edit to all of them.
+    private static void renderMultiCurvePage() {
+        List<CurveTarget> targets = curveTargets();
+        if (targets.isEmpty()) return;
+        CurveTarget shown = targets.getFirst();
+        for (CurveTarget target : targets) {
+            if (target.row() == Timeline.editingTrack() && target.tick() == Timeline.editingTick()) shown = target;
+        }
+        SpeedCurve curve = SpeedCurves.of(shown.keyframe());
+        Integer next = shown.track().keyframesByTick.higherKey(shown.tick());
+        float playhead = next == null ? -1 : (TimelineWindow.getCursorTick() - shown.tick()) / (float) (next - shown.tick());
+        ImGui.textDisabled(I18n.get("vector3.curve.multi", targets.size()));
+        SpeedCurveEditor.Result result = SpeedCurveEditor.render(curve, playhead);
+        if (result == null) return;
+        Timeline.upgradeToSceneWrite();
+        targets = curveTargets();
+        for (CurveTarget target : targets) {
+            CURVE_ORIGINALS.computeIfAbsent(target.keyframe(), SpeedCurves::of);
+            SpeedCurves.set(target.keyframe(), result.curve());
+        }
+        if (result.commit()) {
+            List<EditorSceneHistoryAction> undo = new ArrayList<>(), redo = new ArrayList<>();
+            for (CurveTarget target : targets) {
+                SpeedCurve original = CURVE_ORIGINALS.get(target.keyframe());
+                if (original == null || original.equals(result.curve())) continue;
+                Keyframe before = target.keyframe().copy();
+                SpeedCurves.set(before, original);
+                undo.add(new EditorSceneHistoryAction.SetKeyframe(target.track().keyframeType, target.row(), target.tick(), before));
+                redo.add(new EditorSceneHistoryAction.SetKeyframe(target.track().keyframeType, target.row(), target.tick(), target.keyframe().copy()));
+            }
+            CURVE_ORIGINALS.clear();
+            if (!redo.isEmpty()) {
+                Timeline.scene().push(new EditorSceneHistoryEntry(undo, redo, I18n.get("vector3.history.speed_curve")));
+            }
         }
         Timeline.keyframesChanged();
     }

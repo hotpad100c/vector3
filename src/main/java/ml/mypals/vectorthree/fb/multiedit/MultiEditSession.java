@@ -54,6 +54,7 @@ public final class MultiEditSession {
         boolean color;
     }
 
+    private static final Set<String> HELD = new java.util.HashSet<>();
     private static State s = new State();
     private static final ArrayDeque<State> OUTER = new ArrayDeque<>();
 
@@ -184,7 +185,8 @@ public final class MultiEditSession {
             if (!s.visible.test(key)) return false;
             Object before = WidgetValues.snapshot(container);
             boolean[] mixed = WidgetValues.mixed(key, before, s.captures);
-            boolean locked = WidgetValues.any(mixed) && !InputHelper.isCtrlDownRaw()
+            // Ctrl unlocks a mixed widget, and it stays unlocked while it is being edited, so Ctrl can be let go to type.
+            boolean locked = WidgetValues.any(mixed) && !InputHelper.isCtrlDownRaw() && !HELD.contains(s.scope + "|" + key)
                     || !s.shared && ExpressionUi.locks(key, before);
             if (locked) ImGui.beginDisabled();
             s.pending.push(new Pending(key, before, locked, mixed, kind, label, color));
@@ -226,6 +228,11 @@ public final class MultiEditSession {
             return;
         }
         if (pending.locked()) ImGui.endDisabled();
+        else if (WidgetValues.any(pending.mixed())) {
+            String held = s.scope + "|" + pending.key();
+            if (pending.kind() == Kind.COMBO ? result : ImGui.isItemActive()) HELD.add(held);
+            else HELD.remove(held);
+        }
         if (WidgetValues.any(pending.mixed())) MixedOverlay.draw(pending.label(), pending.mixed(), pending.kind(), pending.locked());
         Object value = pending.kind() == Kind.VALUE ? WidgetValues.snapshot(container) : pending.before();
         if (pending.kind() != Kind.BUTTON) PropertySelection.record(s.scope, pending.key(), pending.kind(), value);

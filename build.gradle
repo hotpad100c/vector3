@@ -114,7 +114,7 @@ publishing {
 }
 
 // Static analysis, run by hand: ./gradlew pmdMain spotbugsMain (reports in build/reports). Never fails the build.
-pmd {
+/*pmd {
 	toolVersion = '7.17.0'
 	ignoreFailures = true
 	consoleOutput = false
@@ -134,3 +134,4 @@ tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
 }
 tasks.named('pmdTest') { enabled = false }
 tasks.named('spotbugsTest') { enabled = false }
+*/

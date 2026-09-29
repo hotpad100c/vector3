@@ -43,8 +43,14 @@ public final class PropertySelection {
     private static String message;
     private static @Nullable String menuKey;
     private static long messageUntil;
+    private static @Nullable List<String> resetKeys;
 
     private PropertySelection() {}
+
+    /** A left press that started on empty space is in progress (it may turn into a box). */
+    public static boolean pressing() {
+        return pressing;
+    }
 
     /** A widget drawn this frame: its key ("label#n") and vertical extent. */
     public record RowInfo(String key, float y0, float y1) {}
@@ -81,13 +87,14 @@ public final class PropertySelection {
         boolean ctrl = InputHelper.isCtrlDownRaw();
         List<PropertyClipboard.Clip> paste = null;
 
-        if (ctrl && hoveredWindow && ImGui.isMouseClicked(1)) {
+        boolean additive = ctrl || ImGui.getIO().getKeyShift();
+        if (hoveredWindow && ImGui.isMouseClicked(0) && !ImGui.isAnyItemHovered()) {
             pressing = true;
             boxing = false;
             startX = mouseX;
             startY = mouseY;
         }
-        if (pressing && ImGui.isMouseDown(1)) {
+        if (pressing && ImGui.isMouseDown(0)) {
             if (Math.hypot(mouseX - startX, mouseY - startY) > DRAG_THRESHOLD) boxing = true;
             if (boxing) {
                 ImDrawList draw = ImGui.getWindowDrawList();
@@ -97,18 +104,27 @@ public final class PropertySelection {
         } else if (pressing) {
             pressing = false;
             if (boxing) {
+                if (!additive) SELECTED.clear();
                 for (Row row : ROWS) {
                     if (row.overlaps(startX, startY, mouseX, mouseY)) SELECTED.add(row.id());
                 }
             } else {
                 Row row = rowAt(mouseX, mouseY);
-                if (row != null && !SELECTED.remove(row.id())) SELECTED.add(row.id());
+                if (row != null) {
+                    if (!SELECTED.remove(row.id())) SELECTED.add(row.id());
+                } else if (!additive) {
+                    SELECTED.clear();
+                }
             }
             boxing = false;
-        } else if (!ctrl && hoveredWindow && ImGui.isMouseReleased(1)) {
+        } else if (hoveredWindow && ImGui.isMouseReleased(1)) {
             Row row = rowAt(mouseX, mouseY);
+            if (row != null && !SELECTED.contains(row.id())) {
+                SELECTED.clear();
+                SELECTED.add(row.id());
+            }
             menuKey = row == null ? null : row.key();
-            if (row == null || SELECTED.contains(row.id()) || ExpressionUi.offers(row.key())) ImGui.openPopup(MENU);
+            ImGui.openPopup(MENU);
         }
 
         boolean focused = ImGui.isWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.getIO().getWantTextInput();
@@ -122,6 +138,9 @@ public final class PropertySelection {
                     !SELECTED.isEmpty())) copy();
             if (ImGui.menuItem(I18n.get("vector3.properties.paste", PropertyClipboard.get().size()), "Ctrl+V", false,
                     !PropertyClipboard.get().isEmpty())) paste = PropertyClipboard.get();
+            if (ImGui.menuItem(I18n.get("vector3.properties.reset", selectedRows().size()), "", false, !SELECTED.isEmpty())) {
+                resetKeys = selectedRows().stream().map(PropertyClipboard.Clip::key).toList();
+            }
             if (ImGui.menuItem(I18n.get("vector3.properties.clear_selection"), "Esc", false, !SELECTED.isEmpty())) {
                 SELECTED.clear();
             }
@@ -134,6 +153,17 @@ public final class PropertySelection {
             ImGui.textDisabled(I18n.get("vector3.properties.clipboard_hint", SELECTED.size(), PropertyClipboard.get().size()));
         }
         return paste == null || paste.isEmpty() ? null : paste;
+    }
+
+    /** Rows the user asked to reset since the last call, or null. */
+    public static @Nullable List<String> takeReset() {
+        List<String> keys = resetKeys;
+        resetKeys = null;
+        return keys == null || keys.isEmpty() ? null : keys;
+    }
+
+    public static void resetDone(int applied, int total) {
+        show(I18n.get("vector3.properties.reset_done", applied, total));
     }
 
     public static void pasted(int applied, int total) {

@@ -2,6 +2,8 @@ package ml.mypals.vectorthree.fb.editor;
 
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiCond;
+import imgui.moulberry90.flag.ImGuiWindowFlags;
+import ml.mypals.vectorthree.fb.multiedit.PropertySelection;
 import net.minecraft.client.resources.language.I18n;
 
 
@@ -12,6 +14,7 @@ public final class PropertiesWindow {
     private static Boolean docked;
     private static long shownKeyframe = Long.MIN_VALUE;
     private static boolean curveTab;
+    private static float windowX, windowY, windowWidth, windowHeight;
 
     private PropertiesWindow() {}
 
@@ -42,7 +45,16 @@ public final class PropertiesWindow {
             focusRequested = false;
         }
         ImGui.setNextWindowSize(380, 480, ImGuiCond.FirstUseEver);
-        boolean visible = ImGui.begin(WINDOW.title(I18n.get("vector3.properties.title")), WINDOW.open());
+        // Dragging on the body selects rows, so it must not also drag a floating window.
+        boolean inBody = ImGui.getIO().getMousePosX() >= windowX && ImGui.getIO().getMousePosX() <= windowX + windowWidth
+                && ImGui.getIO().getMousePosY() >= windowY + ImGui.getFrameHeight() && ImGui.getIO().getMousePosY() <= windowY + windowHeight;
+        int flags = Boolean.FALSE.equals(docked) && (PropertySelection.pressing() || inBody && ImGui.isMouseClicked(0))
+                ? ImGuiWindowFlags.NoMove : 0;
+        boolean visible = ImGui.begin(WINDOW.title(I18n.get("vector3.properties.title")), WINDOW.open(), flags);
+        windowX = ImGui.getWindowPosX();
+        windowY = ImGui.getWindowPosY();
+        windowWidth = ImGui.getWindowWidth();
+        windowHeight = ImGui.getWindowHeight();
         docked = ImGui.isWindowDocked();
         if (visible && hasKeyframe) {
             if (hasCurve && ImGui.beginTabBar("##vector3_properties_tabs")) {

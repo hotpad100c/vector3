@@ -105,6 +105,11 @@ public abstract class CustomKeyframeType<T> implements KeyframeType<CustomKeyfra
         return ((CustomKeyframe<T>) keyframe).value;
     }
 
+    /** A keyframe holding the type's default value. */
+    public final CustomKeyframe<T> defaultKeyframe() {
+        return newKeyframe(createValue(), InterpolationType.getDefault());
+    }
+
     /** The change a keyframe holding {@code value} applies. */
     public final KeyframeChange changeOf(T value) {
         return CustomKeyframeChange.of(this, value);

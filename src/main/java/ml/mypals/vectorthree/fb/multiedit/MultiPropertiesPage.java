@@ -9,6 +9,8 @@ import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiHoveredFlags;
 import imgui.moulberry90.flag.ImGuiWindowFlags;
+import ml.mypals.vectorthree.core.shape.ShapeState;
+import ml.mypals.vectorthree.fb.custom.CustomKeyframeType;
 import ml.mypals.vectorthree.fb.shape.ShapeKeyframe;
 import ml.mypals.vectorthree.fb.curve.SpeedCurves;
 import ml.mypals.vectorthree.mc.shape.ShapeTrackRegistry;
@@ -30,6 +32,9 @@ public final class MultiPropertiesPage {
 
     private static final int SILENT_FLAGS = ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoScrollbar
             | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoNav;
+
+    // Ctrl unlocks the mixed interpolation combo, and it stays unlocked while its list is open.
+    private static boolean interpolationOpen;
 
     private MultiPropertiesPage() {}
 
@@ -122,6 +127,38 @@ public final class MultiPropertiesPage {
         return applied.size();
     }
 
+    /** Puts the given rows of every selected keyframe back to what a new keyframe of its type starts with. */
+    public static int reset(List<String> keys, List<SelectedKeyframes> selection, int editingTrack, int editingTick, Host host) {
+        List<MultiSelection.Entry> entries = MultiSelection.gather(host.scene().get(), selection, editingTrack, editingTick);
+        Set<String> applied = new HashSet<>();
+        silently(-2, () -> {
+            for (int i = 0; i < entries.size(); i++) {
+                MultiSelection.Entry target = entries.get(i);
+                Keyframe fresh = defaultKeyframe(target);
+                if (fresh == null) continue;
+                ImGui.pushID(i);
+                Map<String, Object> defaults = MultiEditSession.capture(() -> fresh.renderEditKeyframe(edit -> {}));
+                List<MultiEditSession.Change> changes = new ArrayList<>();
+                for (String key : keys) {
+                    Object value = defaults.get(key);
+                    if (value != null) changes.add(new MultiEditSession.Change(key, value, null, value instanceof String text ? text : null));
+                }
+                MultiEditSession.replay(changes, applied, () -> target.working.renderEditKeyframe(target.update()));
+                ImGui.popID();
+            }
+        });
+        if (MultiSelection.commit(entries, host.upgradeToWrite(), host.scene())) host.keyframesChanged().run();
+        return applied.size();
+    }
+
+    private static Keyframe defaultKeyframe(MultiSelection.Entry entry) {
+        if (entry.working instanceof ShapeKeyframe shape) {
+            return new ShapeKeyframe(ShapeState.create(shape.value.shapeType(), shape.value.shapeId(), 0, 0, 0), shape.interpolationType());
+        }
+        if (entry.type instanceof CustomKeyframeType<?> custom) return custom.defaultKeyframe();
+        return entry.type.createDirect();
+    }
+
     private static List<Map<String, Object>> captureAll(List<MultiSelection.Entry> targets, int section) {
         List<Map<String, Object>> captures = new ArrayList<>(targets.size());
         silently(section, () -> {
@@ -156,11 +193,13 @@ public final class MultiPropertiesPage {
         String custom = I18n.get("vector3.curve.custom");
         int first = choice(targets.getFirst().working, names.length);
         boolean mixed = targets.stream().anyMatch(entry -> choice(entry.working, names.length) != first);
-        boolean locked = mixed && !InputHelper.isCtrlDownRaw();
+        boolean locked = mixed && !InputHelper.isCtrlDownRaw() && !interpolationOpen;
         String preview = mixed ? "-" : first == names.length ? custom : names[first];
         if (locked) ImGui.beginDisabled();
         ImGui.setNextItemWidth(160);
-        if (ImGui.beginCombo(I18n.get("flashback.type"), preview)) {
+        boolean open = ImGui.beginCombo(I18n.get("flashback.type"), preview);
+        if (!locked) interpolationOpen = open;
+        if (open) {
             for (int i = 0; i < names.length; i++) {
                 if (ImGui.selectable(names[i], !mixed && first == i)) {
                     InterpolationType type = InterpolationType.INTERPOLATION_TYPES[i];
