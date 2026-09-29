@@ -23,6 +23,7 @@ import ml.mypals.vectorthree.mc.vfx.effects.ReflectionEffect;
 import ml.mypals.vectorthree.mc.vfx.effects.VignetteEffect;
 import ml.mypals.vectorthree.core.port.Ports;
 import ml.mypals.vectorthree.mc.camera.PreviewPass;
+import ml.mypals.vectorthree.mc.light.LightRenderer;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4fc;
 
@@ -52,11 +53,12 @@ public final class ScreenVFXRenderer {
         EffectTextures.clear();
         AutoExposureEffect.clear();
         MotionBlurEffect.clear();
+        LightRenderer.clear();
     }
 
     /** Called before the hand pass, which clears the main depth buffer. */
     public static void captureDepth(Matrix4fc projection) {
-        if (Ports.view().mainViewDetached() || current.stream().noneMatch(ScreenVFXRenderer::usesDepth)) return;
+        if (Ports.view().mainViewDetached() || !LightRenderer.hasLights() && current.stream().noneMatch(ScreenVFXRenderer::usesDepth)) return;
         DepthOfFieldEffect.captureDepth(Minecraft.getInstance().gameRenderer.mainRenderTarget(), projection);
     }
 
@@ -71,6 +73,8 @@ public final class ScreenVFXRenderer {
                 AutoExposureEffect.clear();
             if (current.stream().noneMatch(value -> value.has(ScreenVFX.MOTION_BLUR)))
                 MotionBlurEffect.clear();
+            if (!Ports.view().mainViewDetached())
+                LightRenderer.render(Minecraft.getInstance().gameRenderer.mainRenderTarget());
             render();
         } finally {
             DepthOfFieldEffect.endFrame();

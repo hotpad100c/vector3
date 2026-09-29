@@ -1,4 +1,11 @@
 {
+  "vector3.keyframe_type.light": "光源",
+  "vector3.light.position": "位置",
+  "vector3.light.color": "颜色",
+  "vector3.light.intensity": "强度",
+  "vector3.light.radius": "半径",
+  "vector3.light.volume": "体积光",
+  "vector3.light.shadow": "屏幕空间阴影",
   "vector3.vfx.effect.flare": "镜头光晕",
   "vector3.vfx.effect.god_rays": "体积光（丁达尔效应）",
   "vector3.vfx.effect.blur": "高斯模糊",

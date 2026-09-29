@@ -7,6 +7,7 @@ import ml.mypals.vectorthree.fb.camera.dolly.DollyZoomCamera;
 import ml.mypals.vectorthree.fb.camera.lookto.LookToCamera;
 import ml.mypals.vectorthree.mc.vfx.ScreenVFXRenderer;
 import ml.mypals.vectorthree.mc.pose.EntityPoses;
+import ml.mypals.vectorthree.mc.light.LightRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,6 +21,7 @@ public class EditorStateLookToMixin {
         LookToCamera.begin(handler);
         if (handler instanceof MinecraftKeyframeHandler) {
             ScreenVFXRenderer.begin();
+            LightRenderer.begin();
             EntityPoses.begin();
         }
     }
@@ -30,6 +32,7 @@ public class EditorStateLookToMixin {
         LookToCamera.finish(handler);
         if (handler instanceof MinecraftKeyframeHandler) {
             ScreenVFXRenderer.finish();
+            LightRenderer.finish();
             EntityPoses.finish();
         }
     }

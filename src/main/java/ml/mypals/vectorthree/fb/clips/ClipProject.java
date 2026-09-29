@@ -33,6 +33,7 @@ public final class ClipProject {
     private ClipProject() {}
 
     public static void opened(Path replay) {
+        ProjectClock.reset();
         openReplay = replay;
     }
 

@@ -23,6 +23,7 @@ import ml.mypals.vectorthree.core.port.Ports;
 import ml.mypals.vectorthree.core.fade.ScreenVFX;
 import net.minecraft.client.renderer.RenderPipelines;
 import org.joml.Matrix4fc;
+import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 
 import java.util.Optional;
@@ -47,6 +48,7 @@ public final class DepthOfFieldEffect {
     private static boolean depthReady;
     private static float focalScale = 1;
     private static float projectionX = 1, projectionY = 1;
+    private static final Matrix4f projectionMatrix = new Matrix4f(), inverseProjectionMatrix = new Matrix4f();
     private static int frame;
 
     /** Smoothed centre distance, one per view so the camera preview does not disturb the main view. */
@@ -65,6 +67,8 @@ public final class DepthOfFieldEffect {
         focalScale = Math.abs(projection.m11());
         projectionX = projection.m00();
         projectionY = projection.m11();
+        projectionMatrix.set(projection);
+        inverseProjectionMatrix.set(projection).invert();
         boolean zeroToOne = RenderSystem.getDevice().getDeviceInfo().isZZeroToOne();
         write(projectionSettings, projection.m22(), projection.m32(), projection.m23(), projection.m33(),
                 zeroToOne ? 1 : 0, skyDepth(projection, zeroToOne), 0, 0);
@@ -96,6 +100,8 @@ public final class DepthOfFieldEffect {
     public static GpuTextureView distanceView() { return depthReady ? distance.getColorTextureView() : null; }
     public static float projectionX() { return projectionX; }
     public static float projectionY() { return projectionY; }
+    public static Matrix4fc projectionMatrix() { return projectionMatrix; }
+    public static Matrix4fc inverseProjectionMatrix() { return inverseProjectionMatrix; }
 
     public static void render(RenderTarget main, ScreenVFX value, boolean overlay) {
         if (!depthReady || distance.width != main.width || distance.height != main.height) return;

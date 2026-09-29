@@ -6,9 +6,11 @@ import ml.mypals.vectorthree.fb.channel.BuiltInChannels;
 import ml.mypals.vectorthree.fb.clips.ClipCovers;
 import ml.mypals.vectorthree.fb.clips.ClipKeyframeType;
 import ml.mypals.vectorthree.fb.clips.EmptyProject;
+import ml.mypals.vectorthree.fb.clips.ProjectClock;
 import ml.mypals.vectorthree.fb.custom.CustomKeyframes;
 import ml.mypals.vectorthree.fb.fade.ScreenVFXKeyframeType;
 import ml.mypals.vectorthree.fb.loop.LoopKeyframeType;
+import ml.mypals.vectorthree.fb.light.LightKeyframeType;
 import ml.mypals.vectorthree.fb.pose.EntityPoseKeyframeType;
 import ml.mypals.vectorthree.fb.shape.ShapeKeyframe;
 import ml.mypals.vectorthree.fb.shape.ShapeKeyframeType;
@@ -26,6 +28,7 @@ public final class FlashbackBootstrap {
         CustomKeyframes.register(SkipKeyframeType.INSTANCE);
         CustomKeyframes.register(LoopKeyframeType.INSTANCE);
         CustomKeyframes.register(ScreenVFXKeyframeType.INSTANCE);
+        CustomKeyframes.register(LightKeyframeType.INSTANCE);
         CustomKeyframes.register(EntityPoseKeyframeType.INSTANCE);
         CustomKeyframes.register(DollyZoomKeyframeType.INSTANCE);
         CustomKeyframes.register(ClipKeyframeType.INSTANCE);
@@ -35,6 +38,7 @@ public final class FlashbackBootstrap {
     }
 
     public static void onDisconnect() {
+        ProjectClock.reset();
         Editors.clearAll();
         ClipCovers.clear();
     }

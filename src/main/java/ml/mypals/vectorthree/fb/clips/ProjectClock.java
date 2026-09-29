@@ -19,9 +19,17 @@ public final class ProjectClock {
     private static volatile TimeMap map = TimeMap.EMPTY;
     private static volatile int tick;
     private static volatile int lastTick;
-    private static Object server;
+    private static volatile Object server;
 
     private ProjectClock() {}
+
+    public static void reset() {
+        map = TimeMap.EMPTY;
+        tick = 0;
+        lastTick = 0;
+        playing = false;
+        server = null;
+    }
 
     public static boolean active() {
         return !map.isEmpty();
