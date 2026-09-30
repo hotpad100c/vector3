@@ -20,6 +20,7 @@ import ml.mypals.vectorthree.fb.custom.CustomKeyframeChange;
 import ml.mypals.vectorthree.fb.expression.ExpressionBindings;
 import ml.mypals.vectorthree.fb.shape.GizmoMode;
 import ml.mypals.vectorthree.fb.shape.ShapeGizmoEditor;
+import ml.mypals.vectorthree.mc.light.LightParents;
 import ml.mypals.vectorthree.mc.light.LightRenderer;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -69,7 +70,7 @@ public final class LightGizmoEditor {
         preview = null;
         dragging = null;
         ensureShapes();
-        layout(evaluated());
+        layout(LightParents.toWorld(evaluated()));
     }
 
     public void clearSelection() {
@@ -99,7 +100,9 @@ public final class LightGizmoEditor {
         if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
             if (preview != null) {
-                Light replacement = rebase(keyframe.value.sanitized(), dragStart, preview, dragging.kind());
+                String parent = parentOf(keyframe.value);
+                Light replacement = rebase(keyframe.value.sanitized(), LightParents.toLocal(dragStart, parent),
+                        LightParents.toLocal(preview, parent), dragging.kind());
                 if (!replacement.equals(keyframe.value)) commit.accept(replacement);
             }
             LightRenderer.clearPreview();
@@ -109,8 +112,10 @@ public final class LightGizmoEditor {
             return;
         }
 
-        Light evaluated = evaluated();
-        Light light = preview != null ? preview : evaluated;
+        // The gizmo works in the world; the keyframe stores the light relative to its parent, if it has one.
+        Light evaluatedLocal = evaluated();
+        String parent = parentOf(evaluatedLocal);
+        Light light = preview != null ? preview : LightParents.toWorld(evaluatedLocal);
         ensureShapes();
         layout(light);
         Vec3 look = ReplayUI.getMouseLookVector();
@@ -130,7 +135,8 @@ public final class LightGizmoEditor {
                     if (!point.equals(light.position())) {
                         Light edited = replace(light, point, light.direction(), light.radius(), light.areaWidth(),
                                 light.areaHeight(), light.areaReach(), light.innerAngle(), light.outerAngle());
-                        commit.accept(rebase(keyframe.value.sanitized(), light, edited, Kind.X));
+                        commit.accept(rebase(keyframe.value.sanitized(), LightParents.toLocal(light, parent),
+                                LightParents.toLocal(edited, parent), Kind.X));
                     }
                 }
             }
@@ -159,7 +165,7 @@ public final class LightGizmoEditor {
             }
             if (next != null) {
                 preview = next;
-                LightRenderer.preview(evaluated, next);
+                LightRenderer.preview(evaluatedLocal, LightParents.toLocal(next, parent));
                 layout(next);
             }
         }
@@ -392,7 +398,12 @@ public final class LightGizmoEditor {
     private static Light replace(Light start, Vec3 position, Vec3 direction, float radius,
             float width, float height, float reach, float inner, float outer) {
         return new Light(position, start.red(), start.green(), start.blue(), start.intensity(), radius,
-                start.volume(), start.shadow(), start.type(), direction, width, height, inner, outer, reach).sanitized();
+                start.volume(), start.shadow(), start.type(), direction, width, height, inner, outer, reach,
+                start.parent()).sanitized();
+    }
+
+    private static String parentOf(Light light) {
+        return light.parent() == null ? "" : light.parent();
     }
 
     private Light evaluated() {

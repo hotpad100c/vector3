@@ -6,7 +6,9 @@ import ml.mypals.vectorthree.core.light.Light;
 import ml.mypals.vectorthree.fb.custom.CustomKeyframeType;
 import ml.mypals.vectorthree.fb.editor.VectorIcons;
 import ml.mypals.vectorthree.fb.shape.GizmoMode;
+import ml.mypals.vectorthree.mc.light.LightParents;
 import ml.mypals.vectorthree.mc.light.LightRenderer;
+import ml.mypals.vectorthree.mc.shape.ShapeTrackRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.world.phys.Vec3;
@@ -29,11 +31,15 @@ public final class LightKeyframeType extends CustomKeyframeType<Light> {
         return new Light(defaults.position(), defaults.red(), defaults.green(), defaults.blue(),
                 defaults.intensity(), defaults.radius(), defaults.volume(), defaults.shadow(),
                 defaults.type(), new Vec3(camera.forwardVector()), defaults.areaWidth(), defaults.areaHeight(),
-                defaults.innerAngle(), defaults.outerAngle(), defaults.areaReach());
+                defaults.innerAngle(), defaults.outerAngle(), defaults.areaReach(), "");
     }
 
     @Override protected Light sanitize(Light value) { return value.sanitized(); }
-    @Override protected Light lerp(Light from, Light to, double amount) { return from.lerp(to, (float) amount); }
+    // Lights of different parents are blended in the world, where they have a common frame of reference.
+    @Override protected Light lerp(Light from, Light to, double amount) {
+        if (java.util.Objects.equals(from.parent(), to.parent())) return from.lerp(to, (float) amount);
+        return LightParents.toWorld(from).lerp(LightParents.toWorld(to), (float) amount);
+    }
     @Override protected void apply(Light value, KeyframeHandler handler) { LightRenderer.request(value); }
 
     @Override protected Light edit(Light value) {
@@ -45,6 +51,13 @@ public final class LightKeyframeType extends CustomKeyframeType<Light> {
         modeButton(GizmoMode.SCALE, "vector3.gizmo.scale"); ImGui.sameLine();
         modeButton(GizmoMode.GEOMETRY, "vector3.gizmo.geometry");
         ImGui.textDisabled(I18n.get("vector3.gizmo.place_hint"));
+        String parent = value.parent() == null ? "" : value.parent();
+        String chosenParent = parentCombo(parent);
+        if (!chosenParent.equals(parent)) {
+            // Re-parenting keeps the light where it is in the world.
+            return LightParents.toLocal(LightParents.toWorld(value), chosenParent).sanitized();
+        }
+        if (!parent.isEmpty()) ImGui.textDisabled(I18n.get("vector3.light.parent_hint"));
         float[] position = {(float) value.position().x, (float) value.position().y, (float) value.position().z};
         float[] color = {value.red(), value.green(), value.blue()};
         float[] intensity = {value.intensity()}, radius = {value.radius()};
@@ -91,7 +104,23 @@ public final class LightKeyframeType extends CustomKeyframeType<Light> {
         Vec3 axis = new Vec3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
         return new Light(new Vec3(position[0], position[1], position[2]), color[0], color[1], color[2],
                 intensity[0], radius[0], volume[0], shadow[0], type, axis,
-                width[0], height[0], inner[0], outer[0], reach[0]).sanitized();
+                width[0], height[0], inner[0], outer[0], reach[0], parent).sanitized();
+    }
+
+    private static String parentCombo(String current) {
+        String preview = current.isEmpty() ? I18n.get("vector3.light.parent_none")
+                : ShapeTrackRegistry.displayName(current);
+        String result = current;
+        if (ImGui.beginCombo(I18n.get("vector3.light.parent"), preview)) {
+            if (ImGui.selectable(I18n.get("vector3.light.parent_none"), current.isEmpty())) result = "";
+            for (String shapeId : ShapeTrackRegistry.shapeIds()) {
+                if (ImGui.selectable(ShapeTrackRegistry.displayName(shapeId) + "##light_parent_" + shapeId,
+                        shapeId.equals(current))) result = shapeId;
+            }
+            ImGui.endCombo();
+        }
+        if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.light.parent_tip"));
+        return result;
     }
 
     private static String typeLabel(Light.Type type) {

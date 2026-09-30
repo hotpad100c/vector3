@@ -51,6 +51,12 @@ public final class LightRenderer {
     private static Light previewed(Light light) {
         return previewOriginal != null && previewOriginal.equals(light) ? previewReplacement : light;
     }
+
+    /** What is drawn for a requested light: any gizmo preview applied, moved into the world, or null when hidden. */
+    private static Light shown(Light requested) {
+        Light light = previewed(requested);
+        return LightParents.hidden(light) ? null : LightParents.toWorld(light);
+    }
     public static void clear() {
         clearPreview();
         PENDING.clear();
@@ -71,7 +77,7 @@ public final class LightRenderer {
     public static boolean hasLights() { return !current.isEmpty(); }
 
     static List<Light> activeLights() {
-        return current.stream().map(LightRenderer::previewed)
+        return current.stream().map(LightRenderer::shown).filter(java.util.Objects::nonNull)
                 .filter(light -> light.intensity() > 0 && light.radius() > 0).toList();
     }
 
@@ -86,7 +92,7 @@ public final class LightRenderer {
         ScreenPass.copy(main, scene);
         RenderSystem.getDevice().createCommandEncoder().clearColorTexture(
                 surfaceTarget.getColorTexture(), new Vector4f(0));
-        boolean hasVolume = current.stream().map(LightRenderer::previewed)
+        boolean hasVolume = current.stream().map(LightRenderer::shown).filter(java.util.Objects::nonNull)
                 .anyMatch(light -> light.intensity() > 0 && light.volume() > 0);
         if (hasVolume) {
             ensureVolume(main);
@@ -98,8 +104,8 @@ public final class LightRenderer {
         Vector3f up = new Vector3f(camera.upVector());
         Vector3f right = new Vector3f(forward).cross(up).normalize();
         for (Light requested : current) {
-            Light light = previewed(requested);
-            if (light.intensity() <= 0 || light.radius() <= 0) continue;
+            Light light = shown(requested);
+            if (light == null || light.intensity() <= 0 || light.radius() <= 0) continue;
             Vector3f offset = new Vector3f((float) (light.position().x - camera.position().x),
                     (float) (light.position().y - camera.position().y),
                     (float) (light.position().z - camera.position().z));
