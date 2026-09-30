@@ -8,6 +8,10 @@ layout(std140) uniform LightSettings {
     vec4 Effects;
     mat4 ProjectionMatrix;
     mat4 InverseProjectionMatrix;
+    vec4 LightDirectionType;
+    vec4 AreaCone;
+    vec4 AreaRight;
+    vec4 AreaUp;
 };
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 fragColor;
@@ -47,18 +51,30 @@ void main() {
     vec4 rayPoint = InverseProjectionMatrix * vec4(texCoord * 2.0 - 1.0, 0.5, 1.0);
     vec3 ray = rayPoint.xyz / rayPoint.w;
     vec3 surface = ray * (depth / -ray.z);
-    if (length(LightPositionRadius.xyz - surface) > LightPositionRadius.w * 2.5) {
+    float reach = LightPositionRadius.w * 2.5;
+    if (LightDirectionType.w > 0.5 && LightDirectionType.w < 1.5)
+        reach += length(AreaCone.xy) * 0.5;
+    if (length(LightPositionRadius.xyz - surface) > reach) {
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
     }
     vec3 start = surface + normalize(-surface) * max(0.12, depth * 0.003);
     vec3 center = LightPositionRadius.xyz;
-    float spread = clamp(LightPositionRadius.w * 0.04, 0.06, 0.4);
     float jitter = noise(gl_FragCoord.xy);
     float occlusion = blocked(start, center, jitter);
-    occlusion += blocked(start, center + vec3(spread, 0.0, 0.0), jitter);
-    occlusion += blocked(start, center - vec3(spread, 0.0, 0.0), jitter);
-    occlusion += blocked(start, center + vec3(0.0, spread, 0.0), jitter);
-    occlusion += blocked(start, center - vec3(0.0, spread, 0.0), jitter);
+    if (LightDirectionType.w > 0.5 && LightDirectionType.w < 1.5) {
+        vec3 dx = AreaRight.xyz * AreaCone.x * 0.38;
+        vec3 dy = AreaUp.xyz * AreaCone.y * 0.38;
+        occlusion += blocked(start, center + dx + dy, jitter);
+        occlusion += blocked(start, center + dx - dy, jitter);
+        occlusion += blocked(start, center - dx + dy, jitter);
+        occlusion += blocked(start, center - dx - dy, jitter);
+    } else {
+        float spread = clamp(LightPositionRadius.w * 0.04, 0.06, 0.4);
+        occlusion += blocked(start, center + vec3(spread, 0.0, 0.0), jitter);
+        occlusion += blocked(start, center - vec3(spread, 0.0, 0.0), jitter);
+        occlusion += blocked(start, center + vec3(0.0, spread, 0.0), jitter);
+        occlusion += blocked(start, center - vec3(0.0, spread, 0.0), jitter);
+    }
     fragColor = vec4(occlusion * 0.2, 0.0, 0.0, 1.0);
 }

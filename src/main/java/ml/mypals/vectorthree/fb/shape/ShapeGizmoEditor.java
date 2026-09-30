@@ -166,7 +166,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 ReplayUI.imguiWindower.ungrab();
                 beginDrag(hovered, state, ray, camera);
             } else if (ImGui.isMouseClicked(1) && inViewport && !Editors.ORBIT_GIZMO.isHovering()
-                    && !Editors.CAMERA_GIZMO.isHovering() && !Editors.POSE_GIZMO.isHovering() && !Editors.PREFABS.isHovering()
+                    && !Editors.CAMERA_GIZMO.isHovering() && !Editors.POSE_GIZMO.isHovering()
+                    && !Editors.LIGHT_GIZMO.isHovering() && !Editors.PREFABS.isHovering()
                     && !ml.mypals.vectorthree.fb.camera.MotionPaths.isHovering()) {
                 String shapeId = ShapeTrackRegistry.pickShape(ray);
                 if (shapeId != null) ShapeTimelineSelection.request(shapeId);

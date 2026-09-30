@@ -652,7 +652,8 @@ public final class TrackTimeline {
     }
 
     public static boolean filterDrag(int button) {
-        if (Editors.GIZMO_EDITOR.isDragging() || Editors.ORBIT_GIZMO.isDragging() || Editors.CAMERA_GIZMO.isDragging() || Editors.PREFABS.isDragging()
+        if (Editors.GIZMO_EDITOR.isDragging() || Editors.ORBIT_GIZMO.isDragging() || Editors.CAMERA_GIZMO.isDragging()
+                || Editors.LIGHT_GIZMO.isDragging() || Editors.PREFABS.isDragging()
                 || draggedGroup != null) {
             return false;
         }

@@ -10,6 +10,10 @@ layout(std140) uniform LightSettings {
     vec4 Effects;
     mat4 ProjectionMatrix;
     mat4 InverseProjectionMatrix;
+    vec4 LightDirectionType;
+    vec4 AreaCone;
+    vec4 AreaRight;
+    vec4 AreaUp;
 };
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 fragColor;
@@ -54,11 +58,28 @@ void main() {
     vec3 ray = rayPoint.xyz / rayPoint.w;
     vec3 surface = ray * (depth / -ray.z);
     float radius = max(LightPositionRadius.w, 0.001);
-    float normalizedDistance = length(LightPositionRadius.xyz - surface) / radius;
+    vec3 emitter = LightPositionRadius.xyz;
+    float shape = 1.0;
+    if (LightDirectionType.w < 1.5 && LightDirectionType.w > 0.5) {
+        vec3 displacement = surface - emitter;
+        emitter += AreaRight.xyz * clamp(dot(displacement, AreaRight.xyz),
+                -AreaCone.x * 0.5, AreaCone.x * 0.5);
+        emitter += AreaUp.xyz * clamp(dot(displacement, AreaUp.xyz),
+                -AreaCone.y * 0.5, AreaCone.y * 0.5);
+        vec3 toSurface = surface - emitter;
+        shape = smoothstep(-0.05, 0.15,
+                dot(normalize(LightDirectionType.xyz), toSurface / max(length(toSurface), 0.001)));
+    } else if (LightDirectionType.w > 1.5) {
+        vec3 toSurface = surface - emitter;
+        float cone = dot(normalize(LightDirectionType.xyz), toSurface / max(length(toSurface), 0.001));
+        shape = clamp((cone - AreaCone.w) / max(AreaCone.z - AreaCone.w, 0.001), 0.0, 1.0);
+        shape = shape * shape * (3.0 - 2.0 * shape);
+    }
+    float normalizedDistance = length(emitter - surface) / radius;
     float attenuation = exp(-3.0 * normalizedDistance * normalizedDistance);
     float visibility = Effects.y > 0.001 ? 1.0 - Effects.y * shadowOcclusion(depth) : 1.0;
     vec3 scene = texture(InSampler, texCoord).rgb;
     vec3 albedo = mix(vec3(0.35), scene, 0.65);
-    fragColor = vec4(LightColorIntensity.rgb * LightColorIntensity.a * attenuation
+    fragColor = vec4(LightColorIntensity.rgb * LightColorIntensity.a * attenuation * shape
             * visibility * albedo, 1.0);
 }

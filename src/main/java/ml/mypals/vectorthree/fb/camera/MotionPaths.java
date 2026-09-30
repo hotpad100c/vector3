@@ -240,7 +240,8 @@ public final class MotionPaths {
     private static void pick() {
         hovered = null;
         boolean blocked = Editors.CAMERA_GIZMO.isHovering() || Editors.GIZMO_EDITOR.isHovering()
-                || Editors.ORBIT_GIZMO.isHovering() || Editors.POSE_GIZMO.isHovering() || Editors.PREFABS.isHovering()
+                || Editors.ORBIT_GIZMO.isHovering() || Editors.POSE_GIZMO.isHovering()
+                || Editors.LIGHT_GIZMO.isHovering() || Editors.PREFABS.isHovering()
                 || Editors.CAMERA_GIZMO.isDragging() || Editors.GIZMO_EDITOR.isDragging();
         Vec3 direction = ReplayUI.getMouseLookVector();
         if (blocked || direction == null || !ShapeGizmoEditor.mouseInViewport()) return;

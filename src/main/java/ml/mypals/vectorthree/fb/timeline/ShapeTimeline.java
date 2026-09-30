@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import ml.mypals.vectorthree.core.camera.orbit.OrbitTilt;
 import ml.mypals.vectorthree.core.fade.ScreenVFX;
+import ml.mypals.vectorthree.core.light.Light;
 import ml.mypals.vectorthree.core.pose.EntityPose;
 import ml.mypals.vectorthree.core.shape.ShapeState;
 import ml.mypals.vectorthree.core.shape.ShapeTimelineSelection;
@@ -34,6 +35,7 @@ import ml.mypals.vectorthree.fb.editor.Eyedropper;
 import ml.mypals.vectorthree.fb.editor.PropertiesWindow;
 import ml.mypals.vectorthree.fb.expression.ExpressionEditor;
 import ml.mypals.vectorthree.fb.fade.ScreenVFXKeyframeType;
+import ml.mypals.vectorthree.fb.light.LightKeyframeType;
 import ml.mypals.vectorthree.fb.multiedit.GroupTransform;
 import ml.mypals.vectorthree.fb.multiedit.MultiSelection;
 import ml.mypals.vectorthree.fb.pose.EntityPoseKeyframeType;
@@ -74,12 +76,14 @@ public final class ShapeTimeline {
             imgui.moulberry90.internal.ImGui.clearActiveID();
         }
         GizmoMode.pollShortcuts(Editors.ORBIT_GIZMO.isDragging() || Editors.CAMERA_GIZMO.isDragging()
-                || Editors.POSE_GIZMO.isDragging() || Editors.GIZMO_EDITOR.isDragging() || Editors.PREFABS.isDragging());
+                || Editors.POSE_GIZMO.isDragging() || Editors.LIGHT_GIZMO.isDragging()
+                || Editors.GIZMO_EDITOR.isDragging() || Editors.PREFABS.isDragging());
         Editors.ORBIT_GIZMO.frame();
         Editors.CAMERA_GIZMO.frame();
         syncFocusPlaneSelection();
         Editors.FOCUS_GIZMO.frame();
         Editors.POSE_GIZMO.frame();
+        Editors.LIGHT_GIZMO.frame();
         shapeShortcuts();
         Editors.GIZMO_EDITOR.frame();
         ml.mypals.vectorthree.fb.camera.MotionPaths.frame();
@@ -339,17 +343,21 @@ public final class ShapeTimeline {
 
     public static void syncGizmoSelection() {
         if (Editors.GIZMO_EDITOR.isDragging() || Editors.ORBIT_GIZMO.isDragging() || Editors.CAMERA_GIZMO.isDragging()
-                || Editors.POSE_GIZMO.isDragging() || Editors.PREFABS.isDragging()) {
+                || Editors.POSE_GIZMO.isDragging() || Editors.LIGHT_GIZMO.isDragging() || Editors.PREFABS.isDragging()) {
             return;
         }
         syncFocusPlaneSelection();
         if (autoKeyframe != null) {
             boolean cancelled = !ShapeManagerWindow.isAutoKey()
                     || ImGui.isKeyPressed(ImGuiKey.Escape) && !ImGui.getIO().getWantTextInput();
-            if (!cancelled && Timeline.selected().isEmpty()) return;
+            if (!cancelled && Timeline.selected().isEmpty()) {
+                Editors.LIGHT_GIZMO.clearSelection();
+                return;
+            }
             autoKeyframe = null;
         }
         if (MultiSelection.count(Timeline.selected()) > 1) {
+            Editors.LIGHT_GIZMO.clearSelection();
             Editors.ORBIT_GIZMO.clearSelection();
             Editors.CAMERA_GIZMO.clearSelection();
             Editors.POSE_GIZMO.clearSelection();
@@ -358,6 +366,7 @@ public final class ShapeTimeline {
         }
         if (Timeline.selected().size() != 1
                 || Timeline.selected().getFirst().keyframeTicks().size() != 1) {
+            Editors.LIGHT_GIZMO.clearSelection();
             Editors.GIZMO_EDITOR.clearSelection();
             Editors.ORBIT_GIZMO.clearSelection();
             Editors.CAMERA_GIZMO.clearSelection();
@@ -367,6 +376,7 @@ public final class ShapeTimeline {
         SelectedKeyframes selected = Timeline.selected().getFirst();
         int trackIndex = selected.trackIndex();
         if (trackIndex < 0 || trackIndex >= Timeline.scene().keyframeTracks.size()) {
+            Editors.LIGHT_GIZMO.clearSelection();
             Editors.GIZMO_EDITOR.clearSelection();
             Editors.ORBIT_GIZMO.clearSelection();
             Editors.CAMERA_GIZMO.clearSelection();
@@ -375,6 +385,8 @@ public final class ShapeTimeline {
         }
         int tick = selected.keyframeTicks().iterator().nextInt();
         Keyframe keyframe = Timeline.scene().keyframeTracks.get(trackIndex).keyframesByTick.get(tick);
+        if (!(keyframe instanceof CustomKeyframe<?> lightCandidate
+                && lightCandidate.type() == LightKeyframeType.INSTANCE)) Editors.LIGHT_GIZMO.clearSelection();
         if (keyframe instanceof CameraOrbitKeyframe orbitKeyframe) {
             Editors.GIZMO_EDITOR.clearSelection();
             Editors.CAMERA_GIZMO.clearSelection();
@@ -422,6 +434,20 @@ public final class ShapeTimeline {
             return;
         }
         Editors.POSE_GIZMO.clearSelection();
+        if (keyframe instanceof CustomKeyframe<?> custom && custom.type() == LightKeyframeType.INSTANCE) {
+            Editors.GIZMO_EDITOR.clearSelection();
+            @SuppressWarnings("unchecked") CustomKeyframe<Light> light = (CustomKeyframe<Light>) custom;
+            Editors.LIGHT_GIZMO.select(light, replacement -> {
+                CustomKeyframe<Light> copy = (CustomKeyframe<Light>) light.copy();
+                copy.value = replacement;
+                ChannelMasks.markChanged(light, copy);
+                Timeline.upgradeToSceneWrite();
+                Timeline.scene().setKeyframe(trackIndex, tick, copy);
+                EditorStateManager.getCurrent().markDirty();
+                ((MinecraftExt) Minecraft.getInstance()).flashback$applyKeyframes();
+            });
+            return;
+        }
         if (selected.type() != ShapeKeyframeType.INSTANCE || !(keyframe instanceof ShapeKeyframe shape)) {
             Editors.GIZMO_EDITOR.clearSelection();
             return;

@@ -28,6 +28,7 @@ import java.util.Optional;
 public final class LightRenderer {
     private static final List<Light> PENDING = new ArrayList<>();
     private static List<Light> current = List.of();
+    private static Light previewOriginal, previewReplacement;
     private static RenderPipeline surfacePipeline, shadowPipeline, volumePipeline, volumeCompositePipeline;
     private static GpuBuffer settings;
     private static RenderTarget shadowTarget, volumeTarget;
@@ -37,7 +38,19 @@ public final class LightRenderer {
     public static void begin() { PENDING.clear(); }
     public static void request(Light light) { PENDING.add(light); }
     public static void finish() { current = List.copyOf(PENDING); }
+    public static void preview(Light original, Light replacement) {
+        previewOriginal = original;
+        previewReplacement = replacement;
+    }
+    public static void clearPreview() {
+        previewOriginal = null;
+        previewReplacement = null;
+    }
+    private static Light previewed(Light light) {
+        return previewOriginal != null && previewOriginal.equals(light) ? previewReplacement : light;
+    }
     public static void clear() {
+        clearPreview();
         PENDING.clear();
         current = List.of();
         if (shadowTarget != null) {
@@ -59,7 +72,8 @@ public final class LightRenderer {
         ensureShadow(main);
         RenderTarget scene = ScreenPass.scratch(main);
         ScreenPass.copy(main, scene);
-        boolean hasVolume = current.stream().anyMatch(light -> light.intensity() > 0 && light.volume() > 0);
+        boolean hasVolume = current.stream().map(LightRenderer::previewed)
+                .anyMatch(light -> light.intensity() > 0 && light.volume() > 0);
         if (hasVolume) {
             ensureVolume(main);
             assert volumeTarget.getColorTexture() != null;
@@ -69,15 +83,22 @@ public final class LightRenderer {
         Vector3f forward = new Vector3f(camera.forwardVector());
         Vector3f up = new Vector3f(camera.upVector());
         Vector3f right = new Vector3f(forward).cross(up).normalize();
-        for (Light light : current) {
+        for (Light requested : current) {
+            Light light = previewed(requested);
             if (light.intensity() <= 0 || light.radius() <= 0) continue;
             Vector3f offset = new Vector3f((float) (light.position().x - camera.position().x),
                     (float) (light.position().y - camera.position().y),
                     (float) (light.position().z - camera.position().z));
             Matrix4fc projection = DepthOfFieldEffect.projectionMatrix();
             Matrix4fc inverse = DepthOfFieldEffect.inverseProjectionMatrix();
+            Vector3f direction = new Vector3f((float) light.direction().x,
+                    (float) light.direction().y, (float) light.direction().z);
+            Vector3f areaRight = new Vector3f(direction).cross(0, 1, 0);
+            if (areaRight.lengthSquared() < 1e-6f) areaRight.set(1, 0, 0);
+            areaRight.normalize();
+            Vector3f areaUp = new Vector3f(areaRight).cross(direction).normalize();
             try (MemoryStack stack = MemoryStack.stackPush()) {
-                var data = Std140Builder.onStack(stack, 192)
+                var data = Std140Builder.onStack(stack, 256)
                         .putVec4(offset.dot(right), offset.dot(up), -offset.dot(forward), light.radius())
                         .putVec4(light.red(), light.green(), light.blue(), light.intensity())
                         .putVec4(DepthOfFieldEffect.projectionX(), DepthOfFieldEffect.projectionY(),
@@ -90,7 +111,14 @@ public final class LightRenderer {
                         .putVec4(inverse.m00(), inverse.m01(), inverse.m02(), inverse.m03())
                         .putVec4(inverse.m10(), inverse.m11(), inverse.m12(), inverse.m13())
                         .putVec4(inverse.m20(), inverse.m21(), inverse.m22(), inverse.m23())
-                        .putVec4(inverse.m30(), inverse.m31(), inverse.m32(), inverse.m33()).get();
+                        .putVec4(inverse.m30(), inverse.m31(), inverse.m32(), inverse.m33())
+                        .putVec4(direction.dot(right), direction.dot(up), -direction.dot(forward),
+                                light.type().ordinal())
+                        .putVec4(light.areaWidth(), light.areaHeight(),
+                                (float) Math.cos(Math.toRadians(light.innerAngle())),
+                                (float) Math.cos(Math.toRadians(light.outerAngle())))
+                        .putVec4(areaRight.dot(right), areaRight.dot(up), -areaRight.dot(forward), 0)
+                        .putVec4(areaUp.dot(right), areaUp.dot(up), -areaUp.dot(forward), 0).get();
                 RenderSystem.getDevice().createCommandEncoder().writeToBuffer(settings.slice(), data);
             }
             if (light.shadow() > 0) {
@@ -158,7 +186,7 @@ public final class LightRenderer {
                 .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER).build(),
                 GpuFormat.RGBA8_UNORM, BlendFunction.ADDITIVE);
         settings = RenderSystem.getDevice().createBuffer(() -> "vector3_light_settings",
-                GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 192);
+                GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 256);
     }
 
     private static void ensureShadow(RenderTarget main) {

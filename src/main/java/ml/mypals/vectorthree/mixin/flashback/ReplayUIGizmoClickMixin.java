@@ -15,7 +15,8 @@ public class ReplayUIGizmoClickMixin {
             target = "Limgui/moulberry90/ImGui;isMouseClicked(I)Z"))
     private static boolean vector3$gizmoTakesRightClick(int button, Operation<Boolean> original) {
         if (button == 1 && (Editors.POSE_GIZMO.isHovering() || Editors.CAMERA_GIZMO.isHovering()
-                || Editors.ORBIT_GIZMO.isHovering() || Editors.GIZMO_EDITOR.isHovering()
+                || Editors.ORBIT_GIZMO.isHovering() || Editors.LIGHT_GIZMO.isHovering()
+                || Editors.GIZMO_EDITOR.isHovering()
                 || Editors.PREFABS.isHovering() || ml.mypals.vectorthree.fb.camera.MotionPaths.isHovering())) {
             return false;
         }

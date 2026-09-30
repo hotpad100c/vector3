@@ -15,6 +15,7 @@ public class EditorStateManagerMixin {
         Editors.GIZMO_EDITOR.clear();
         Editors.ORBIT_GIZMO.clear();
         Editors.CAMERA_GIZMO.clear();
+        Editors.LIGHT_GIZMO.clear();
         Editors.FOCUS_GIZMO.clear();
         Editors.PREFABS.clear();
         Editors.EDITOR_CAMERA.reset();

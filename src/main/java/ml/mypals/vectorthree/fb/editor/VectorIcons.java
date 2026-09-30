@@ -28,7 +28,7 @@ import static org.lwjgl.stb.STBTruetype.stbtt_InitFont;
  * <ul>
  *   <li>U+F500 Shape track, U+F501 Look To track, U+F502 Skip track, U+F503 Dolly Zoom track,
  *       U+F504 Clips track, U+F505 Loop track, U+F506 Fade track,
- *       U+F507 Entity Pose track</li>
+ *       U+F507 Entity Pose track, U+F508 Light track</li>
  *   <li>U+F510 onward: one per shape type, in {@link #SHAPE_TYPES} order
  *       (box F510, sphere F511, face_circle F512, ... area F51F, particle F520, blast F521)</li>
  * </ul>
@@ -42,6 +42,7 @@ public final class VectorIcons {
     public static final char LOOP_TRACK = '\uF505';
     public static final char FADE_TRACK = '\uF506';
     public static final char POSE_TRACK = '\uF507';
+    public static final char LIGHT_TRACK = '\uF508';
     private static final char FIRST_SHAPE_TYPE = '\uF510';
     private static final List<String> SHAPE_TYPES = List.of("box", "sphere", "face_circle", "cylinder", "cone",
             "line", "line_strip", "text", "block", "item", "entity", "obj", "arrow", "image", "video", "area", "particle", "blast");
