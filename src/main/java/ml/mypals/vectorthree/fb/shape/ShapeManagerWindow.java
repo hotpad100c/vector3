@@ -59,16 +59,6 @@ public final class ShapeManagerWindow {
         ImGui.setNextWindowSize(360, 320, ImGuiCond.FirstUseEver);
         if (ImGui.begin(WINDOW.title(I18n.get("vector3.shape_manager.title")), WINDOW.open())) {
             hovered = ImGui.isWindowHovered(ImGuiHoveredFlags.RootAndChildWindows);
-            ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode);
-            ImGui.checkbox(I18n.get("vector3.shape_manager.instant_preview"), instantPreview);
-            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.instant_preview.tooltip"));
-            ImGui.checkbox(I18n.get("vector3.shape_manager.auto_key"), autoKey);
-            if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.auto_key.tooltip"));
-            renderPlaybackLoop();
-            ImGui.checkbox(I18n.get("vector3.shape_manager.debug_bypass_only"), debugBypassOnly);
-            IrisBypassTarget.debugShowOnly = debugBypassOnly.get();
-            ImGui.separator();
-
             ImGui.setNextItemWidth(-1);
             ImGui.inputText("##search", search);
 
@@ -81,6 +71,25 @@ public final class ShapeManagerWindow {
         }
         ImGui.end();
         WINDOW.sync();
+    }
+
+    public static void renderPreferences() {
+        if (!ImGui.collapsingHeader(I18n.get("vector3.preferences.title"), ImGuiTreeNodeFlags.DefaultOpen)) return;
+        ImGui.indent();
+        ImGui.separatorText(I18n.get("vector3.preferences.editor"));
+        ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode);
+        ImGui.checkbox(I18n.get("vector3.shape_manager.instant_preview"), instantPreview);
+        if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.instant_preview.tooltip"));
+        ImGui.checkbox(I18n.get("vector3.shape_manager.auto_key"), autoKey);
+        if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.auto_key.tooltip"));
+
+        ImGui.separatorText(I18n.get("vector3.preferences.playback"));
+        renderPlaybackLoop();
+
+        ImGui.separatorText(I18n.get("vector3.preferences.rendering"));
+        if (ImGui.checkbox(I18n.get("vector3.shape_manager.debug_bypass_only"), debugBypassOnly))
+            IrisBypassTarget.debugShowOnly = debugBypassOnly.get();
+        ImGui.unindent();
     }
 
     private static void renderPlaybackLoop() {
