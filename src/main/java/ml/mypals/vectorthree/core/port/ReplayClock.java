@@ -13,6 +13,7 @@ public interface ReplayClock {
     /** Seconds per exported frame, or 0 when not exporting. */
     double exportFrameSeconds();
 
+    /** The replay tick being exported, counted from the start of the replay like {@link #partialTick()}. */
     double exportTick();
 
     /** Playback position with the sub-tick fraction. */

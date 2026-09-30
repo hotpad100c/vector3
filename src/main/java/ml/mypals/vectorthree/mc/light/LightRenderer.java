@@ -70,6 +70,11 @@ public final class LightRenderer {
     }
     public static boolean hasLights() { return !current.isEmpty(); }
 
+    static List<Light> activeLights() {
+        return current.stream().map(LightRenderer::previewed)
+                .filter(light -> light.intensity() > 0 && light.radius() > 0).toList();
+    }
+
     public static void render(RenderTarget main, GodRaysSettings localRays) {
         if (current.isEmpty() || !DepthOfFieldEffect.hasCapturedDepth() || main.width <= 0 || main.height <= 0) return;
         Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
@@ -128,7 +133,9 @@ public final class LightRenderer {
                                 (float) Math.cos(Math.toRadians(light.innerAngle())),
                                 (float) Math.cos(Math.toRadians(light.outerAngle())))
                         .putVec4(areaRight.dot(right), areaRight.dot(up), -areaRight.dot(forward), light.areaReach())
-                        .putVec4(areaUp.dot(right), areaUp.dot(up), -areaUp.dot(forward), 0).get();
+                        .putVec4(areaUp.dot(right), areaUp.dot(up), -areaUp.dot(forward),
+                                AlbedoCapture.ready()
+                                        ? (RenderSystem.getDevice().getDeviceInfo().isZZeroToOne() ? 2 : 1) : 0).get();
                 RenderSystem.getDevice().createCommandEncoder().writeToBuffer(settings.slice(), data);
             }
             if (light.shadow() > 0) {
@@ -146,6 +153,10 @@ public final class LightRenderer {
                 pass.setPipeline(RenderSystem.getCompiledPipeline(surfacePipeline));
                 RenderSystem.bindDefaultUniforms(pass);
                 pass.setUniform("InSampler", scene.getColorTextureView(), ScreenPass.nearest());
+                pass.setUniform("AlbedoSampler", AlbedoCapture.ready()
+                        ? AlbedoCapture.colorView() : scene.getColorTextureView(), ScreenPass.nearest());
+                pass.setUniform("AlbedoDepthSampler", AlbedoCapture.ready()
+                        ? AlbedoCapture.depthView() : DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
                 pass.setUniform("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
                 pass.setUniform("ShadowSampler", shadowTarget.getColorTextureView(), ScreenPass.nearest());
                 pass.setUniform("LightSettings", settings);
@@ -188,6 +199,8 @@ public final class LightRenderer {
         if (surfacePipeline != null) return;
         BindGroupLayout surfaceLayout = BindGroupLayout.builder()
                 .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("AlbedoSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("AlbedoDepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
                 .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER)
                 .withUniform("ShadowSampler", UniformType.COMBINED_IMAGE_SAMPLER)
                 .withUniform("LightSettings", UniformType.UNIFORM_BUFFER).build();

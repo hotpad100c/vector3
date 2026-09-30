@@ -4,6 +4,7 @@ import ml.mypals.vectorthree.core.camera.shake.ShakeHolder;
 import ml.mypals.vectorthree.core.camera.shake.ShakeKeyframe;
 import ml.mypals.vectorthree.core.camera.shake.ShakeParams;
 
+import ml.mypals.vectorthree.fb.FlashbackPorts;
 import com.moulberry.flashback.Flashback;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.keyframe.Keyframe;
@@ -84,7 +85,7 @@ public final class CameraShake {
         ShakeParams params = ShakeParams.orDefault(holder.vector3$shake());
         double[] phases = holder.vector3$phases();
         if (phases == null) {
-            float tick = Flashback.isExporting() ? (float) Flashback.EXPORT_JOB.getCurrentTickDouble() : (float) server.getPartialReplayTick();
+            float tick = Flashback.isExporting() ? (float) FlashbackPorts.exportReplayTick() : (float) server.getPartialReplayTick();
             phases = scaled(new double[]{visuals.cameraShakeXFrequency * tick, visuals.cameraShakeYFrequency * tick,
                     params.rollFrequency() * tick, params.positionFrequency() * tick});
         }

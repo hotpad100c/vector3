@@ -22,6 +22,7 @@ import java.util.UUID;
 
 public final class VideoShape extends Shape implements EmptyMesh {
     public static final int TICKS_PER_SECOND = 20;
+    private static final long EXPORT_WAIT_MILLIS = 15_000;
 
     private final String file;
     private final VideoFrameSource source;
@@ -64,8 +65,11 @@ public final class VideoShape extends Shape implements EmptyMesh {
     @Override
     protected void drawInternal(VertexBuilder builder) {
         if (source == null) return;
+        boolean exporting = Ports.clock().exporting();
+        // An export renders on its own schedule, so it waits for the decoder instead of showing what is ready.
+        if (exporting && !source.isReady()) source.awaitOpen(EXPORT_WAIT_MILLIS);
         if (!source.isReady()) {
-            drawProgress(builder, source.failed());
+            if (!exporting || source.failed()) drawProgress(builder, source.failed());
             return;
         }
         if (!sized) {
@@ -79,13 +83,14 @@ public final class VideoShape extends Shape implements EmptyMesh {
         double duration = source.duration();
         double seconds;
         if (autoPlay) {
-            seconds = Math.max(0, (Ports.clock().cursorTick() - videoStartTick) / (double) TICKS_PER_SECOND);
+            seconds = Math.max(0, (Ports.clock().effectTick() - videoStartTick) / (double) TICKS_PER_SECOND);
             if (duration > 0) seconds = loop ? seconds % duration : Math.min(seconds, duration);
         } else {
             seconds = Math.max(0, playbackSeconds);
             if (duration > 0) seconds = Math.min(seconds, duration);
         }
         source.requestSeconds(seconds);
+        if (exporting) source.awaitServed(EXPORT_WAIT_MILLIS);
         if (source.pollFrame(texture.getPixels())) texture.upload();
 
         Minecraft minecraft = Minecraft.getInstance();
@@ -97,7 +102,7 @@ public final class VideoShape extends Shape implements EmptyMesh {
         submits.submitCustomGeometry(poseStack, ShapeTrackRegistry.imageType(textureId, seeThrough),
                 (pose, consumer) -> quad(pose, consumer, halfWidth, argb));
         IrisBypassTarget.renderFeatures(() -> Helpers.renderFeatures(minecraft, submits));
-        if (source.isLoading()) drawProgress(builder, false);
+        if (!exporting && source.isLoading()) drawProgress(builder, false);
     }
 
     private static final int TRACK = 0x90181818, FILL = 0xE650C8FF, FAILED = 0xE6E04040;

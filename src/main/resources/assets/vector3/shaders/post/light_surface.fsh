@@ -1,6 +1,8 @@
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
+uniform sampler2D AlbedoSampler;
+uniform sampler2D AlbedoDepthSampler;
 uniform sampler2D DistanceSampler;
 uniform sampler2D ShadowSampler;
 layout(std140) uniform LightSettings {
@@ -89,6 +91,18 @@ float shadowOcclusion(float depth) {
 
 // Smooth only the light's material response. The original scene remains sharp in the composite.
 vec3 surfaceAlbedo(float depth) {
+    if (AreaUp.w > 0.5) {
+        vec4 material = texture(AlbedoSampler, texCoord);
+        if (material.a > 0.5) {
+            float rawDepth = texture(AlbedoDepthSampler, texCoord).r;
+            float ndc = AreaUp.w > 1.5 ? rawDepth : rawDepth * 2.0 - 1.0;
+            float denominator = ndc * ProjectionMatrix[2][3] - ProjectionMatrix[2][2];
+            float materialDepth = abs(denominator) < 1e-7 ? 60000.0
+                    : (ndc * ProjectionMatrix[3][3] - ProjectionMatrix[3][2]) / denominator;
+            if (abs(materialDepth - depth) < max(0.05, depth * 0.01))
+                return material.rgb;
+        }
+    }
     vec3 center = texture(InSampler, texCoord).rgb;
     vec3 sum = center;
     float total = 1.0;

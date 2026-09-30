@@ -25,6 +25,7 @@ import ml.mypals.vectorthree.mc.vfx.effects.VignetteEffect;
 import ml.mypals.vectorthree.core.port.Ports;
 import ml.mypals.vectorthree.mc.camera.PreviewPass;
 import ml.mypals.vectorthree.mc.light.LightRenderer;
+import ml.mypals.vectorthree.mc.light.AlbedoCapture;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4fc;
 
@@ -56,12 +57,15 @@ public final class ScreenVFXRenderer {
         MotionBlurEffect.clear();
         ReflectionEffect.clear();
         LightRenderer.clear();
+        AlbedoCapture.clear();
     }
 
     /** Called before the hand pass, which clears the main depth buffer. */
     public static void captureDepth(Matrix4fc projection) {
         if (Ports.view().mainViewDetached() || !LightRenderer.hasLights() && current.stream().noneMatch(ScreenVFXRenderer::usesDepth)) return;
-        DepthOfFieldEffect.captureDepth(Minecraft.getInstance().gameRenderer.mainRenderTarget(), projection);
+        RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+        if (LightRenderer.hasLights()) AlbedoCapture.render(main);
+        DepthOfFieldEffect.captureDepth(main, projection);
     }
 
     private static boolean usesDepth(ScreenVFX value) {

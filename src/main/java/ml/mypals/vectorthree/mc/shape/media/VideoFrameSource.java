@@ -28,6 +28,8 @@ final class VideoFrameSource {
     private final Object requestLock = new Object();
     private volatile boolean closed;
     private volatile double requestedSeconds;
+    private long requestId;
+    private long servedId = -1;
 
     private volatile boolean ready;
     private volatile boolean failed;
@@ -65,8 +67,40 @@ final class VideoFrameSource {
     double duration() { return durationSeconds; }
 
     void requestSeconds(double seconds) {
-        requestedSeconds = seconds;
-        synchronized (requestLock) { requestLock.notifyAll(); }
+        synchronized (requestLock) {
+            if (seconds != requestedSeconds) {
+                requestedSeconds = seconds;
+                requestId++;
+            }
+            requestLock.notifyAll();
+        }
+    }
+
+    /** Blocks until the file has opened (or failed to); false if it is not usable in time. */
+    boolean awaitOpen(long timeoutMillis) {
+        return await(timeoutMillis, () -> ready || failed) && ready;
+    }
+
+    /** Blocks until the frame for the last requested time has been published; false on timeout. */
+    boolean awaitServed(long timeoutMillis) {
+        return await(timeoutMillis, () -> servedId >= requestId);
+    }
+
+    private boolean await(long timeoutMillis, java.util.function.BooleanSupplier done) {
+        long deadline = System.nanoTime() + timeoutMillis * 1_000_000L;
+        synchronized (requestLock) {
+            try {
+                while (!done.getAsBoolean() && !failed && !closed) {
+                    long left = deadline - System.nanoTime();
+                    if (left <= 0) return false;
+                    requestLock.wait(Math.max(1, left / 1_000_000L));
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Copies the newest decoded frame into {@code target} if one has arrived since the last call. */
@@ -103,6 +137,7 @@ final class VideoFrameSource {
         } catch (Exception exception) {
             Mod.LOGGER.warn("Could not open video file {}", file, exception);
             failed = true;
+            synchronized (requestLock) { requestLock.notifyAll(); }
             return;
         }
         width = Math.max(1, grabber.getImageWidth());
@@ -110,6 +145,7 @@ final class VideoFrameSource {
         long lengthMicros = grabber.getLengthInTime();
         durationSeconds = lengthMicros > 0 ? lengthMicros / 1_000_000.0 : 0;
         ready = true;
+        synchronized (requestLock) { requestLock.notifyAll(); }
 
         try {
             decodeUntilClosed(grabber, file);
@@ -139,53 +175,69 @@ final class VideoFrameSource {
         double lastDecodedSeconds = -1;
         double lastRequested = Double.NaN;
         while (!closed) {
-            double seconds = requestedSeconds;
-            if (seconds == lastRequested) {
-                synchronized (requestLock) {
-                    if (requestedSeconds == lastRequested) requestLock.wait(200);
-                }
-                continue;
-            }
-            lastRequested = seconds;
-            if (serveCached(seconds, interval)) continue;
-
-            // A single bad seek/grab must not kill this thread, or the shape would freeze on its last
-            // frame forever. Each request is isolated so a failure only skips that frame.
-            try {
-                boolean backward = lastDecodedSeconds >= 0 && seconds < lastDecodedSeconds;
-                boolean farJump = lastDecodedSeconds < 0 || backward
-                        || seconds - lastDecodedSeconds > SEEK_THRESHOLD_SECONDS;
-                double windowStart = seconds;
-                if (farJump) {
-                    seekStartedNanos = System.nanoTime();
-                    windowStart = backward ? Math.max(0, seconds - reverseWindow) : seconds;
-                    grabber.setTimestamp((long) (windowStart * 1_000_000));
-                    lastDecodedSeconds = -1;
-                } else if (lastDecodedSeconds >= seconds) {
+            double seconds;
+            long id;
+            synchronized (requestLock) {
+                seconds = requestedSeconds;
+                id = requestId;
+                if (seconds == lastRequested) {
+                    // The shown frame was asked for again after another time: nothing to decode.
+                    if (servedId != id) {
+                        servedId = id;
+                        requestLock.notifyAll();
+                    } else {
+                        requestLock.wait(200);
+                    }
                     continue;
                 }
+            }
+            lastRequested = seconds;
+            try {
+                if (serveCached(seconds, interval)) continue;
 
-                int[] target = null;
-                Frame frame;
-                while ((frame = grabber.grab()) != null) {
-                    if (frame.image == null) continue;
-                    lastDecodedSeconds = frame.timestamp / 1_000_000.0;
-                    boolean reached = lastDecodedSeconds >= seconds - 1.0e-4;
-                    if (reached || backward && lastDecodedSeconds > windowStart - interval) {
-                        int[] pixels = copyPixels(frame);
-                        cache.put(lastDecodedSeconds, pixels);
-                        if (reached) target = pixels;
+                // A single bad seek/grab must not kill this thread, or the shape would freeze on its last
+                // frame forever. Each request is isolated so a failure only skips that frame.
+                try {
+                    boolean backward = lastDecodedSeconds >= 0 && seconds < lastDecodedSeconds;
+                    boolean farJump = lastDecodedSeconds < 0 || backward
+                            || seconds - lastDecodedSeconds > SEEK_THRESHOLD_SECONDS;
+                    double windowStart = seconds;
+                    if (farJump) {
+                        seekStartedNanos = System.nanoTime();
+                        windowStart = backward ? Math.max(0, seconds - reverseWindow) : seconds;
+                        grabber.setTimestamp((long) (windowStart * 1_000_000));
+                        lastDecodedSeconds = -1;
+                    } else if (lastDecodedSeconds >= seconds) {
+                        continue;
                     }
-                    if (reached) break;
+
+                    int[] target = null;
+                    Frame frame;
+                    while ((frame = grabber.grab()) != null) {
+                        if (frame.image == null) continue;
+                        lastDecodedSeconds = frame.timestamp / 1_000_000.0;
+                        boolean reached = lastDecodedSeconds >= seconds - 1.0e-4;
+                        if (reached || backward && lastDecodedSeconds > windowStart - interval) {
+                            int[] pixels = copyPixels(frame);
+                            cache.put(lastDecodedSeconds, pixels);
+                            if (reached) target = pixels;
+                        }
+                        if (reached) break;
+                    }
+                    if (target == null && !cache.isEmpty()) target = cache.lastEntry().getValue();
+                    if (target != null) publish(target);
+                    trimCache(seconds, maxFrames);
+                } catch (Exception exception) {
+                    Mod.LOGGER.warn("Video seek/decode failed for {} at {}s, skipping", file, seconds, exception);
+                    lastDecodedSeconds = -1;
+                } finally {
+                    seekStartedNanos = 0;
                 }
-                if (target == null && !cache.isEmpty()) target = cache.lastEntry().getValue();
-                if (target != null) publish(target);
-                trimCache(seconds, maxFrames);
-            } catch (Exception exception) {
-                Mod.LOGGER.warn("Video seek/decode failed for {} at {}s, skipping", file, seconds, exception);
-                lastDecodedSeconds = -1;
             } finally {
-                seekStartedNanos = 0;
+                synchronized (requestLock) {
+                    servedId = id;
+                    requestLock.notifyAll();
+                }
             }
         }
     }

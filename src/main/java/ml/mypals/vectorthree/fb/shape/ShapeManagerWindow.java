@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.fb.shape;
 
 import ml.mypals.vectorthree.fb.editor.PersistentWindow;
+import ml.mypals.vectorthree.fb.editor.Preferences;
 import ml.mypals.vectorthree.fb.editor.VectorIcons;
 import ml.mypals.vectorthree.fb.timeline.PlaybackRange;
 
@@ -28,10 +29,10 @@ import java.util.Set;
 
 public final class ShapeManagerWindow {
     private static final ImString search = new ImString("", 128);
-    private static final ImBoolean editorMode = new ImBoolean(false);
+    private static final ImBoolean editorMode = new ImBoolean(Preferences.get("editor_mode", false));
     private static final ImBoolean debugBypassOnly = new ImBoolean(false);
-    private static final ImBoolean instantPreview = new ImBoolean(false);
-    private static final ImBoolean autoKey = new ImBoolean(false);
+    private static final ImBoolean instantPreview = new ImBoolean(Preferences.get("instant_preview", false));
+    private static final ImBoolean autoKey = new ImBoolean(Preferences.get("auto_key", false));
     private static final String DRAG_PAYLOAD = "vector3_shape";
     private static String pendingChild;
     private static String pendingParent;
@@ -77,10 +78,13 @@ public final class ShapeManagerWindow {
         if (!ImGui.collapsingHeader(I18n.get("vector3.preferences.title"), ImGuiTreeNodeFlags.DefaultOpen)) return;
         ImGui.indent();
         ImGui.separatorText(I18n.get("vector3.preferences.editor"));
-        ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode);
-        ImGui.checkbox(I18n.get("vector3.shape_manager.instant_preview"), instantPreview);
+        if (ImGui.checkbox(I18n.get("vector3.shape_manager.editor_mode"), editorMode))
+            Preferences.set("editor_mode", editorMode.get());
+        if (ImGui.checkbox(I18n.get("vector3.shape_manager.instant_preview"), instantPreview))
+            Preferences.set("instant_preview", instantPreview.get());
         if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.instant_preview.tooltip"));
-        ImGui.checkbox(I18n.get("vector3.shape_manager.auto_key"), autoKey);
+        if (ImGui.checkbox(I18n.get("vector3.shape_manager.auto_key"), autoKey))
+            Preferences.set("auto_key", autoKey.get());
         if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.shape_manager.auto_key.tooltip"));
 
         ImGui.separatorText(I18n.get("vector3.preferences.playback"));

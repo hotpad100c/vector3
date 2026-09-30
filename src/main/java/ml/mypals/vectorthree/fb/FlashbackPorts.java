@@ -42,6 +42,11 @@ public final class FlashbackPorts {
         FrameHooks.beforeFrame(CameraPreview::beforeFrame);
     }
 
+    /** The replay tick an export is at. Flashback's own counter starts at 0 on the export's first tick. */
+    public static double exportReplayTick() {
+        return Flashback.EXPORT_JOB.getSettings().startTick() + Flashback.EXPORT_JOB.getCurrentTickDouble();
+    }
+
     public static TrackingBodyPart toFlashback(BodyPart part) {
         return TrackingBodyPart.valueOf(part.name());
     }
@@ -68,7 +73,7 @@ public final class FlashbackPorts {
             return Flashback.isExporting() && Flashback.EXPORT_JOB != null ? 1.0 / Flashback.EXPORT_JOB.getSettings().framerate() : 0;
         }
 
-        public double exportTick() { return Flashback.EXPORT_JOB.getCurrentTickDouble(); }
+        public double exportTick() { return exportReplayTick(); }
 
         public double partialTick() {
             ReplayServer server = Flashback.getReplayServer();

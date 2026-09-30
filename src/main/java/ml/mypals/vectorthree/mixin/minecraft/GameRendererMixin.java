@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.mixin.minecraft;
 
 import ml.mypals.vectorthree.core.port.FrameHooks;
+import ml.mypals.vectorthree.mc.camera.EditorOverlays;
 import ml.mypals.vectorthree.mc.camera.PreviewPass;
 import com.llamalad7.mixinextras.sugar.Local;
 import ml.mypals.vectorthree.mc.vfx.ScreenVFXRenderer;
@@ -20,6 +21,12 @@ public class GameRendererMixin {
         ParticleEmitters.frame();
         PreviewPass.bind((GameRenderer) (Object) this);
         FrameHooks.runBeforeFrame();
+        EditorOverlays.hideForExport();
+    }
+
+    @Inject(method = "render", at = @At("RETURN"))
+    private void vector3$restoreOverlays(CallbackInfo ci) {
+        EditorOverlays.restoreAfterExport();
     }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE",
