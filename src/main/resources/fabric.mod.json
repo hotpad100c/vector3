@@ -11,7 +11,7 @@
 		"homepage": "https://github.com/hotpad100c/vector3",
 		"sources": "https://github.com/hotpad100c/vector3"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/vector3/icon.png",
 	"environment": "client",
 	"entrypoints": {
