@@ -2,7 +2,15 @@
 #extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D DistanceSampler;
-layout(std140) uniform ReflectionSettings { vec4 Reflection; vec4 Screen; };
+uniform sampler2D MaterialSampler;
+layout(std140) uniform ReflectionSettings {
+    vec4 Reflection;
+    vec4 Screen;
+    vec4 CameraLocalPosition;
+    vec4 CameraRight;
+    vec4 CameraUp;
+    vec4 CameraForward;
+};
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 fragColor;
 
@@ -16,6 +24,18 @@ void main() {
     float d = texture(DistanceSampler, texCoord).r;
     if (d >= 50000.0 || d < 0.05) { fragColor = scene; return; }
     vec3 p = viewPosition(texCoord, d);
+    vec3 worldRay = normalize(CameraRight.xyz * p.x + CameraUp.xyz * p.y - CameraForward.xyz * p.z);
+    vec3 world = CameraLocalPosition.xyz + CameraRight.xyz * p.x + CameraUp.xyz * p.y
+            - CameraForward.xyz * p.z + worldRay * 0.03;
+    ivec3 blockCell = ivec3(floor(world));
+    if (any(lessThan(blockCell, ivec3(0))) || any(greaterThanEqual(blockCell, ivec3(48, 64, 48)))) {
+        fragColor = scene;
+        return;
+    }
+    if (texelFetch(MaterialSampler, ivec2(blockCell.x + blockCell.z * 48, blockCell.y), 0).r < 0.5) {
+        fragColor = scene;
+        return;
+    }
     vec2 dx = vec2(Screen.x, 0.0), dy = vec2(0.0, Screen.y);
     float depthX = texture(DistanceSampler, clamp(texCoord + dx, vec2(0.0), vec2(1.0))).r;
     float depthY = texture(DistanceSampler, clamp(texCoord + dy, vec2(0.0), vec2(1.0))).r;

@@ -69,6 +69,14 @@ void main() {
         occlusion += blocked(start, center + dx - dy, jitter);
         occlusion += blocked(start, center - dx + dy, jitter);
         occlusion += blocked(start, center - dx - dy, jitter);
+    } else if (LightDirectionType.w > 1.5) {
+        float spread = clamp(LightPositionRadius.w * 0.02, 0.025, 0.18);
+        vec3 dx = AreaRight.xyz * spread;
+        vec3 dy = AreaUp.xyz * spread;
+        occlusion += blocked(start, center + dx + dy, jitter);
+        occlusion += blocked(start, center + dx - dy, jitter);
+        occlusion += blocked(start, center - dx + dy, jitter);
+        occlusion += blocked(start, center - dx - dy, jitter);
     } else {
         float spread = clamp(LightPositionRadius.w * 0.04, 0.06, 0.4);
         occlusion += blocked(start, center + vec3(spread, 0.0, 0.0), jitter);

@@ -12,6 +12,7 @@ import com.mojang.renderpearl.api.pipeline.BlendFunction;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.pipeline.UniformType;
 import ml.mypals.vectorthree.core.light.Light;
+import ml.mypals.vectorthree.core.fade.effects.GodRaysSettings;
 import ml.mypals.vectorthree.mc.vfx.effects.DepthOfFieldEffect;
 import ml.mypals.vectorthree.mc.vfx.effects.ScreenPass;
 import net.minecraft.client.Camera;
@@ -29,9 +30,10 @@ public final class LightRenderer {
     private static final List<Light> PENDING = new ArrayList<>();
     private static List<Light> current = List.of();
     private static Light previewOriginal, previewReplacement;
-    private static RenderPipeline surfacePipeline, shadowPipeline, volumePipeline, volumeCompositePipeline;
+    private static RenderPipeline surfacePipeline, surfaceCompositePipeline, shadowPipeline,
+            volumePipeline, volumeCompositePipeline;
     private static GpuBuffer settings;
-    private static RenderTarget shadowTarget, volumeTarget;
+    private static RenderTarget surfaceTarget, shadowTarget, volumeTarget;
 
     private LightRenderer() {}
 
@@ -53,6 +55,10 @@ public final class LightRenderer {
         clearPreview();
         PENDING.clear();
         current = List.of();
+        if (surfaceTarget != null) {
+            surfaceTarget.destroyBuffers();
+            surfaceTarget = null;
+        }
         if (shadowTarget != null) {
             shadowTarget.destroyBuffers();
             shadowTarget = null;
@@ -64,14 +70,17 @@ public final class LightRenderer {
     }
     public static boolean hasLights() { return !current.isEmpty(); }
 
-    public static void render(RenderTarget main) {
+    public static void render(RenderTarget main, GodRaysSettings localRays) {
         if (current.isEmpty() || !DepthOfFieldEffect.hasCapturedDepth() || main.width <= 0 || main.height <= 0) return;
         Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
         if (!camera.isInitialized()) return;
         ensure();
+        ensureSurface(main);
         ensureShadow(main);
         RenderTarget scene = ScreenPass.scratch(main);
         ScreenPass.copy(main, scene);
+        RenderSystem.getDevice().createCommandEncoder().clearColorTexture(
+                surfaceTarget.getColorTexture(), new Vector4f(0));
         boolean hasVolume = current.stream().map(LightRenderer::previewed)
                 .anyMatch(light -> light.intensity() > 0 && light.volume() > 0);
         if (hasVolume) {
@@ -103,7 +112,8 @@ public final class LightRenderer {
                         .putVec4(light.red(), light.green(), light.blue(), light.intensity())
                         .putVec4(DepthOfFieldEffect.projectionX(), DepthOfFieldEffect.projectionY(),
                                 1f / main.width, 1f / main.height)
-                        .putVec4(light.volume(), light.shadow(), 0, 0)
+                        .putVec4(light.volume(), light.shadow(), localRays == null ? 0 : localRays.intensity(),
+                                localRays == null ? 0 : localRays.samples())
                         .putVec4(projection.m00(), projection.m01(), projection.m02(), projection.m03())
                         .putVec4(projection.m10(), projection.m11(), projection.m12(), projection.m13())
                         .putVec4(projection.m20(), projection.m21(), projection.m22(), projection.m23())
@@ -132,7 +142,7 @@ public final class LightRenderer {
                 }
             }
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                    () -> "vector3_light_surface", main.getColorTextureView(), Optional.empty())) {
+                    () -> "vector3_light_surface", surfaceTarget.getColorTextureView(), Optional.empty())) {
                 pass.setPipeline(RenderSystem.getCompiledPipeline(surfacePipeline));
                 RenderSystem.bindDefaultUniforms(pass);
                 pass.setUniform("InSampler", scene.getColorTextureView(), ScreenPass.nearest());
@@ -152,12 +162,22 @@ public final class LightRenderer {
                 }
             }
         }
+        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                () -> "vector3_light_surface_composite", main.getColorTextureView(), Optional.empty())) {
+            pass.setPipeline(RenderSystem.getCompiledPipeline(surfaceCompositePipeline));
+            RenderSystem.bindDefaultUniforms(pass);
+            pass.setUniform("InSampler", scene.getColorTextureView(), ScreenPass.nearest());
+            pass.setUniform("LightSampler", surfaceTarget.getColorTextureView(), ScreenPass.nearest());
+            pass.draw(3, 1, 0, 0);
+        }
         if (hasVolume) {
+            ScreenPass.copy(main, scene);
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                     () -> "vector3_light_volume_composite", main.getColorTextureView(), Optional.empty())) {
                 pass.setPipeline(RenderSystem.getCompiledPipeline(volumeCompositePipeline));
                 RenderSystem.bindDefaultUniforms(pass);
                 pass.setUniform("InSampler", volumeTarget.getColorTextureView(), ScreenPass.linear());
+                pass.setUniform("SceneSampler", scene.getColorTextureView(), ScreenPass.nearest());
                 pass.setUniform("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
                 pass.draw(3, 1, 0, 0);
             }
@@ -172,7 +192,11 @@ public final class LightRenderer {
                 .withUniform("ShadowSampler", UniformType.COMBINED_IMAGE_SAMPLER)
                 .withUniform("LightSettings", UniformType.UNIFORM_BUFFER).build();
         surfacePipeline = ScreenPass.pipeline("light_surface", surfaceLayout,
-                GpuFormat.RGBA8_UNORM, BlendFunction.ADDITIVE);
+                GpuFormat.RGBA16_FLOAT, BlendFunction.ADDITIVE);
+        surfaceCompositePipeline = ScreenPass.pipeline("light_surface_composite", BindGroupLayout.builder()
+                .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("LightSampler", UniformType.COMBINED_IMAGE_SAMPLER).build(),
+                GpuFormat.RGBA8_UNORM, null);
         shadowPipeline = ScreenPass.pipeline("light_shadow", BindGroupLayout.builder()
                 .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER)
                 .withUniform("LightSettings", UniformType.UNIFORM_BUFFER).build(),
@@ -183,8 +207,9 @@ public final class LightRenderer {
                 GpuFormat.RGBA16_FLOAT, BlendFunction.ADDITIVE);
         volumeCompositePipeline = ScreenPass.pipeline("light_volume_composite", BindGroupLayout.builder()
                 .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withUniform("SceneSampler", UniformType.COMBINED_IMAGE_SAMPLER)
                 .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER).build(),
-                GpuFormat.RGBA8_UNORM, BlendFunction.ADDITIVE);
+                GpuFormat.RGBA8_UNORM, null);
         settings = RenderSystem.getDevice().createBuffer(() -> "vector3_light_settings",
                 GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 256);
     }
@@ -195,6 +220,15 @@ public final class LightRenderer {
             shadowTarget = new TextureTarget("vector3_light_shadow", width, height, GpuFormat.R16_FLOAT, null);
         } else if (shadowTarget.width != width || shadowTarget.height != height) {
             shadowTarget.resize(width, height);
+        }
+    }
+
+    private static void ensureSurface(RenderTarget main) {
+        if (surfaceTarget == null) {
+            surfaceTarget = new TextureTarget("vector3_light_surface", main.width, main.height,
+                    GpuFormat.RGBA16_FLOAT, null);
+        } else if (surfaceTarget.width != main.width || surfaceTarget.height != main.height) {
+            surfaceTarget.resize(main.width, main.height);
         }
     }
 

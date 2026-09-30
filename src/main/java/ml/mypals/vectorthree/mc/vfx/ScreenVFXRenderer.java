@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.mc.vfx;
 
 import ml.mypals.vectorthree.core.fade.ScreenVFX;
+import ml.mypals.vectorthree.core.fade.effects.GodRaysSettings;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import ml.mypals.vectorthree.mc.vfx.effects.AutoExposureEffect;
@@ -53,6 +54,7 @@ public final class ScreenVFXRenderer {
         EffectTextures.clear();
         AutoExposureEffect.clear();
         MotionBlurEffect.clear();
+        ReflectionEffect.clear();
         LightRenderer.clear();
     }
 
@@ -73,8 +75,12 @@ public final class ScreenVFXRenderer {
                 AutoExposureEffect.clear();
             if (current.stream().noneMatch(value -> value.has(ScreenVFX.MOTION_BLUR)))
                 MotionBlurEffect.clear();
+            GodRaysSettings localRays = null;
+            for (ScreenVFX value : current)
+                if (value.has(ScreenVFX.GOD_RAYS) && value.additional().rays().localLights())
+                    localRays = value.additional().rays();
             if (!Ports.view().mainViewDetached())
-                LightRenderer.render(Minecraft.getInstance().gameRenderer.mainRenderTarget());
+                LightRenderer.render(Minecraft.getInstance().gameRenderer.mainRenderTarget(), localRays);
             render();
         } finally {
             DepthOfFieldEffect.endFrame();

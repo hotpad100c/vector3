@@ -16,6 +16,7 @@ public final class GodRaysEditor {
         float[] tint = {value.tint().r(), value.tint().g(), value.tint().b()};
         int[] samples = {value.samples()};
         ImBoolean sky = new ImBoolean(value.sky()), bright = new ImBoolean(value.bright());
+        ImBoolean localLights = new ImBoolean(value.localLights());
         ImGui.textDisabled(I18n.get("vector3.rays.note"));
         boolean changed = ImGui.sliderFloat(I18n.get("vector3.rays.intensity"), intensity, 0, 4);
         changed |= ImGui.sliderFloat(I18n.get("vector3.rays.length"), length, 0.05f, 1.5f);
@@ -30,9 +31,12 @@ public final class GodRaysEditor {
         if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.rays.sky_tip"));
         changed |= ImGui.checkbox(I18n.get("vector3.rays.bright"), bright);
         if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.rays.bright_tip"));
+        changed |= ImGui.checkbox(I18n.get("vector3.rays.local_lights"), localLights);
+        if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.rays.local_lights_tip"));
         if (bright.get()) changed |= ImGui.sliderFloat(I18n.get("vector3.rays.threshold"), threshold, 0, 1);
         return changed ? new GodRaysSettings(intensity[0], length[0], decay[0], samples[0],
-                new Rgb(tint[0], tint[1], tint[2]), falloff[0], sky.get(), bright.get(), threshold[0]).sanitized()
+                new Rgb(tint[0], tint[1], tint[2]), falloff[0], sky.get(), bright.get(),
+                threshold[0], localLights.get()).sanitized()
                 : value;
     }
 }

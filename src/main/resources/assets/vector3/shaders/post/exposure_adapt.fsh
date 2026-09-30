@@ -7,7 +7,11 @@ layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 fragColor;
 void main() {
     float lum = texture(LumSampler, vec2(0.5)).r;
+    if (isnan(lum) || isinf(lum)) lum = Detail.x;
     float target = clamp(Detail.x / max(lum, 0.001) * exp2(Settings.w), exp2(Settings.y), exp2(Settings.z));
     float previous = Detail.y > 0.5 ? texture(PrevSampler, vec2(0.5)).r : target;
-    fragColor = vec4(mix(previous, target, Settings.x), 0.0, 0.0, 1.0);
+    if (isnan(previous) || isinf(previous) || previous <= 0.0) previous = target;
+    // Bright scenes need immediate exposure reduction; recovery in darkness can remain gradual.
+    float blend = target < previous ? 1.0 : Settings.x;
+    fragColor = vec4(mix(previous, target, blend), 0.0, 0.0, 1.0);
 }
