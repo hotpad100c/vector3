@@ -34,7 +34,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 public final class LightGizmoEditor {
-    private enum Kind { X, Y, Z, YAW, PITCH, RADIUS, WIDTH, HEIGHT, REACH, INNER, OUTER }
+    private enum Kind { X, Y, Z, FREE, YAW, PITCH, RADIUS, WIDTH, HEIGHT, REACH, INNER, OUTER }
     private record Handle(Kind kind, ObjModelShape shape, Color color) {}
 
     private static final Color X_COLOR = new Color(255, 55, 55, 230);
@@ -50,13 +50,12 @@ public final class LightGizmoEditor {
     private final List<LineShape> edges = new ArrayList<>();
     private LineCircleShape ring;
     private LineShape directionLine;
-    private ObjModelShape centerMarker;
     private CustomKeyframe<Light> keyframe;
     private KeyframeTrack track;
     private Consumer<Light> commit = light -> {};
     private Handle hovered, dragging;
     private Light preview, dragStart;
-    private Vec3 dragAxis, dragOrigin;
+    private Vec3 dragAxis, dragOrigin, dragPlaneStart;
     private double dragParameter;
 
     public boolean isDragging() { return dragging != null; }
@@ -83,13 +82,11 @@ public final class LightGizmoEditor {
         for (LineShape edge : edges) edge.discard();
         if (ring != null) ring.discard();
         if (directionLine != null) directionLine.discard();
-        if (centerMarker != null) centerMarker.discard();
         handles.clear();
         edges.clear();
         ShapeManagers.removeShapes(Mod.id("light_gizmo/" + session));
         ring = null;
         directionLine = null;
-        centerMarker = null;
         keyframe = null;
         track = null;
         hovered = dragging = null;
@@ -141,15 +138,25 @@ public final class LightGizmoEditor {
                 ReplayUI.imguiWindower.ungrab();
                 dragging = hovered;
                 dragStart = light;
-                dragAxis = axis(light, hovered.kind());
                 dragOrigin = handlePosition(light, hovered.kind());
-                dragParameter = ShapeGizmoEditor.axisParameter(ray, dragOrigin, dragAxis);
+                if (hovered.kind() == Kind.FREE) {
+                    dragAxis = new Vec3(camera.forwardVector());
+                    dragPlaneStart = ShapeGizmoEditor.intersectPlane(ray, dragOrigin, dragAxis);
+                } else {
+                    dragAxis = axis(light, hovered.kind());
+                    dragParameter = ShapeGizmoEditor.axisParameter(ray, dragOrigin, dragAxis);
+                }
                 updateColors();
             }
         }
         if (dragging != null && ImGui.isMouseDown(1)) {
-            double delta = ShapeGizmoEditor.axisParameter(ray, dragOrigin, dragAxis) - dragParameter;
-            Light next = drag(delta);
+            Light next;
+            if (dragging.kind() == Kind.FREE) {
+                Vec3 current = ShapeGizmoEditor.intersectPlane(ray, dragOrigin, dragAxis);
+                next = current == null || dragPlaneStart == null ? null : moveFree(current.subtract(dragPlaneStart));
+            } else {
+                next = drag(ShapeGizmoEditor.axisParameter(ray, dragOrigin, dragAxis) - dragParameter);
+            }
             if (next != null) {
                 preview = next;
                 LightRenderer.preview(evaluated, next);
@@ -163,16 +170,14 @@ public final class LightGizmoEditor {
         ring = ShapeGenerator.generateLineCircle().radius(1).segments(64).lineWidth(2.5f)
                 .color(OUTLINE_COLOR).seeThrough(true).build(Shape.RenderingType.BATCH);
         directionLine = line();
-        centerMarker = new ObjModelShape(Shape.RenderingType.BATCH, transformer -> {},
-                ShapeGizmoEditor.CENTER_MODEL, Vec3.ZERO, OUTLINE_COLOR, true);
         add("ring", ring);
         add("direction", directionLine);
-        add("center", centerMarker);
         for (int i = 0; i < 12; i++) {
             LineShape edge = line();
             edges.add(edge);
             add("edge/" + i, edge);
         }
+        addHandle(Kind.FREE, ShapeGizmoEditor.CENTER_MODEL, OUTLINE_COLOR);
         addHandle(Kind.X, X_COLOR);
         addHandle(Kind.Y, Y_COLOR);
         addHandle(Kind.Z, Z_COLOR);
@@ -196,8 +201,12 @@ public final class LightGizmoEditor {
     }
 
     private void addHandle(Kind kind, Color color) {
+        addHandle(kind, ShapeGizmoEditor.MOVE_MODEL, color);
+    }
+
+    private void addHandle(Kind kind, net.minecraft.resources.Identifier model, Color color) {
         ObjModelShape shape = new ObjModelShape(Shape.RenderingType.BATCH, transformer -> {},
-                ShapeGizmoEditor.MOVE_MODEL, Vec3.ZERO, color, true);
+                model, Vec3.ZERO, color, true);
         add("handle/" + kind.name().toLowerCase(java.util.Locale.ROOT), shape);
         handles.add(new Handle(kind, shape, color));
     }
@@ -207,8 +216,6 @@ public final class LightGizmoEditor {
         Vec3 direction = light.direction();
         double range = light.radius();
         double size = ShapeGizmoEditor.gizmoScale(center);
-        centerMarker.forceSetWorldPosition(center);
-        centerMarker.forceSetWorldScale(new Vec3(size * 0.5, size * 0.5, size * 0.5));
         directionLine.forceSetStart(center);
         directionLine.forceSetEnd(center.add(direction.scale(light.type() == Light.Type.AREA
                 ? light.areaReach() : light.type() == Light.Type.SPOT ? range : 0)));
@@ -256,6 +263,12 @@ public final class LightGizmoEditor {
             }
             handle.shape().enable();
             Vec3 position = handlePosition(light, handle.kind());
+            if (handle.kind() == Kind.FREE) {
+                double marker = size * 0.5;
+                handle.shape().forceSetWorldPosition(position);
+                handle.shape().forceSetWorldScale(new Vec3(marker, marker, marker));
+                continue;
+            }
             double scale = ShapeGizmoEditor.gizmoScale(position);
             handle.shape().forceSetWorldPosition(position);
             handle.shape().forceSetWorldScale(new Vec3(scale, scale, scale));
@@ -272,11 +285,11 @@ public final class LightGizmoEditor {
     private boolean shown(Light light, Kind kind) {
         if (dragging != null) return dragging.kind() == kind;
         return switch (GizmoMode.current()) {
-            case MOVE -> kind == Kind.X || kind == Kind.Y || kind == Kind.Z;
+            case MOVE -> kind == Kind.FREE || kind == Kind.X || kind == Kind.Y || kind == Kind.Z;
             case ROTATE -> light.type() != Light.Type.POINT && (kind == Kind.YAW || kind == Kind.PITCH);
-            case SCALE -> kind == Kind.RADIUS || light.type() == Light.Type.AREA
+            case SCALE -> kind == Kind.FREE || kind == Kind.RADIUS || light.type() == Light.Type.AREA
                     && (kind == Kind.WIDTH || kind == Kind.HEIGHT || kind == Kind.REACH);
-            case GEOMETRY -> switch (light.type()) {
+            case GEOMETRY -> kind == Kind.FREE || switch (light.type()) {
                 case POINT -> kind == Kind.RADIUS;
                 case AREA -> kind == Kind.WIDTH || kind == Kind.HEIGHT || kind == Kind.REACH;
                 case SPOT -> kind == Kind.INNER || kind == Kind.OUTER || kind == Kind.RADIUS;
@@ -289,7 +302,7 @@ public final class LightGizmoEditor {
         double size = ShapeGizmoEditor.gizmoScale(center);
         Vec3 direction = light.direction();
         return switch (kind) {
-            case X, Y, Z -> center;
+            case X, Y, Z, FREE -> center;
             case YAW -> center.add(direction.scale(size * 2)).add(yawTangent(light).scale(size * 0.4));
             case PITCH -> center.add(direction.scale(size * 2)).add(pitchTangent(light).scale(size * 0.4));
             case RADIUS -> center.add(light.type() == Light.Type.SPOT
@@ -310,6 +323,7 @@ public final class LightGizmoEditor {
             case RADIUS -> light.type() == Light.Type.SPOT ? light.direction() : new Vec3(1, 0, 0);
             case Y -> new Vec3(0, 1, 0);
             case Z -> new Vec3(0, 0, 1);
+            case FREE -> light.direction();
             case YAW -> yawTangent(light);
             case PITCH -> pitchTangent(light);
             case WIDTH, OUTER -> right(light);
@@ -365,6 +379,16 @@ public final class LightGizmoEditor {
         return replace(start, position, direction, radius, width, height, reach, inner, outer);
     }
 
+    private Light moveFree(Vec3 offset) {
+        Vec3 position = dragStart.position().add(offset);
+        if (InputHelper.isCtrlDownRaw()) {
+            position = new Vec3(Math.round(position.x * 2) / 2.0, Math.round(position.y * 2) / 2.0,
+                    Math.round(position.z * 2) / 2.0);
+        }
+        return replace(dragStart, position, dragStart.direction(), dragStart.radius(), dragStart.areaWidth(),
+                dragStart.areaHeight(), dragStart.areaReach(), dragStart.innerAngle(), dragStart.outerAngle());
+    }
+
     private static Light replace(Light start, Vec3 position, Vec3 direction, float radius,
             float width, float height, float reach, float inner, float outer) {
         return new Light(position, start.red(), start.green(), start.blue(), start.intensity(), radius,
@@ -385,7 +409,7 @@ public final class LightGizmoEditor {
         float radius = stored.radius(), width = stored.areaWidth(), height = stored.areaHeight();
         float reach = stored.areaReach(), inner = stored.innerAngle(), outer = stored.outerAngle();
         switch (kind) {
-            case X, Y, Z -> position = position.add(edited.position().subtract(evaluated.position()));
+            case X, Y, Z, FREE -> position = position.add(edited.position().subtract(evaluated.position()));
             case YAW, PITCH -> {
                 double yaw = Math.atan2(-direction.x, direction.z)
                         + Math.atan2(-edited.direction().x, edited.direction().z)

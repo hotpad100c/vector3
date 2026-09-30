@@ -14,16 +14,25 @@ public class Vector3 implements ClientModInitializer {
 	public void onInitializeClient() {
 		MinecraftBootstrap.init();
 		FlashbackBootstrap.init();
-		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-			FlashbackBootstrap.onDisconnect();
-			MinecraftBootstrap.onDisconnect();
-		});
+		// The event fires on a network thread, but cleanup frees GPU resources, which only the render thread may.
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
+			guard("Flashback cleanup", FlashbackBootstrap::onDisconnect);
+			guard("Minecraft cleanup", MinecraftBootstrap::onDisconnect);
+		}));
 		if (Boolean.getBoolean("vector3.mixinAudit")) {
 			ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
 				MixinEnvironment.getCurrentEnvironment().audit();
 				Mod.LOGGER.info("Mixin audit passed; timeline accessors read editingTrack={} mouseX={} scene={}",
 						Timeline.editingTrack(), Timeline.mouseX(), Timeline.scene());
 			});
+		}
+	}
+
+	private static void guard(String what, Runnable cleanup) {
+		try {
+			cleanup.run();
+		} catch (RuntimeException exception) {
+			Mod.LOGGER.warn("{} failed on disconnect", what, exception);
 		}
 	}
 }

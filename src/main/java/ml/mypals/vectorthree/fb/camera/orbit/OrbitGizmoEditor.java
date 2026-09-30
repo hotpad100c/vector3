@@ -63,7 +63,7 @@ public final class OrbitGizmoEditor {
         }
     }
 
-    private enum Kind { CENTER_X, CENTER_Y, CENTER_Z, YAW, PITCH, DISTANCE, TILT }
+    private enum Kind { CENTER_FREE, CENTER_X, CENTER_Y, CENTER_Z, YAW, PITCH, DISTANCE, TILT }
 
     private record Handle(Kind kind, ObjModelShape shape, Color color) {}
 
@@ -86,7 +86,6 @@ public final class OrbitGizmoEditor {
     private LineShape spoke;
     private SphereShape cameraBall;
     private SphereShape distanceBall;
-    private ObjModelShape centerMarker;
 
     private CameraOrbitKeyframe keyframe;
     private Consumer<Orbit> commit = orbit -> {};
@@ -96,6 +95,7 @@ public final class OrbitGizmoEditor {
     private Orbit dragStart;
     private Vec3 dragOrigin;
     private Vec3 dragAxis;
+    private Vec3 dragPlaneStart;
     private double dragParameter;
     private double dragAngle;
 
@@ -125,14 +125,13 @@ public final class OrbitGizmoEditor {
     public void clear() {
         for (Handle handle : handles) handle.shape().discard();
         handles.clear();
-        for (Shape shape : new Shape[]{ring, spoke, cameraBall, distanceBall, centerMarker}) {
+        for (Shape shape : new Shape[]{ring, spoke, cameraBall, distanceBall}) {
             if (shape != null) shape.discard();
         }
         ring = null;
         spoke = null;
         cameraBall = null;
         distanceBall = null;
-        centerMarker = null;
         ShapeManagers.removeShapes(Mod.id("orbit_gizmo/" + session));
         keyframe = null;
         preview = null;
@@ -166,7 +165,7 @@ public final class OrbitGizmoEditor {
             setHovered(ShapeGizmoEditor.mouseInViewport() ? pick(ray) : null);
             if (ImGui.isMouseClicked(1) && hovered != null) {
                 ReplayUI.imguiWindower.ungrab();
-                beginDrag(hovered, orbit, ray);
+                beginDrag(hovered, orbit, ray, camera);
             }
         }
         if (dragging != null && ImGui.isMouseDown(1)) {
@@ -186,13 +185,11 @@ public final class OrbitGizmoEditor {
                 .color(SPOKE_COLOR).seeThrough(true).build(Shape.RenderingType.BATCH);
         cameraBall = ball(YAW_COLOR);
         distanceBall = ball(DISTANCE_COLOR);
-        centerMarker = new ObjModelShape(Shape.RenderingType.BATCH, transformer -> {},
-                ShapeGizmoEditor.CENTER_MODEL, Vec3.ZERO, RING_COLOR, true);
         addVisual("ring", ring);
         addVisual("spoke", spoke);
         addVisual("camera", cameraBall);
         addVisual("distance", distanceBall);
-        addVisual("center", centerMarker);
+        addHandle(Kind.CENTER_FREE, ShapeGizmoEditor.CENTER_MODEL, RING_COLOR);
         addHandle(Kind.CENTER_X, X_COLOR);
         addHandle(Kind.CENTER_Y, Y_COLOR);
         addHandle(Kind.CENTER_Z, Z_COLOR);
@@ -212,8 +209,12 @@ public final class OrbitGizmoEditor {
     }
 
     private void addHandle(Kind kind, Color color) {
+        addHandle(kind, ShapeGizmoEditor.MOVE_MODEL, color);
+    }
+
+    private void addHandle(Kind kind, net.minecraft.resources.Identifier model, Color color) {
         ObjModelShape shape = new ObjModelShape(Shape.RenderingType.BATCH, transformer -> {},
-                ShapeGizmoEditor.MOVE_MODEL, Vec3.ZERO, color, true);
+                model, Vec3.ZERO, color, true);
         ShapeManagers.addShape(Mod.id("orbit_gizmo/" + session + "/handle/" + handles.size()), shape);
         handles.add(new Handle(kind, shape, color));
     }
@@ -236,8 +237,6 @@ public final class OrbitGizmoEditor {
         placeBall(cameraBall, eye, 0.2);
         placeBall(distanceBall, distancePoint, 0.16);
         double markerScale = ShapeGizmoEditor.gizmoScale(center) * 0.5;
-        centerMarker.forceSetWorldPosition(center);
-        centerMarker.forceSetWorldScale(new Vec3(markerScale, markerScale, markerScale));
 
         for (Handle handle : handles) {
             if (!shown(handle.kind())) {
@@ -245,8 +244,13 @@ public final class OrbitGizmoEditor {
                 continue;
             }
             handle.shape().enable();
+            if (handle.kind() == Kind.CENTER_FREE) {
+                handle.shape().forceSetWorldPosition(center);
+                handle.shape().forceSetWorldScale(new Vec3(markerScale, markerScale, markerScale));
+                continue;
+            }
             Vec3 position = switch (handle.kind()) {
-                case CENTER_X, CENTER_Y, CENTER_Z -> center;
+                case CENTER_FREE, CENTER_X, CENTER_Y, CENTER_Z -> center;
                 case YAW, PITCH -> eye;
                 case DISTANCE, TILT -> distancePoint;
             };
@@ -261,9 +265,10 @@ public final class OrbitGizmoEditor {
     private boolean shown(Kind kind) {
         if (dragging != null) return dragging.kind() == kind;
         return switch (GizmoMode.current()) {
-            case MOVE -> kind == Kind.CENTER_X || kind == Kind.CENTER_Y || kind == Kind.CENTER_Z;
+            case MOVE -> kind == Kind.CENTER_FREE || kind == Kind.CENTER_X || kind == Kind.CENTER_Y
+                    || kind == Kind.CENTER_Z;
             case ROTATE -> kind == Kind.YAW || kind == Kind.PITCH || kind == Kind.TILT;
-            case SCALE -> kind == Kind.DISTANCE;
+            case SCALE -> kind == Kind.CENTER_FREE || kind == Kind.DISTANCE;
             case GEOMETRY -> true;
         };
     }
@@ -287,6 +292,7 @@ public final class OrbitGizmoEditor {
 
     private static Vec3 handleDirection(Orbit orbit, Kind kind) {
         return switch (kind) {
+            case CENTER_FREE -> new Vec3(0, 1, 0);
             case CENTER_X -> new Vec3(1, 0, 0);
             case CENTER_Y -> new Vec3(0, 1, 0);
             case CENTER_Z -> new Vec3(0, 0, 1);
@@ -327,11 +333,16 @@ public final class OrbitGizmoEditor {
         }
     }
 
-    private void beginDrag(Handle handle, Orbit orbit, RayModelIntersection.Ray ray) {
+    private void beginDrag(Handle handle, Orbit orbit, RayModelIntersection.Ray ray, Camera camera) {
         dragging = handle;
         dragStart = orbit;
         Vec3 center = vec(orbit.center());
         switch (handle.kind()) {
+            case CENTER_FREE -> {
+                dragOrigin = center;
+                dragAxis = new Vec3(camera.forwardVector());
+                dragPlaneStart = ShapeGizmoEditor.intersectPlane(ray, dragOrigin, dragAxis);
+            }
             case CENTER_X, CENTER_Y, CENTER_Z -> {
                 dragOrigin = center;
                 dragAxis = handleDirection(orbit, handle.kind());
@@ -358,6 +369,15 @@ public final class OrbitGizmoEditor {
         boolean snap = InputHelper.isCtrlDownRaw();
         Orbit start = dragStart;
         switch (dragging.kind()) {
+            case CENTER_FREE -> {
+                Vec3 current = ShapeGizmoEditor.intersectPlane(ray, dragOrigin, dragAxis);
+                if (current == null || dragPlaneStart == null) return null;
+                Vec3 offset = current.subtract(dragPlaneStart);
+                Vector3d center = new Vector3d(start.center()).add(offset.x, offset.y, offset.z);
+                if (snap) center.set(snapGrid(center.x, start.center().x), snapGrid(center.y, start.center().y),
+                        snapGrid(center.z, start.center().z));
+                return start.with(center, start.distance(), start.yaw(), start.pitch(), start.tiltX(), start.tiltZ());
+            }
             case CENTER_X, CENTER_Y, CENTER_Z -> {
                 double delta = ShapeGizmoEditor.axisParameter(ray, dragOrigin, dragAxis) - dragParameter;
                 Vector3d center = new Vector3d(start.center()).add(dragAxis.x * delta, dragAxis.y * delta, dragAxis.z * delta);

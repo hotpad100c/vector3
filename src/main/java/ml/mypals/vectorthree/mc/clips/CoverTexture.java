@@ -17,6 +17,15 @@ public record CoverTexture(DynamicTexture texture, float aspect) {
         return texture.getTextureView();
     }
 
+    public boolean alive() {
+        try {
+            texture.getTextureView();
+            return true;
+        } catch (IllegalStateException freed) {
+            return false;
+        }
+    }
+
     public void close() {
         texture.close();
     }
