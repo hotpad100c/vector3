@@ -60,6 +60,7 @@ void main() {
     float radius = max(LightPositionRadius.w, 0.001);
     vec3 emitter = LightPositionRadius.xyz;
     float shape = 1.0;
+    float normalizedDistance = length(emitter - surface) / radius;
     if (LightDirectionType.w < 1.5 && LightDirectionType.w > 0.5) {
         vec3 displacement = surface - emitter;
         emitter += AreaRight.xyz * clamp(dot(displacement, AreaRight.xyz),
@@ -67,15 +68,17 @@ void main() {
         emitter += AreaUp.xyz * clamp(dot(displacement, AreaUp.xyz),
                 -AreaCone.y * 0.5, AreaCone.y * 0.5);
         vec3 toSurface = surface - emitter;
+        float axial = dot(LightDirectionType.xyz, toSurface);
+        normalizedDistance = length(toSurface - LightDirectionType.xyz * axial) / radius;
         shape = smoothstep(-0.05, 0.15,
                 dot(normalize(LightDirectionType.xyz), toSurface / max(length(toSurface), 0.001)));
+        shape *= 1.0 - smoothstep(AreaRight.w * 0.75, AreaRight.w, axial);
     } else if (LightDirectionType.w > 1.5) {
         vec3 toSurface = surface - emitter;
         float cone = dot(normalize(LightDirectionType.xyz), toSurface / max(length(toSurface), 0.001));
         shape = clamp((cone - AreaCone.w) / max(AreaCone.z - AreaCone.w, 0.001), 0.0, 1.0);
         shape = shape * shape * (3.0 - 2.0 * shape);
     }
-    float normalizedDistance = length(emitter - surface) / radius;
     float attenuation = exp(-3.0 * normalizedDistance * normalizedDistance);
     float visibility = Effects.y > 0.001 ? 1.0 - Effects.y * shadowOcclusion(depth) : 1.0;
     vec3 scene = texture(InSampler, texCoord).rgb;

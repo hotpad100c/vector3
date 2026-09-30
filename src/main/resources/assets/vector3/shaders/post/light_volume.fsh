@@ -23,7 +23,7 @@ void main() {
     float radius = LightPositionRadius.w;
     float bounds = radius;
     if (LightDirectionType.w > 0.5 && LightDirectionType.w < 1.5)
-        bounds += length(AreaCone.xy) * 0.5;
+        bounds = length(vec2(AreaRight.w, radius + length(AreaCone.xy) * 0.5));
     float projected = dot(ray, center);
     float discriminant = projected * projected - (dot(center, center) - bounds * bounds);
     if (discriminant <= 0.0) {
@@ -38,12 +38,15 @@ void main() {
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
     }
-    float stepLength = (end - start) / 12.0;
+    int steps = LightDirectionType.w > 0.5 && LightDirectionType.w < 1.5 ? 24 : 12;
+    float stepLength = (end - start) / float(steps);
     float scattering = 0.0;
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < 24; i++) {
+        if (i >= steps) break;
         vec3 point = ray * (start + (float(i) + 0.5) * stepLength);
         vec3 emitter = center;
         float shape = 1.0;
+        float radial;
         if (LightDirectionType.w > 0.5 && LightDirectionType.w < 1.5) {
             vec3 displacement = point - center;
             emitter += AreaRight.xyz * clamp(dot(displacement, AreaRight.xyz),
@@ -51,15 +54,20 @@ void main() {
             emitter += AreaUp.xyz * clamp(dot(displacement, AreaUp.xyz),
                     -AreaCone.y * 0.5, AreaCone.y * 0.5);
             vec3 toPoint = point - emitter;
+            float axial = dot(LightDirectionType.xyz, toPoint);
+            radial = max(0.0, 1.0 - length(toPoint - LightDirectionType.xyz * axial) / radius);
             shape = smoothstep(-0.05, 0.15,
                     dot(LightDirectionType.xyz, toPoint / max(length(toPoint), 0.001)));
+            shape *= 1.0 - smoothstep(AreaRight.w * 0.75, AreaRight.w, axial);
         } else if (LightDirectionType.w > 1.5) {
             vec3 toPoint = point - center;
             float cone = dot(LightDirectionType.xyz, toPoint / max(length(toPoint), 0.001));
             shape = clamp((cone - AreaCone.w) / max(AreaCone.z - AreaCone.w, 0.001), 0.0, 1.0);
             shape = shape * shape * (3.0 - 2.0 * shape);
+            radial = max(0.0, 1.0 - length(point - center) / radius);
+        } else {
+            radial = max(0.0, 1.0 - length(point - center) / radius);
         }
-        float radial = max(0.0, 1.0 - length(point - emitter) / radius);
         scattering += radial * radial * shape;
     }
     scattering *= stepLength / max(radius, 0.1);

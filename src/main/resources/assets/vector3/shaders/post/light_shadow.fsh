@@ -53,7 +53,7 @@ void main() {
     vec3 surface = ray * (depth / -ray.z);
     float reach = LightPositionRadius.w * 2.5;
     if (LightDirectionType.w > 0.5 && LightDirectionType.w < 1.5)
-        reach += length(AreaCone.xy) * 0.5;
+        reach = length(vec2(AreaRight.w, reach + length(AreaCone.xy) * 0.5));
     if (length(LightPositionRadius.xyz - surface) > reach) {
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;

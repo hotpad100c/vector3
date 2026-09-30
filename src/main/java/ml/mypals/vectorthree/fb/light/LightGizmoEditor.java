@@ -1,6 +1,7 @@
 package ml.mypals.vectorthree.fb.light;
 
 import com.moulberry.flashback.editor.ui.ReplayUI;
+import com.moulberry.flashback.state.KeyframeTrack;
 import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
@@ -12,8 +13,11 @@ import ml.mypals.ryansrenderingkit.shape.round.LineCircleShape;
 import ml.mypals.ryansrenderingkit.shapeManagers.ShapeManagers;
 import ml.mypals.vectorthree.core.Mod;
 import ml.mypals.vectorthree.core.light.Light;
+import ml.mypals.vectorthree.core.port.Ports;
 import ml.mypals.vectorthree.fb.camera.ViewportPick;
 import ml.mypals.vectorthree.fb.custom.CustomKeyframe;
+import ml.mypals.vectorthree.fb.custom.CustomKeyframeChange;
+import ml.mypals.vectorthree.fb.expression.ExpressionBindings;
 import ml.mypals.vectorthree.fb.shape.GizmoMode;
 import ml.mypals.vectorthree.fb.shape.ShapeGizmoEditor;
 import ml.mypals.vectorthree.mc.light.LightRenderer;
@@ -30,7 +34,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 public final class LightGizmoEditor {
-    private enum Kind { X, Y, Z, YAW, PITCH, RADIUS, WIDTH, HEIGHT, INNER, OUTER }
+    private enum Kind { X, Y, Z, YAW, PITCH, RADIUS, WIDTH, HEIGHT, REACH, INNER, OUTER }
     private record Handle(Kind kind, ObjModelShape shape, Color color) {}
 
     private static final Color X_COLOR = new Color(255, 55, 55, 230);
@@ -48,6 +52,7 @@ public final class LightGizmoEditor {
     private LineShape directionLine;
     private ObjModelShape centerMarker;
     private CustomKeyframe<Light> keyframe;
+    private KeyframeTrack track;
     private Consumer<Light> commit = light -> {};
     private Handle hovered, dragging;
     private Light preview, dragStart;
@@ -57,14 +62,15 @@ public final class LightGizmoEditor {
     public boolean isDragging() { return dragging != null; }
     public boolean isHovering() { return hovered != null || dragging != null; }
 
-    public void select(CustomKeyframe<Light> keyframe, Consumer<Light> commit) {
+    public void select(CustomKeyframe<Light> keyframe, KeyframeTrack track, Consumer<Light> commit) {
         this.commit = commit;
+        this.track = track;
         if (this.keyframe == keyframe) return;
         this.keyframe = keyframe;
         preview = null;
         dragging = null;
         ensureShapes();
-        layout(keyframe.value.sanitized());
+        layout(evaluated());
     }
 
     public void clearSelection() {
@@ -85,6 +91,7 @@ public final class LightGizmoEditor {
         directionLine = null;
         centerMarker = null;
         keyframe = null;
+        track = null;
         hovered = dragging = null;
         preview = null;
         commit = light -> {};
@@ -94,7 +101,10 @@ public final class LightGizmoEditor {
         if (!ReplayUI.isActive() || keyframe == null) return;
         if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
-            if (preview != null && !preview.equals(keyframe.value)) commit.accept(preview);
+            if (preview != null) {
+                Light replacement = rebase(keyframe.value.sanitized(), dragStart, preview, dragging.kind());
+                if (!replacement.equals(keyframe.value)) commit.accept(replacement);
+            }
             LightRenderer.clearPreview();
             preview = null;
             dragging = null;
@@ -102,7 +112,8 @@ public final class LightGizmoEditor {
             return;
         }
 
-        Light light = preview != null ? preview : keyframe.value.sanitized();
+        Light evaluated = evaluated();
+        Light light = preview != null ? preview : evaluated;
         ensureShapes();
         layout(light);
         Vec3 look = ReplayUI.getMouseLookVector();
@@ -119,8 +130,11 @@ public final class LightGizmoEditor {
                             : InputHelper.isCtrlDownRaw() && hit.block() != null
                             ? Vec3.atCenterOf(hit.block().getBlockPos().relative(hit.block().getDirection()))
                             : hit.location();
-                    if (!point.equals(light.position())) commit.accept(replace(light, point, light.direction(),
-                            light.radius(), light.areaWidth(), light.areaHeight(), light.innerAngle(), light.outerAngle()));
+                    if (!point.equals(light.position())) {
+                        Light edited = replace(light, point, light.direction(), light.radius(), light.areaWidth(),
+                                light.areaHeight(), light.areaReach(), light.innerAngle(), light.outerAngle());
+                        commit.accept(rebase(keyframe.value.sanitized(), light, edited, Kind.X));
+                    }
                 }
             }
             if (ImGui.isMouseClicked(1) && hovered != null) {
@@ -138,7 +152,7 @@ public final class LightGizmoEditor {
             Light next = drag(delta);
             if (next != null) {
                 preview = next;
-                LightRenderer.preview(keyframe.value, next);
+                LightRenderer.preview(evaluated, next);
                 layout(next);
             }
         }
@@ -154,7 +168,7 @@ public final class LightGizmoEditor {
         add("ring", ring);
         add("direction", directionLine);
         add("center", centerMarker);
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 12; i++) {
             LineShape edge = line();
             edges.add(edge);
             add("edge/" + i, edge);
@@ -167,6 +181,7 @@ public final class LightGizmoEditor {
         addHandle(Kind.RADIUS, SIZE_COLOR);
         addHandle(Kind.WIDTH, X_COLOR);
         addHandle(Kind.HEIGHT, Y_COLOR);
+        addHandle(Kind.REACH, DIRECTION_COLOR);
         addHandle(Kind.INNER, INNER_COLOR);
         addHandle(Kind.OUTER, SIZE_COLOR);
     }
@@ -195,7 +210,8 @@ public final class LightGizmoEditor {
         centerMarker.forceSetWorldPosition(center);
         centerMarker.forceSetWorldScale(new Vec3(size * 0.5, size * 0.5, size * 0.5));
         directionLine.forceSetStart(center);
-        directionLine.forceSetEnd(center.add(direction.scale(light.type() == Light.Type.POINT ? 0 : Math.min(range, size * 3))));
+        directionLine.forceSetEnd(center.add(direction.scale(light.type() == Light.Type.AREA
+                ? light.areaReach() : light.type() == Light.Type.SPOT ? range : 0)));
         if (light.type() == Light.Type.POINT) directionLine.disable();
         else directionLine.enable();
 
@@ -210,6 +226,7 @@ public final class LightGizmoEditor {
             Vec3[] rim = {tip.add(right.scale(spread)), tip.add(up.scale(spread)),
                     tip.subtract(right.scale(spread)), tip.subtract(up.scale(spread))};
             for (int i = 0; i < 4; i++) showLine(edges.get(i), center, rim[i]);
+            for (int i = 4; i < edges.size(); i++) edges.get(i).disable();
         } else if (light.type() == Light.Type.AREA) {
             ring.enable();
             ring.forceSetWorldPosition(center);
@@ -219,7 +236,12 @@ public final class LightGizmoEditor {
             Vec3 u = up(light).scale(light.areaHeight() * 0.5);
             Vec3[] corners = {center.add(r).add(u), center.subtract(r).add(u),
                     center.subtract(r).subtract(u), center.add(r).subtract(u)};
-            for (int i = 0; i < 4; i++) showLine(edges.get(i), corners[i], corners[(i + 1) % 4]);
+            Vec3 offset = direction.scale(light.areaReach());
+            for (int i = 0; i < 4; i++) {
+                showLine(edges.get(i), corners[i], corners[(i + 1) % 4]);
+                showLine(edges.get(i + 4), corners[i], corners[i].add(offset));
+                showLine(edges.get(i + 8), corners[i].add(offset), corners[(i + 1) % 4].add(offset));
+            }
         } else {
             ring.enable();
             ring.forceSetWorldPosition(center);
@@ -252,10 +274,11 @@ public final class LightGizmoEditor {
         return switch (GizmoMode.current()) {
             case MOVE -> kind == Kind.X || kind == Kind.Y || kind == Kind.Z;
             case ROTATE -> light.type() != Light.Type.POINT && (kind == Kind.YAW || kind == Kind.PITCH);
-            case SCALE -> kind == Kind.RADIUS || light.type() == Light.Type.AREA && (kind == Kind.WIDTH || kind == Kind.HEIGHT);
+            case SCALE -> kind == Kind.RADIUS || light.type() == Light.Type.AREA
+                    && (kind == Kind.WIDTH || kind == Kind.HEIGHT || kind == Kind.REACH);
             case GEOMETRY -> switch (light.type()) {
                 case POINT -> kind == Kind.RADIUS;
-                case AREA -> kind == Kind.WIDTH || kind == Kind.HEIGHT;
+                case AREA -> kind == Kind.WIDTH || kind == Kind.HEIGHT || kind == Kind.REACH;
                 case SPOT -> kind == Kind.INNER || kind == Kind.OUTER || kind == Kind.RADIUS;
             };
         };
@@ -273,6 +296,7 @@ public final class LightGizmoEditor {
                     ? direction.scale(light.radius()) : new Vec3(light.radius(), 0, 0));
             case WIDTH -> center.add(right(light).scale(light.areaWidth() * 0.5));
             case HEIGHT -> center.add(up(light).scale(light.areaHeight() * 0.5));
+            case REACH -> center.add(direction.scale(light.areaReach()));
             case INNER -> center.add(direction.scale(light.radius()))
                     .add(up(light).scale(light.radius() * Math.tan(Math.toRadians(light.innerAngle()))));
             case OUTER -> center.add(direction.scale(light.radius()))
@@ -290,13 +314,14 @@ public final class LightGizmoEditor {
             case PITCH -> pitchTangent(light);
             case WIDTH, OUTER -> right(light);
             case HEIGHT, INNER -> up(light);
+            case REACH -> light.direction();
         };
     }
 
     private Light drag(double delta) {
         Light start = dragStart;
         Vec3 position = start.position(), direction = start.direction();
-        float radius = start.radius(), width = start.areaWidth(), height = start.areaHeight();
+        float radius = start.radius(), width = start.areaWidth(), height = start.areaHeight(), reach = start.areaReach();
         float inner = start.innerAngle(), outer = start.outerAngle();
         boolean snap = InputHelper.isCtrlDownRaw();
         switch (dragging.kind()) {
@@ -317,6 +342,7 @@ public final class LightGizmoEditor {
             case RADIUS -> radius = (float) (radius + delta);
             case WIDTH -> width = (float) (width + delta * 2);
             case HEIGHT -> height = (float) (height + delta * 2);
+            case REACH -> reach = (float) (reach + delta);
             case INNER -> inner = (float) Math.toDegrees(Math.atan(Math.max(0,
                     start.radius() * Math.tan(Math.toRadians(inner)) + delta) / start.radius()));
             case OUTER -> outer = (float) Math.toDegrees(Math.atan(Math.max(0,
@@ -330,18 +356,55 @@ public final class LightGizmoEditor {
                 case RADIUS -> radius = Math.round(radius * 2) / 2f;
                 case WIDTH -> width = Math.round(width * 2) / 2f;
                 case HEIGHT -> height = Math.round(height * 2) / 2f;
+                case REACH -> reach = Math.round(reach * 2) / 2f;
                 case INNER -> inner = Math.round(inner / 5) * 5;
                 case OUTER -> outer = Math.round(outer / 5) * 5;
                 default -> {}
             }
         }
-        return replace(start, position, direction, radius, width, height, inner, outer);
+        return replace(start, position, direction, radius, width, height, reach, inner, outer);
     }
 
     private static Light replace(Light start, Vec3 position, Vec3 direction, float radius,
-            float width, float height, float inner, float outer) {
+            float width, float height, float reach, float inner, float outer) {
         return new Light(position, start.red(), start.green(), start.blue(), start.intensity(), radius,
-                start.volume(), start.shadow(), start.type(), direction, width, height, inner, outer).sanitized();
+                start.volume(), start.shadow(), start.type(), direction, width, height, inner, outer, reach).sanitized();
+    }
+
+    private Light evaluated() {
+        if (track != null && ExpressionBindings.any(track)
+                && track.createKeyframeChange((float) Ports.clock().effectTick(), null)
+                instanceof CustomKeyframeChange change && change.value() instanceof Light light) {
+            return light.sanitized();
+        }
+        return keyframe.value.sanitized();
+    }
+
+    private static Light rebase(Light stored, Light evaluated, Light edited, Kind kind) {
+        Vec3 position = stored.position(), direction = stored.direction();
+        float radius = stored.radius(), width = stored.areaWidth(), height = stored.areaHeight();
+        float reach = stored.areaReach(), inner = stored.innerAngle(), outer = stored.outerAngle();
+        switch (kind) {
+            case X, Y, Z -> position = position.add(edited.position().subtract(evaluated.position()));
+            case YAW, PITCH -> {
+                double yaw = Math.atan2(-direction.x, direction.z)
+                        + Math.atan2(-edited.direction().x, edited.direction().z)
+                        - Math.atan2(-evaluated.direction().x, evaluated.direction().z);
+                double pitch = Math.asin(Math.clamp(-direction.y, -1, 1))
+                        + Math.asin(Math.clamp(-edited.direction().y, -1, 1))
+                        - Math.asin(Math.clamp(-evaluated.direction().y, -1, 1));
+                pitch = Math.clamp(pitch, -Math.PI / 2, Math.PI / 2);
+                direction = new Vec3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch),
+                        Math.cos(yaw) * Math.cos(pitch));
+            }
+            case RADIUS -> radius += edited.radius() - evaluated.radius();
+            case WIDTH -> width += edited.areaWidth() - evaluated.areaWidth();
+            case HEIGHT -> height += edited.areaHeight() - evaluated.areaHeight();
+            case REACH -> reach += edited.areaReach() - evaluated.areaReach();
+            case INNER -> inner += edited.innerAngle() - evaluated.innerAngle();
+            case OUTER -> outer += edited.outerAngle() - evaluated.outerAngle();
+        }
+        return replace(stored, position, direction, radius, width, height, reach, inner, outer);
     }
 
     private static Vec3 right(Light light) {

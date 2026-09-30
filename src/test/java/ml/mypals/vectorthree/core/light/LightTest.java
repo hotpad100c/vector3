@@ -19,6 +19,7 @@ class LightTest {
         assertEquals(2, light.areaWidth());
         assertEquals(20, light.innerAngle());
         assertEquals(35, light.outerAngle());
+        assertEquals(5, light.areaReach());
     }
 
     @Test
@@ -26,9 +27,23 @@ class LightTest {
         Light base = Light.defaults(net.minecraft.world.phys.Vec3.ZERO);
         Light spot = new Light(base.position(), base.red(), base.green(), base.blue(), base.intensity(),
                 base.radius(), base.volume(), base.shadow(), Light.Type.SPOT, base.direction(),
-                base.areaWidth(), base.areaHeight(), 0, 30).sanitized();
+                base.areaWidth(), base.areaHeight(), 0, 30, base.areaReach()).sanitized();
 
         assertEquals(0, spot.innerAngle());
         assertEquals(30, spot.outerAngle());
+    }
+
+    @Test
+    void intensityAboveEightAndLegacyAreaReachSurvive() {
+        String json = """
+                {"position":{"x":0,"y":5,"z":0},"red":1,"green":1,"blue":1,
+                 "intensity":25,"radius":12,"volume":0,"shadow":0,"type":"AREA",
+                 "direction":{"x":0,"y":-1,"z":0},"areaWidth":4,"areaHeight":3,
+                 "innerAngle":20,"outerAngle":35}
+                """;
+        Light light = new Gson().fromJson(json, Light.class).sanitized();
+
+        assertEquals(25, light.intensity());
+        assertEquals(12, light.areaReach());
     }
 }

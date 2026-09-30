@@ -437,7 +437,7 @@ public final class ShapeTimeline {
         if (keyframe instanceof CustomKeyframe<?> custom && custom.type() == LightKeyframeType.INSTANCE) {
             Editors.GIZMO_EDITOR.clearSelection();
             @SuppressWarnings("unchecked") CustomKeyframe<Light> light = (CustomKeyframe<Light>) custom;
-            Editors.LIGHT_GIZMO.select(light, replacement -> {
+            Editors.LIGHT_GIZMO.select(light, Timeline.scene().keyframeTracks.get(trackIndex), replacement -> {
                 CustomKeyframe<Light> copy = (CustomKeyframe<Light>) light.copy();
                 copy.value = replacement;
                 ChannelMasks.markChanged(light, copy);

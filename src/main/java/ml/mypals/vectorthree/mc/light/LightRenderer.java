@@ -117,7 +117,7 @@ public final class LightRenderer {
                         .putVec4(light.areaWidth(), light.areaHeight(),
                                 (float) Math.cos(Math.toRadians(light.innerAngle())),
                                 (float) Math.cos(Math.toRadians(light.outerAngle())))
-                        .putVec4(areaRight.dot(right), areaRight.dot(up), -areaRight.dot(forward), 0)
+                        .putVec4(areaRight.dot(right), areaRight.dot(up), -areaRight.dot(forward), light.areaReach())
                         .putVec4(areaUp.dot(right), areaUp.dot(up), -areaUp.dot(forward), 0).get();
                 RenderSystem.getDevice().createCommandEncoder().writeToBuffer(settings.slice(), data);
             }

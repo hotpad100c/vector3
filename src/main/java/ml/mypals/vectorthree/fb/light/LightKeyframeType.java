@@ -29,7 +29,7 @@ public final class LightKeyframeType extends CustomKeyframeType<Light> {
         return new Light(defaults.position(), defaults.red(), defaults.green(), defaults.blue(),
                 defaults.intensity(), defaults.radius(), defaults.volume(), defaults.shadow(),
                 defaults.type(), new Vec3(camera.forwardVector()), defaults.areaWidth(), defaults.areaHeight(),
-                defaults.innerAngle(), defaults.outerAngle());
+                defaults.innerAngle(), defaults.outerAngle(), defaults.areaReach());
     }
 
     @Override protected Light sanitize(Light value) { return value.sanitized(); }
@@ -62,12 +62,13 @@ public final class LightKeyframeType extends CustomKeyframeType<Light> {
         }
         changed |= ImGui.dragFloat3(I18n.get("vector3.light.position"), position, 0.05f);
         changed |= ImGui.colorEdit3(I18n.get("vector3.light.color"), color);
-        changed |= ImGui.dragFloat(I18n.get("vector3.light.intensity"), intensity, 0.02f, 0, 100);
+        changed |= ImGui.dragFloat(I18n.get("vector3.light.intensity"), intensity, 0.02f, 0, Light.MAX_INTENSITY);
         changed |= ImGui.dragFloat(I18n.get("vector3.light.radius"), radius, 0.05f, 0.1f, 128);
         Vec3 direction = value.direction();
         float[] angles = {(float) Math.toDegrees(Math.atan2(-direction.x, direction.z)),
                 (float) Math.toDegrees(Math.asin(Math.clamp(-direction.y, -1, 1)))};
         float[] width = {value.areaWidth()}, height = {value.areaHeight()};
+        float[] reach = {value.areaReach()};
         float[] inner = {value.innerAngle()}, outer = {value.outerAngle()};
         if (type != Light.Type.POINT) {
             changed |= ImGui.dragFloat(I18n.get("vector3.light.yaw"), angles, 0.5f, -180, 180);
@@ -78,6 +79,7 @@ public final class LightKeyframeType extends CustomKeyframeType<Light> {
         if (type == Light.Type.AREA) {
             changed |= ImGui.dragFloat(I18n.get("vector3.light.area_width"), width, 0.05f, 0.1f, 64);
             changed |= ImGui.dragFloat(I18n.get("vector3.light.area_height"), height, 0.05f, 0.1f, 64);
+            changed |= ImGui.dragFloat(I18n.get("vector3.light.area_reach"), reach, 0.05f, 0.1f, 128);
         } else if (type == Light.Type.SPOT) {
             changed |= ImGui.dragFloat(I18n.get("vector3.light.inner_angle"), inner, 0.5f, 0, 89);
             changed |= ImGui.dragFloat(I18n.get("vector3.light.outer_angle"), outer, 0.5f, 1, 89);
@@ -89,7 +91,7 @@ public final class LightKeyframeType extends CustomKeyframeType<Light> {
         Vec3 axis = new Vec3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
         return new Light(new Vec3(position[0], position[1], position[2]), color[0], color[1], color[2],
                 intensity[0], radius[0], volume[0], shadow[0], type, axis,
-                width[0], height[0], inner[0], outer[0]).sanitized();
+                width[0], height[0], inner[0], outer[0], reach[0]).sanitized();
     }
 
     private static String typeLabel(Light.Type type) {
