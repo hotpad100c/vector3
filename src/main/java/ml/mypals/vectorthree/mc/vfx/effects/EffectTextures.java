@@ -2,7 +2,7 @@ package ml.mypals.vectorthree.mc.vfx.effects;
 
 import ml.mypals.vectorthree.core.Mod;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.vectorthree.core.shape.media.ImageDecoder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;

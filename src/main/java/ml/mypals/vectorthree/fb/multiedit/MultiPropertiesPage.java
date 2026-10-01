@@ -1,11 +1,11 @@
 package ml.mypals.vectorthree.fb.multiedit;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.keyframe.Keyframe;
 import com.moulberry.flashback.keyframe.KeyframeType;
 import com.moulberry.flashback.keyframe.interpolation.InterpolationType;
 import com.moulberry.flashback.state.EditorScene;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiHoveredFlags;
 import imgui.moulberry90.flag.ImGuiWindowFlags;
@@ -194,7 +194,7 @@ public final class MultiPropertiesPage {
         String custom = I18n.get("vector3.curve.custom");
         int first = choice(targets.getFirst().working, names.length);
         boolean mixed = targets.stream().anyMatch(entry -> choice(entry.working, names.length) != first);
-        boolean locked = mixed && !InputHelper.isCtrlDownRaw() && !interpolationOpen;
+        boolean locked = mixed && !EditorInput.isCtrlDown() && !interpolationOpen;
         String preview = mixed ? "-" : first == names.length ? custom : names[first];
         if (locked) ImGui.beginDisabled();
         ImGui.setNextItemWidth(160);

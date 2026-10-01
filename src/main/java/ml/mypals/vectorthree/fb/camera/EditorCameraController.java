@@ -1,11 +1,11 @@
 package ml.mypals.vectorthree.fb.camera;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import ml.mypals.vectorthree.core.camera.ViewportCamera;
 
 import ml.mypals.vectorthree.mixin.flashback.ReplayUIAccessor;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.moulberry.flashback.editor.ui.ReplayUI;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
 import ml.mypals.vectorthree.core.shape.ShapeState;
@@ -39,7 +39,7 @@ public final class EditorCameraController {
     private boolean focusKeyWasDown;
 
     public void reset() {
-        if (dragging != Drag.NONE) ReplayUI.imguiWindower.ungrab();
+        if (dragging != Drag.NONE) EditorInput.ungrab();
         dragging = Drag.NONE;
         mouseWasDown = false;
         focusKeyWasDown = false;
@@ -53,17 +53,17 @@ public final class EditorCameraController {
 
         Camera mcCamera = Minecraft.getInstance().gameRenderer.mainCamera();
         boolean inViewport = mouseInViewport();
-        boolean mouseDownNow = InputHelper.isMouseDownRaw(0);
+        boolean mouseDownNow = EditorInput.isMouseDown(0);
 
         if (dragging != Drag.NONE) {
             if (!mouseDownNow) {
-                ReplayUI.imguiWindower.ungrab();
+                EditorInput.ungrab();
                 dragging = Drag.NONE;
                 mouseWasDown = false;
                 return;
             }
-            double dx = ReplayUI.imguiWindower.getGrabbedMouseDeltaX();
-            double dy = ReplayUI.imguiWindower.getGrabbedMouseDeltaY();
+            double dx = EditorInput.grabbedDeltaX();
+            double dy = EditorInput.grabbedDeltaY();
             if (dragging == Drag.ORBIT) camera.orbit(dx, dy);
             else camera.pan(dx, dy, viewportHeight(), mcCamera.getFov());
             applyCamera(mcCamera);
@@ -71,7 +71,7 @@ public final class EditorCameraController {
             return;
         }
 
-        if (ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
+        if (EditorInput.isGrabbed()) EditorInput.ungrab();
 
         boolean focusPressed = keyJustPressed(InputConstants.KEY_F);
         boolean hotkeysAllowed = !ImGui.getIO().getWantTextInput() && (inViewport || !ImGui.isAnyItemActive());
@@ -84,8 +84,8 @@ public final class EditorCameraController {
 
         if (inViewport && justPressed) {
             if (syncCamera(mcCamera)) {
-                dragging = InputHelper.isShiftDownRaw() ? Drag.PAN : Drag.ORBIT;
-                ReplayUI.imguiWindower.setGrabbed(false, 0, -1, -1);
+                dragging = EditorInput.isShiftDown() ? Drag.PAN : Drag.ORBIT;
+                EditorInput.grab();
             }
             return;
         }
@@ -103,7 +103,7 @@ public final class EditorCameraController {
     }
 
     private boolean keyJustPressed(int key) {
-        boolean down = InputConstants.isKeyDown(key);
+        boolean down = EditorInput.isKeyDown(key);
         boolean wasDown = focusKeyWasDown;
         focusKeyWasDown = down;
         return down && !wasDown;

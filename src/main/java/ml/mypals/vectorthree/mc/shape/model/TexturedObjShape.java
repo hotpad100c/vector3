@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.mc.shape.model;
 
+import ml.mypals.vectorthree.mc.render.PreparedDraws;
 import ml.mypals.vectorthree.core.Mod;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -8,16 +9,16 @@ import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.CompareOp;
-import com.mojang.renderpearl.api.pipeline.DepthStencilState;
-import com.mojang.renderpearl.api.pipeline.IndexType;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.IndexType;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import ml.mypals.ryansrenderingkit.builders.vertexBuilders.VertexBuilder;
 import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
@@ -36,7 +37,6 @@ import ml.mypals.vectorthree.core.shape.media.ImageDecoder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.client.renderer.StagedVertexBuffer;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -317,9 +317,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
             if (frameEntity && (entityVertices == null || entityExtended != irisExtendsNow())) buildEntityMesh();
             if (frameEntity) {
                 if (entityVertices == null) return;
-                var sequential = RenderSystem.getSequentialBuffer(PrimitiveTopology.TRIANGLES);
-                sequential.requestIndexCount(model.corners.size());
-                sequential.resizeToRequestedIndexCount();
+                PreparedDraws.reserveSequential(PrimitiveTopology.TRIANGLES, model.corners.size());
             }
             prepareDraws(new Matrix4f(RenderSystem.getModelViewMatrixCopy()), true);
             PREPARED.add(this);
@@ -418,7 +416,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
             prepareDraws(ScreenLayer.basePose(), false);
             var target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "vector3_obj_screen",
-                    target.getColorTextureView(), Optional.empty(), target.hasDepth() ? target.getDepthTextureView() : null,
+                    target.getColorTextureView(), Optional.empty(), target.useDepth ? target.getDepthTextureView() : null,
                     OptionalDouble.empty())) {
                 RenderSystem.bindDefaultUniforms(pass);
                 draw(pass, false);
@@ -446,8 +444,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         Identifier texture = texture(material);
         PreparedRenderType original = (frameEntity ? entityType(texture, seeThrough)
                 : ShapeTrackRegistry.objType(texture, seeThrough, lit)).prepare();
-        frameDraws.add(new FrameDraw(new PreparedRenderType(original.name(), original.pipeline(),
-                original.oitPipelineSet(), transform, original.scissorState(), original.textures()),
+        frameDraws.add(new FrameDraw(PreparedDraws.withTransform(original, transform),
                 first, count, seeThrough || color.w < 1));
     }
 
@@ -476,15 +473,31 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     }
 
     public static void drawPreparedTranslucent() {
-        if (PREPARED.stream().noneMatch(shape -> shape.inMainPass()
-                && shape.frameDraws.stream().anyMatch(FrameDraw::translucent))) return;
-        var target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
-        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "vector3_obj",
-                target.getColorTextureView(), Optional.empty(), target.hasDepth() ? target.getDepthTextureView() : null,
-                OptionalDouble.empty())) {
-            RenderSystem.bindDefaultUniforms(pass);
+        if (!hasMainPassDraws(true)) return;
+        try (RenderPass pass = mainPass("vector3_obj")) {
             drawPreparedTranslucent(pass);
         }
+    }
+
+    public static void drawPreparedOpaque() {
+        if (!hasMainPassDraws(false)) return;
+        try (RenderPass pass = mainPass("vector3_obj_opaque")) {
+            drawPreparedOpaque(pass);
+        }
+    }
+
+    private static boolean hasMainPassDraws(boolean translucent) {
+        return PREPARED.stream().anyMatch(shape -> shape.inMainPass()
+                && shape.frameDraws.stream().anyMatch(draw -> draw.translucent() == translucent));
+    }
+
+    private static RenderPass mainPass(String label) {
+        var target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+        RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> label,
+                target.getColorTextureView(), Optional.empty(), target.useDepth ? target.getDepthTextureView() : null,
+                OptionalDouble.empty());
+        RenderSystem.bindDefaultUniforms(pass);
+        return pass;
     }
 
     // Without a pack, or through Iris's entity program, the mesh is drawn inside the main pass; otherwise from
@@ -499,12 +512,11 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
             for (FrameDraw draw : frameDraws) {
                 if (draw.translucent() != translucent) continue;
                 if (frameEntity) {
-                    draw.type().drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(entityVertices, null,
-                            RenderSystem.getSequentialBuffer(PrimitiveTopology.TRIANGLES).type(), 0, draw.first(),
-                            draw.count(), PrimitiveTopology.TRIANGLES), pass);
+                    PreparedDraws.draw(pass, draw.type(), entityVertices, null, null, 0, draw.first(),
+                            draw.count(), PrimitiveTopology.TRIANGLES);
                 } else {
-                    draw.type().drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(gpuVertices, gpuIndices, IndexType.INT,
-                            0, draw.first(), draw.count(), PrimitiveTopology.TRIANGLES), pass);
+                    PreparedDraws.draw(pass, draw.type(), gpuVertices, gpuIndices, IndexType.INT,
+                            0, draw.first(), draw.count(), PrimitiveTopology.TRIANGLES);
                 }
             }
         } catch (Exception exception) {

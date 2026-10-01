@@ -1,9 +1,9 @@
 package ml.mypals.vectorthree.fb.camera;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import ml.mypals.vectorthree.core.Mod;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.keyframe.impl.CameraKeyframe;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
@@ -139,7 +139,7 @@ public final class CameraGizmoEditor {
             typedInput.frame(false, null);
             return;
         }
-        if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
+        if (dragging != null && EditorInput.isGrabbed()) EditorInput.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
             if (preview != null) commit.accept(preview);
             preview = null;
@@ -162,7 +162,7 @@ public final class CameraGizmoEditor {
         if (dragging == null) {
             setHovered(ShapeGizmoEditor.mouseInViewport() ? pick(ray) : null);
             if (ImGui.isMouseClicked(1) && hovered != null) {
-                ReplayUI.imguiWindower.ungrab();
+                EditorInput.ungrab();
                 beginDrag(hovered, pose, ray, camera);
             }
         }
@@ -301,7 +301,7 @@ public final class CameraGizmoEditor {
     }
 
     private Pose drag(RayModelIntersection.Ray ray) {
-        boolean snap = InputHelper.isCtrlDownRaw();
+        boolean snap = EditorInput.isCtrlDown();
         Pose start = dragStart;
         switch (dragging.kind()) {
             case MOVE_X, MOVE_Y, MOVE_Z -> {

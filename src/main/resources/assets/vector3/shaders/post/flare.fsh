@@ -1,10 +1,9 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D DistanceSampler;
 layout(std140) uniform FlareSettings { vec4 Flare; vec4 Detail; vec4 Sun; };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 float visibleSun() {
     float visible = 0.0;

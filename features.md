@@ -2,7 +2,7 @@
 
 Vector3 是 [Flashback](https://modrinth.com/mod/flashback) 的扩展：在回放时间轴上用关键帧制作图形、文字、媒体和世界片段的动画，并补充一批相机、后期特效与时间轴编辑工具。
 
-> 前置：Minecraft 26.3， Fabric Loader， Fabric API， Flashback，RyansRenderingKit
+> 前置：Minecraft 26.2， Fabric Loader， Fabric API， Flashback，RyansRenderingKit
 >
 > 兼容：Sodium，Iris
 

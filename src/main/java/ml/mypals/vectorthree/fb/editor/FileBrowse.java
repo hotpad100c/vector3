@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.fb.editor;
 
 import ml.mypals.vectorthree.core.Mod;
-import com.moulberry.flashback.utils.AsyncFileDialogs;
+import com.moulberry.flashback.exporting.AsyncFileDialogs;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.type.ImString;
 import net.minecraft.client.Minecraft;

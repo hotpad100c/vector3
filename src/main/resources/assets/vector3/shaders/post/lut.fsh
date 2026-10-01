@@ -1,10 +1,9 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D LutSampler;
 layout(std140) uniform LutSettings { vec4 Settings; };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 vec3 lookup(vec3 colour) {
     vec3 scaled = clamp(colour, 0.0, 1.0) * 15.0;
     float low = floor(scaled.b), high = min(low + 1.0, 15.0);

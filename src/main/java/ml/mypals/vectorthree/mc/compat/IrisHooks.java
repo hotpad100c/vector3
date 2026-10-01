@@ -1,6 +1,6 @@
 package ml.mypals.vectorthree.mc.compat;
 
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import ml.mypals.vectorthree.mc.shape.model.ObjPbrTexture;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;

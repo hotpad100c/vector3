@@ -6,12 +6,12 @@ import ml.mypals.vectorthree.mc.camera.PreviewPass;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.pipeline.UniformType;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
@@ -54,8 +54,8 @@ public final class MotionBlurEffect {
         if (!valid || value.strength() <= 0.001f) return;
         if (pipeline == null) {
             pipeline = ScreenPass.pipeline("motion_blur", BindGroupLayout.builder()
-                    .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                    .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withSampler("InSampler")
+                    .withSampler("DistanceSampler")
                     .withUniform("MotionSettings", UniformType.UNIFORM_BUFFER).build(), GpuFormat.RGBA8_UNORM, null);
             settings = RenderSystem.getDevice().createBuffer(() -> "vector3_motion_blur",
                     GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 128);
@@ -75,10 +75,10 @@ public final class MotionBlurEffect {
         RenderTarget target = ScreenPass.scratch(main);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_motion_blur", target.getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
+            pass.setPipeline(pipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", main.getColorTextureView(), ScreenPass.linear());
-            pass.setUniform("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
+            pass.bindTexture("InSampler", main.getColorTextureView(), ScreenPass.linear());
+            pass.bindTexture("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
             pass.setUniform("MotionSettings", settings);
             pass.draw(3, 1, 0, 0);
         }

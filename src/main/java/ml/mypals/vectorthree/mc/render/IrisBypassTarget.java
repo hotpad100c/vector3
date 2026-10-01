@@ -5,15 +5,17 @@ import ml.mypals.vectorthree.mc.compat.IrisCompat;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
-import com.mojang.renderpearl.api.pipeline.DepthStencilState;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.textures.FilterMode;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.textures.FilterMode;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
+import java.util.Optional;
 import java.util.OptionalDouble;
 import net.minecraft.client.Minecraft;
 import org.joml.Vector4f;
@@ -126,23 +128,26 @@ public final class IrisBypassTarget {
             depthMergePipeline = RenderPipelines.register(RenderPipeline.builder()
                     .withLocation(Mod.id("pipeline/bypass_depth_merge"))
                     .withVertexShader("core/screenquad")
-                    .withFragmentShader("core/blit_depth")
+                    .withFragmentShader(Mod.id("core/blit_depth"))
                     .withBindGroupLayout(BindGroupLayouts.IN_SAMPLER)
                     .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+                    // 26.2 render passes size themselves from the first color attachment, so the color target is
+                    // attached and masked off rather than left out.
+                    .withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, ColorTargetState.WRITE_NONE))
                     .withDepthStencilState(DepthStencilState.DEFAULT)
                     .build());
         }
         RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
-        if (!main.hasDepth()) return;
+        if (!main.useDepth) return;
         assert target.getDepthTextureView() != null;
-        RenderPassDescriptor descriptor = RenderPassDescriptor.builder(() -> "vector3_bypass_depth_merge")
+        RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> "vector3_bypass_depth_merge")
+                .withColorAttachment(target.getColorTextureView())
                 .withDepthAttachment(target.getDepthTextureView(), OptionalDouble.empty())
-                .withRenderArea(new RenderPass.RenderArea(0, 0, target.width, target.height))
-                .build();
+                .withRenderArea(new RenderPass.RenderArea(0, 0, target.width, target.height));
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor)) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(depthMergePipeline));
+            pass.setPipeline(depthMergePipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", main.getDepthTextureView(),
+            pass.bindTexture("InSampler", main.getDepthTextureView(),
                     RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
             pass.draw(3, 1, 0, 0);
         }
@@ -160,11 +165,11 @@ public final class IrisBypassTarget {
         if (target != null && usedThisFrame) {
             RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
             if (debugShowOnly) {
-                main.copyColorFrom(target);
+                RenderTargets.copyColor(target, main);
             } else {
                 assert main.getColorTextureView() != null;
                 target.blitAndBlendToTexture(main.getColorTextureView(),
-                        Objects.requireNonNull(main.hasDepth() ? main.getDepthTextureView() : null));
+                        Objects.requireNonNull(main.useDepth ? main.getDepthTextureView() : null));
             }
         }
         preparedThisFrame = false;
@@ -179,7 +184,7 @@ public final class IrisBypassTarget {
         int height = Math.max(1, main.height);
         if (target == null) {
             target = new TextureTarget("vector3_iris_bypass", width, height,
-                    GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT);
+                    true, GpuFormat.RGBA8_UNORM);
         } else if (target.width != width || target.height != height) {
             target.resize(width, height);
         }

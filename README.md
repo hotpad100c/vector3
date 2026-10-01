@@ -16,7 +16,7 @@ Animate 3D shapes, text, images and even pieces of the world inside your [Flashb
 
 ### Requirements
 
-Minecraft 26.3 · Fabric Loader · Fabric API · Flashback · RyansRenderingKit
+Minecraft 26.2 · Fabric Loader · Fabric API · Flashback · RyansRenderingKit
 
 ---
 
@@ -36,4 +36,4 @@ Minecraft 26.3 · Fabric Loader · Fabric API · Flashback · RyansRenderingKit
 
 ### 前置
 
-Minecraft 26.3 · Fabric Loader · Fabric API · Flashback · RyansRenderingKit
+Minecraft 26.2 · Fabric Loader · Fabric API · Flashback · RyansRenderingKit

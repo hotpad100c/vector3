@@ -1,5 +1,4 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;       // the frame, for its alpha
 uniform sampler2D MipSampler;      // rgb frame, a signed CoC, full mip chain
 uniform sampler2D NearSampler;     // dilated foreground blur in half-res pixels
@@ -12,8 +11,8 @@ layout(std140) uniform DOFSettings {
     vec4 Flags; // overlay, chromatic, anamorphic, autofocus
     vec4 Texel; // full-res texel size, height / width, chromatic strength
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 const float PI = 3.14159265;
 

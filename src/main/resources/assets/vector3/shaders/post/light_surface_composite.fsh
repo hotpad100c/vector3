@@ -1,9 +1,8 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D LightSampler;
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 float dither(vec2 pixel) {
     return fract(sin(dot(pixel, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;

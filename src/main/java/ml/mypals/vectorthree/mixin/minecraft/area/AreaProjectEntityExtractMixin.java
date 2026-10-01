@@ -15,11 +15,11 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(LevelExtractor.class)
 public class AreaProjectEntityExtractMixin {
     @WrapOperation(method = "extractVisibleEntities", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/extract/LevelExtractor;isEntityVisible(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/culling/Frustum;DDDFJ)Z"))
+            target = "Lnet/minecraft/client/renderer/extract/LevelExtractor;isEntityVisible(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/client/renderer/culling/Frustum;DDD)Z"))
     private boolean vector3$keepProjected(LevelExtractor extractor, Entity entity, Frustum frustum, double camX,
-            double camY, double camZ, float partialTicks, long fadeDuration, Operation<Boolean> original) {
+            double camY, double camZ, Operation<Boolean> original) {
         return AreaProjection.forEntity(entity) != null
-                || original.call(extractor, entity, frustum, camX, camY, camZ, partialTicks, fadeDuration);
+                || original.call(extractor, entity, frustum, camX, camY, camZ);
     }
 
     @WrapOperation(method = "extractVisibleEntities", at = @At(value = "INVOKE",

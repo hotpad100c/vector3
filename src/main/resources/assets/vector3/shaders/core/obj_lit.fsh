@@ -1,16 +1,15 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 
-#include <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
 
 uniform sampler2D Sampler0;
 
-layout(location = 0) in vec2 texCoord0;
-layout(location = 1) in vec4 vertexColor;
-layout(location = 2) in vec3 worldPos;
-layout(location = 3) in vec3 viewPos;
+in vec2 texCoord0;
+in vec4 vertexColor;
+in vec3 worldPos;
+in vec3 viewPos;
 
-layout(location = 0) out vec4 fragColor;
+out vec4 fragColor;
 
 const vec3 LIGHT0 = vec3(0.16169, 0.80845, -0.56592);
 const vec3 LIGHT1 = vec3(-0.16169, 0.80845, 0.56592);

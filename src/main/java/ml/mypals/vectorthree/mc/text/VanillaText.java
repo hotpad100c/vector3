@@ -2,12 +2,12 @@ package ml.mypals.vectorthree.mc.text;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.CompareOp;
-import com.mojang.renderpearl.api.pipeline.DepthStencilState;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.textures.FilterMode;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.textures.FilterMode;
 import ml.mypals.vectorthree.mixin.minecraft.area.RenderSetupAccessor;
 import ml.mypals.vectorthree.mixin.minecraft.area.RenderTypeAccessor;
 import ml.mypals.vectorthree.mixin.minecraft.area.TextureBindingAccessor;

@@ -6,13 +6,13 @@ import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.pipeline.UniformType;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
 import ml.mypals.vectorthree.core.fade.effects.ColorGradingSettings.Rgb;
 import org.lwjgl.system.MemoryStack;
 
@@ -48,30 +48,30 @@ public final class GodRaysEffect {
         write(compositeSettings, tint.r() * gain, tint.g() * gain, tint.b() * gain, 0);
 
         try (RenderPass pass = begin("mask", mask.getColorTextureView())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(maskPipeline));
+            pass.setPipeline(maskPipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", main.getColorTextureView(), ScreenPass.linear());
-            pass.setUniform("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
+            pass.bindTexture("InSampler", main.getColorTextureView(), ScreenPass.linear());
+            pass.bindTexture("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
             pass.setUniform("GodRaysMask", maskSettings);
             pass.draw(3, 1, 0, 0);
         }
         try (RenderPass pass = begin("blur", rays.getColorTextureView())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(blurPipeline));
+            pass.setPipeline(blurPipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", mask.getColorTextureView(), ScreenPass.linear());
+            pass.bindTexture("InSampler", mask.getColorTextureView(), ScreenPass.linear());
             pass.setUniform("GodRaysBlur", blurSettings);
             pass.draw(3, 1, 0, 0);
         }
         try (RenderPass pass = begin("composite", main.getColorTextureView())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(compositePipeline));
+            pass.setPipeline(compositePipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", rays.getColorTextureView(), ScreenPass.linear());
+            pass.bindTexture("InSampler", rays.getColorTextureView(), ScreenPass.linear());
             pass.setUniform("GodRaysComposite", compositeSettings);
             pass.draw(3, 1, 0, 0);
         }
     }
 
-    private static RenderPass begin(String name, com.mojang.renderpearl.api.textures.GpuTextureView target) {
+    private static RenderPass begin(String name, com.mojang.blaze3d.textures.GpuTextureView target) {
         return RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_god_rays_" + name, target, Optional.empty());
     }
@@ -94,14 +94,14 @@ public final class GodRaysEffect {
     private static void ensure(RenderTarget main) {
         if (maskPipeline == null) {
             maskPipeline = ScreenPass.pipeline("god_rays_mask", BindGroupLayout.builder()
-                    .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                    .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withSampler("InSampler")
+                    .withSampler("DistanceSampler")
                     .withUniform("GodRaysMask", UniformType.UNIFORM_BUFFER).build(), FORMAT, null);
             blurPipeline = ScreenPass.pipeline("god_rays_blur", BindGroupLayout.builder()
-                    .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withSampler("InSampler")
                     .withUniform("GodRaysBlur", UniformType.UNIFORM_BUFFER).build(), FORMAT, null);
             compositePipeline = ScreenPass.pipeline("god_rays_composite", BindGroupLayout.builder()
-                    .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withSampler("InSampler")
                     .withUniform("GodRaysComposite", UniformType.UNIFORM_BUFFER).build(),
                     GpuFormat.RGBA8_UNORM, BlendFunction.ADDITIVE);
             maskSettings = buffer("mask", 16);
@@ -110,8 +110,8 @@ public final class GodRaysEffect {
         }
         int width = Math.max(1, main.width / 2), height = Math.max(1, main.height / 2);
         if (mask == null) {
-            mask = new TextureTarget("vector3_god_rays_mask", width, height, FORMAT, null);
-            rays = new TextureTarget("vector3_god_rays", width, height, FORMAT, null);
+            mask = new TextureTarget("vector3_god_rays_mask", width, height, false, FORMAT);
+            rays = new TextureTarget("vector3_god_rays", width, height, false, FORMAT);
         } else if (mask.width != width || mask.height != height) {
             mask.resize(width, height);
             rays.resize(width, height);

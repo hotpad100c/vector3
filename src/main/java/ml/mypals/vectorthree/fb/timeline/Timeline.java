@@ -1,7 +1,7 @@
 package ml.mypals.vectorthree.fb.timeline;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import com.moulberry.flashback.editor.SelectedKeyframes;
-import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.ext.MinecraftExt;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.EditorState;
@@ -73,7 +73,7 @@ public final class Timeline {
     public static int xOf(int tick) { return TimelineWindowAccessor.vector3$xOf(tick); }
 
     public static boolean mouseInTimeline() {
-        return !ReplayUI.isMainFrameHovered()
+        return !EditorInput.isMainFrameHovered()
                 && mouseX() >= x() && mouseX() < x() + width()
                 && mouseY() >= y() && mouseY() < y() + height();
     }

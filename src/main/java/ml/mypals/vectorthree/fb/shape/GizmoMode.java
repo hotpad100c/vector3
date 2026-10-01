@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.fb.shape;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import com.mojang.blaze3d.platform.InputConstants;
 import imgui.moulberry90.ImGui;
 
@@ -41,7 +42,7 @@ public enum GizmoMode {
     }
 
     private static boolean pressed(int key) {
-        boolean down = InputConstants.isKeyDown(key);
+        boolean down = EditorInput.isKeyDown(key);
         boolean wasDown = down ? !held.add(key) : held.remove(key);
         return down && !wasDown;
     }

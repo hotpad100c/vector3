@@ -71,7 +71,7 @@ public final class ScreenLayer {
         RenderTarget main = minecraft.gameRenderer.mainRenderTarget();
         if (!camera.isInitialized() || main.width <= 0 || main.height <= 0) return;
 
-        if (main.hasDepth()) {
+        if (main.useDepth) {
             assert main.getDepthTexture() != null;
             RenderSystem.getDevice().createCommandEncoder().clearDepthTexture(main.getDepthTexture(), 0.0);
         }

@@ -1,11 +1,11 @@
 package ml.mypals.vectorthree.fb.pose;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import ml.mypals.vectorthree.core.pose.EntityPose;
 import ml.mypals.vectorthree.mc.pose.EntityPoses;
 
 import ml.mypals.vectorthree.core.Mod;
 import com.moulberry.flashback.editor.ui.ReplayUI;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
 import ml.mypals.ryansrenderingkit.shape.Shape;
@@ -140,7 +140,7 @@ public final class PoseGizmoEditor {
         EntityPoses.watch(keyframe == null ? null : entity());
         frames = EntityPoses.watchedFrames();
         if (!ReplayUI.isActive() || keyframe == null) return;
-        if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
+        if (dragging != null && EditorInput.isGrabbed()) EditorInput.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
             if (preview != null) commit.accept(preview);
             EntityPoses.clearPreview(entity());
@@ -170,7 +170,7 @@ public final class PoseGizmoEditor {
             if (ImGui.isMouseClicked(1) && hovered instanceof Marker marker) {
                 focus(marker.part());
             } else if (ImGui.isMouseClicked(1) && hovered instanceof Ring ring && part != null) {
-                ReplayUI.imguiWindower.ungrab();
+                EditorInput.ungrab();
                 beginDrag(ring, frames.get(part), ray);
             }
         }
@@ -352,7 +352,7 @@ public final class PoseGizmoEditor {
             case Z -> limb.z();
         };
         double value = start + moved;
-        if (InputHelper.isCtrlDownRaw()) value = ShapeGizmoEditor.snap(value, start, 1, false);
+        if (EditorInput.isCtrlDown()) value = ShapeGizmoEditor.snap(value, start, 1, false);
         float offset = (float) value;
         EntityPose.Limb movedLimb = switch (dragging.axis()) {
             case X -> limb.withOffset(offset, limb.y(), limb.z());
@@ -377,7 +377,7 @@ public final class PoseGizmoEditor {
             case Z -> limb.zRot();
         };
         double value = start + turned;
-        if (InputHelper.isCtrlDownRaw()) value = ShapeGizmoEditor.snap(value, start, ShapeGizmoEditor.ANGLE_STEP, false);
+        if (EditorInput.isCtrlDown()) value = ShapeGizmoEditor.snap(value, start, ShapeGizmoEditor.ANGLE_STEP, false);
         float angle = (float) value;
         EntityPose.Limb turnedLimb = switch (dragging.axis()) {
             case X -> limb.withRotation(angle, limb.yRot(), limb.zRot());

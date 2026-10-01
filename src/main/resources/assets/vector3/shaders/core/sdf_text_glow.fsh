@@ -1,17 +1,16 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 
-#include <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
 
 uniform sampler2D Sampler0;
 
-layout(location = 0) in vec2 texCoord0;
-layout(location = 1) in vec4 vertexColor;
-layout(location = 2) flat in vec3 outlineColor;
-layout(location = 3) flat in int styleFlags;
-layout(location = 4) flat in float outlineWidth;
+in vec2 texCoord0;
+in vec4 vertexColor;
+flat in vec3 outlineColor;
+flat in int styleFlags;
+flat in float outlineWidth;
 
-layout(location = 0) out vec4 fragColor;
+out vec4 fragColor;
 
 // Distance field: 0.5 is the glyph edge, one pixel of the SDF bitmap is ~0.084 (see SdfFont).
 const float EDGE = 0.5;

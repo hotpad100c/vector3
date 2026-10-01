@@ -1,9 +1,8 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 layout(std140) uniform BloomPrefilter { vec4 Threshold; vec4 Sample; };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 vec3 sampleScene(vec2 uv) { return min(texture(InSampler, uv).rgb, vec3(Threshold.z)); }
 void main() {

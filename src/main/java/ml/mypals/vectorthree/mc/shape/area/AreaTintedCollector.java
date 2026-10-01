@@ -20,9 +20,8 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.QuadParticleRenderState;
-import net.minecraft.client.renderer.texture.UvMapping;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.geometry.BakedQuad;
-import net.minecraft.client.resources.model.geometry.ItemQuads;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -33,6 +32,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Quaternionf;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -95,9 +95,10 @@ public final class AreaTintedCollector implements SubmitNodeCollector {
 
     @Override
     public <S> void submitModel(Model<? super S> model, S state, PoseStack poseStack, RenderType renderType,
-            int light, int overlay, int color, UvMapping uvMapping, int outlineColor) {
+            int light, int overlay, int color, @Nullable TextureAtlasSprite sprite, int outlineColor,
+            ModelFeatureRenderer.@Nullable CrumblingOverlay crumbling) {
         target.submitModel(model, state, poseStack, entityVariant(renderType), light, overlay,
-                ARGB.multiply(color, tint), uvMapping, outlineColor);
+                ARGB.multiply(color, tint), sprite, outlineColor, crumbling);
     }
 
     @Override
@@ -113,9 +114,9 @@ public final class AreaTintedCollector implements SubmitNodeCollector {
 
     @Override
     public void submitItem(@NonNull PoseStack poseStack, @NonNull ItemDisplayContext displayContext, int light, int overlay,
-                           int outlineColor, int @NonNull [] tints, ItemQuads quads, ItemStackRenderState.@NonNull FoilType foilType) {
+                           int outlineColor, int @NonNull [] tints, List<BakedQuad> quads, ItemStackRenderState.@NonNull FoilType foilType) {
         Map<RenderType, List<BakedQuad>> byType = new LinkedHashMap<>();
-        for (BakedQuad quad : quads.all()) {
+        for (BakedQuad quad : quads) {
             byType.computeIfAbsent(entityVariant(quad.materialInfo().itemRenderType()), key -> new ArrayList<>()).add(quad);
         }
         byType.forEach((renderType, typed) -> submitQuads(poseStack, renderType, typed, tints, light, overlay));
@@ -151,12 +152,6 @@ public final class AreaTintedCollector implements SubmitNodeCollector {
     }
 
     @Override
-    public void submitTextBackground(@NonNull PoseStack poseStack, float x0, float y0, float x1, float y1, int color,
-                                     Font.@NonNull DisplayMode displayMode, int light) {
-        target.submitTextBackground(poseStack, x0, y0, x1, y1, ARGB.multiply(color, tint), displayMode, light);
-    }
-
-    @Override
     public void submitShadow(@NonNull PoseStack poseStack, float radius, List<EntityRenderState.ShadowPiece> pieces) {
         target.submitShadow(poseStack, radius, pieces);
     }
@@ -178,19 +173,13 @@ public final class AreaTintedCollector implements SubmitNodeCollector {
     }
 
     @Override
-    public <S> void submitCrumblingOverlay(Model<? super S> model, S state, PoseStack poseStack, RenderType renderType,
-            int light, int overlay, int color, ModelFeatureRenderer.CrumblingOverlay crumbling) {
-        target.submitCrumblingOverlay(model, state, poseStack, renderType, light, overlay, color, crumbling);
-    }
-
-    @Override
     public void submitMovingBlock(PoseStack poseStack, MovingBlockRenderState state, int outlineColor) {
         target.submitMovingBlock(poseStack, state, outlineColor);
     }
 
     @Override
-    public void submitBreakingBlockModel(PoseStack poseStack, List<BlockStateModelPart> parts, int progress, boolean flag) {
-        target.submitBreakingBlockModel(poseStack, parts, progress, flag);
+    public void submitBreakingBlockModel(PoseStack poseStack, List<BlockStateModelPart> parts, int progress) {
+        target.submitBreakingBlockModel(poseStack, parts, progress);
     }
 
     @Override
@@ -249,12 +238,6 @@ public final class AreaTintedCollector implements SubmitNodeCollector {
         @Override
         public VertexConsumer setUv2(int u, int v) {
             delegate.setUv2(u, v);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv3(float u, float v) {
-            delegate.setUv3(u, v);
             return this;
         }
 

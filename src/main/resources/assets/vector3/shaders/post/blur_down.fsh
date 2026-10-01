@@ -1,8 +1,7 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 // Halves the frame: four bilinear taps cover the 4 x 4 source texels around each output pixel.
 void main() {

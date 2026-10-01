@@ -66,7 +66,7 @@ public class TextShapeMixin {
     }
 
     @Inject(method = "beforeDraw(Lcom/mojang/blaze3d/vertex/PoseStack;FZ)V", at = @At(value = "INVOKE", ordinal = 0,
-            target = "Lcom/mojang/blaze3d/vertex/PoseStack;rotate(Lorg/joml/Quaternionfc;)V"))
+            target = "Lcom/mojang/blaze3d/vertex/PoseStack;mulPose(Lorg/joml/Quaternionfc;)V"))
     private void vector3$faceCameraOnly(PoseStack poseStack, float deltaTime, boolean camSpace, CallbackInfo ci) {
         Matrix4f pose = poseStack.last().pose();
         Vector3f translation = pose.getTranslation(new Vector3f());

@@ -1,10 +1,9 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D PrevSampler;
 uniform sampler2D CurrentSampler;
 layout(std140) uniform BloomStep { vec4 Step; };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 void main() {
     vec2 d = Step.xy;
     vec3 wide = texture(PrevSampler, texCoord).rgb * 4.0;

@@ -1,5 +1,4 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 layout(std140) uniform DOFSettings {
     vec4 Focus; // focus distance, half sharp range, mode, max radius in full-res pixels
@@ -11,8 +10,8 @@ layout(std140) uniform DOFSettings {
 layout(std140) uniform DOFDirection {
     vec4 Direction; // xy: half-res texel step, z: source holds the signed CoC in alpha
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 // Largest foreground blur, in half-res pixels, that reaches this pixel along one axis.
 void main() {

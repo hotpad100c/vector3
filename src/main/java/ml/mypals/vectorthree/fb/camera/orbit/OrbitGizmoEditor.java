@@ -1,12 +1,12 @@
 package ml.mypals.vectorthree.fb.camera.orbit;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import ml.mypals.vectorthree.core.camera.orbit.OrbitMath;
 import ml.mypals.vectorthree.core.camera.orbit.OrbitTilt;
 
 import ml.mypals.vectorthree.core.Mod;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.keyframe.impl.CameraOrbitKeyframe;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
@@ -142,7 +142,7 @@ public final class OrbitGizmoEditor {
 
     public void frame() {
         if (!ReplayUI.isActive() || keyframe == null) return;
-        if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
+        if (dragging != null && EditorInput.isGrabbed()) EditorInput.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
             if (preview != null) commit.accept(preview);
             preview = null;
@@ -164,7 +164,7 @@ public final class OrbitGizmoEditor {
         if (dragging == null) {
             setHovered(ShapeGizmoEditor.mouseInViewport() ? pick(ray) : null);
             if (ImGui.isMouseClicked(1) && hovered != null) {
-                ReplayUI.imguiWindower.ungrab();
+                EditorInput.ungrab();
                 beginDrag(hovered, orbit, ray, camera);
             }
         }
@@ -366,7 +366,7 @@ public final class OrbitGizmoEditor {
     }
 
     private Orbit drag(RayModelIntersection.Ray ray) {
-        boolean snap = InputHelper.isCtrlDownRaw();
+        boolean snap = EditorInput.isCtrlDown();
         Orbit start = dragStart;
         switch (dragging.kind()) {
             case CENTER_FREE -> {

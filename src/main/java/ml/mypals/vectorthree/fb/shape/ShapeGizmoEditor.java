@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.fb.shape;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import ml.mypals.vectorthree.core.shape.ShapeState;
 import ml.mypals.vectorthree.core.shape.ShapeTimelineSelection;
 import ml.mypals.vectorthree.mc.shape.ShapeTrackRegistry;
@@ -17,7 +18,6 @@ import ml.mypals.vectorthree.mc.render.ScreenLayer;
 import ml.mypals.vectorthree.mc.shape.area.BlastShape;
 import ml.mypals.vectorthree.mixin.flashback.ReplayUIAccessor;
 import com.moulberry.flashback.editor.ui.ReplayUI;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
@@ -118,8 +118,8 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         if (!ReplayUI.isActive()) return;
         Minecraft minecraft = Minecraft.getInstance();
         followMode();
-        if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) {
-            ReplayUI.imguiWindower.ungrab();
+        if (dragging != null && EditorInput.isGrabbed()) {
+            EditorInput.ungrab();
         }
 
         if (dragging != null && !ImGui.isMouseDown(1)) {
@@ -163,7 +163,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
                 ImGui.setTooltip(BlastShape.pointLabel(state, hovered.point()));
             }
             if (ImGui.isMouseClicked(1) && hovered != null) {
-                ReplayUI.imguiWindower.ungrab();
+                EditorInput.ungrab();
                 beginDrag(hovered, state, ray, camera);
             } else if (ImGui.isMouseClicked(1) && inViewport && !Editors.ORBIT_GIZMO.isHovering()
                     && !Editors.CAMERA_GIZMO.isHovering() && !Editors.POSE_GIZMO.isHovering()
@@ -222,7 +222,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
         ViewportPick.Hit hit = ViewportPick.pick(ray.origin, ray.direction);
         if (hit == null) return null;
         if (hit.entity() != null) return hit.entity().getBoundingBox().getCenter();
-        if (InputHelper.isCtrlDownRaw()) return Vec3.atCenterOf(hit.block().getBlockPos().relative(hit.block().getDirection()));
+        if (EditorInput.isCtrlDown()) return Vec3.atCenterOf(hit.block().getBlockPos().relative(hit.block().getDirection()));
         return hit.location();
     }
 
@@ -331,7 +331,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     private Map<GroupTransform.Member, ShapeState> dragGroup(RayModelIntersection.Ray ray) {
         Map<GroupTransform.Member, ShapeState> starts = groupStart;
         if (starts == null) return null;
-        boolean snap = InputHelper.isCtrlDownRaw();
+        boolean snap = EditorInput.isCtrlDown();
         int axis = index(dragging.axis());
         switch (dragging.operation()) {
             case MOVE_FREE -> {
@@ -799,7 +799,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
     /** Ctrl snaps whatever the drag changed: positions/points and sizes/scale to 0.5, rotation to 15°. */
     private ShapeState drag(RayModelIntersection.Ray ray, Camera camera) {
         ShapeState result = dragUnsnapped(ray);
-        return result != null && InputHelper.isCtrlDownRaw() ? snapChanged(result) : result;
+        return result != null && EditorInput.isCtrlDown() ? snapChanged(result) : result;
     }
 
     private ShapeState snapChanged(ShapeState state) {
@@ -851,7 +851,7 @@ public final class ShapeGizmoEditor implements ShapeTrackEditor {
             Vec3 point = intersectPlane(ray, dragOrigin, dragAxis);
             if (point == null) return null;
             double delta = Math.toDegrees(wrapAngle(angleOnPlane(point.subtract(dragOrigin), dragAxis) - dragAngle));
-            if (InputHelper.isCtrlDownRaw()) delta = Math.round(delta / ANGLE_STEP) * ANGLE_STEP;
+            if (EditorInput.isCtrlDown()) delta = Math.round(delta / ANGLE_STEP) * ANGLE_STEP;
             return with(dragStart, null, rotatedAbout(dragStart, dragAxis, delta), null, null, null);
         }
 

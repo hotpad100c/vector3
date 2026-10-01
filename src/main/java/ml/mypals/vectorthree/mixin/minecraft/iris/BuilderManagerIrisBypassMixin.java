@@ -1,34 +1,29 @@
 package ml.mypals.vectorthree.mixin.minecraft.iris;
 
-import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManager;
 import ml.mypals.vectorthree.mc.render.IrisBypassTarget;
-import net.minecraft.client.renderer.GameRenderer;
+import ml.mypals.vectorthree.mc.render.RenderTargets;
+import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 
+// Each render-type draw takes its attachments from RenderSystem's output override when one is set.
 @Mixin(value = BuilderManager.class, remap = false)
 public class BuilderManagerIrisBypassMixin {
     @Shadow public String id;
 
-    @Inject(method = "flushDraws", at = @At("HEAD"))
-    private void vector3$beginIrisBypass(CallbackInfo ci) {
+    @WrapMethod(method = "flushDraws")
+    private void vector3$drawIntoBypassTarget(Operation<Void> original) {
         IrisBypassTarget.beginIrisBypass();
-    }
-
-    @Inject(method = "flushDraws", at = @At("RETURN"))
-    private void vector3$endIrisBypass(CallbackInfo ci) {
-        IrisBypassTarget.endIrisBypass();
-    }
-
-    @Redirect(method = "flushDraws", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/GameRenderer;mainRenderTarget()Lcom/mojang/blaze3d/pipeline/RenderTarget;"))
-    private RenderTarget vector3$redirectToBypassTarget(GameRenderer gameRenderer) {
-        return IrisBypassTarget.targetFor(gameRenderer.mainRenderTarget(), "BuilderManager:" + id);
+        try {
+            RenderTargets.drawInto(IrisBypassTarget.isBypassing()
+                    ? IrisBypassTarget.targetFor(Minecraft.getInstance().gameRenderer.mainRenderTarget(), "BuilderManager:" + id)
+                    : null, original::call);
+        } finally {
+            IrisBypassTarget.endIrisBypass();
+        }
     }
 }

@@ -1,12 +1,11 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D DistanceSampler;
 layout(std140) uniform GodRaysMask {
     vec4 Mask; // sky as a light source, bright pixels as light sources, their threshold, brightness floor of the sky
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 // Keeps what can emit light and blacks out the rest, so everything else works as an occluder.
 void main() {

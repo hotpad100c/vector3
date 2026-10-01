@@ -1,10 +1,11 @@
 package ml.mypals.vectorthree.fb.shape;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import imgui.moulberry90.ImGui;
-import com.mojang.blaze3d.platform.InputConstants;
 import imgui.moulberry90.flag.ImGuiKey;
 import net.minecraft.client.resources.language.I18n;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayDeque;
 
@@ -15,13 +16,6 @@ import java.util.ArrayDeque;
  * does to what it edits, through {@link Target}.
  */
 public final class GizmoTypedInput {
-    // GLFW's key codes (LWJGL's GLFW class is not on the compile classpath).
-    private static final class GLFW {
-        static final int GLFW_KEY_X = 88, GLFW_KEY_Y = 89, GLFW_KEY_Z = 90, GLFW_KEY_0 = 48, GLFW_KEY_KP_0 = 320,
-                GLFW_KEY_PERIOD = 46, GLFW_KEY_KP_DECIMAL = 330, GLFW_KEY_MINUS = 45, GLFW_KEY_KP_SUBTRACT = 333,
-                GLFW_KEY_BACKSPACE = 259, GLFW_KEY_ESCAPE = 256, GLFW_KEY_ENTER = 257, GLFW_KEY_KP_ENTER = 335;
-    }
-
     public enum Axis { NONE, X, Y, Z }
 
     public interface Target {
@@ -46,7 +40,7 @@ public final class GizmoTypedInput {
     // Read from GLFW directly, like the G / R / B keys: ImGui is only fed the keyboard while one of its own windows
     // has focus, so it misses keys pressed right after clicking the viewport.
     private static boolean pressed(int key) {
-        boolean down = InputConstants.isKeyDown(key);
+        boolean down = EditorInput.isKeyDown(key);
         boolean wasDown = down ? !HELD.add(key) : HELD.remove(key);
         return down && !wasDown;
     }

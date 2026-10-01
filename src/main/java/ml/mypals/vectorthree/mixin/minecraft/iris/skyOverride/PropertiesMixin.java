@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.Unique;
 @Mixin(IrisPipelines.class)
 public class PropertiesMixin {
     @WrapMethod(method = "getPipeline", remap = false)
-    private static ShaderKey isSky(IrisRenderingPipeline pipeline, com.mojang.renderpearl.api.pipeline.RenderPipeline shader, Operation<ShaderKey> original) {
+    private static ShaderKey isSky(IrisRenderingPipeline pipeline, com.mojang.blaze3d.pipeline.RenderPipeline shader, Operation<ShaderKey> original) {
         ShaderKey key = original.call(pipeline, shader);
         if (Ports.view().skyOverride() != null && IrisApi.getInstance().isShaderPackInUse() && isBlackListed(key)) {
             return ShaderKey.BASIC;

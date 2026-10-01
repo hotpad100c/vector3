@@ -1,5 +1,4 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D DistanceSampler;
 uniform sampler2D FocusSampler;    // smoothed autofocus distance, 1 x 1
@@ -10,8 +9,8 @@ layout(std140) uniform DOFSettings {
     vec4 Flags; // overlay, chromatic, anamorphic, autofocus
     vec4 Texel; // full-res texel size, height / width, chromatic strength
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 float focusAt(vec2 uv) {
     float focus = Flags.w > 0.5 ? texture(FocusSampler, vec2(0.5)).r : Focus.x;

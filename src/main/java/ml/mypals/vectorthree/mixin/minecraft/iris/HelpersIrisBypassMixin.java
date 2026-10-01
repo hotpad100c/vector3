@@ -4,22 +4,20 @@ import ml.mypals.vectorthree.mc.compat.IrisCompat;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.renderpearl.api.commands.RenderPass;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.mc.render.IrisBypassTarget;
+import ml.mypals.vectorthree.mc.render.RenderTargets;
 import ml.mypals.vectorthree.mc.render.TextGlow;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * Helpers#renderFeatures — RRK's feature-dispatcher draw used by the EmptyMesh shapes — hardcodes
- * {@code gameRenderer.mainRenderTarget()}. Only calls wrapped in IrisBypassTarget#renderFeatures are
- * redirected, so other callers keep their behavior.
+ * Helpers#renderFeatures — RRK's feature-dispatcher draw used by the EmptyMesh shapes — draws into the main
+ * target. Only calls wrapped in IrisBypassTarget#renderFeatures (or TextGlow's routing) are sent elsewhere, through
+ * RenderSystem's output override, so other callers keep their behavior.
  * <p>
  * Routed draws also pin vanilla vertex layouts. With a pack active Iris widens BLOCK/ENTITY/glyph
  * vertices, deciding separately when buffers are built and when they're bound; with its shader
@@ -35,42 +33,36 @@ public class HelpersIrisBypassMixin {
         return IrisBypassTarget.isRoutingFeatures() || TextGlow.isRouting() && IrisBypassTarget.isBypassing();
     }
 
-    @Redirect(method = "renderFeatures", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/GameRenderer;mainRenderTarget()Lcom/mojang/blaze3d/pipeline/RenderTarget;"))
-    private static RenderTarget vector3$redirectToBypassTarget(GameRenderer gameRenderer) {
+    @Unique
+    private static RenderTarget vector3$routedTarget() {
         if (TextGlow.isRouting()) return TextGlow.prepareForDraw();
-        return IrisBypassTarget.isRoutingFeatures()
-                ? IrisBypassTarget.prepareForDraw("Features")
-                : gameRenderer.mainRenderTarget();
+        return IrisBypassTarget.isRoutingFeatures() ? IrisBypassTarget.prepareForDraw("Features") : null;
     }
 
+    // 26.2's renderAllFeatures builds the frame (prepareFrame) and draws it in one call.
     @WrapOperation(method = "renderFeatures", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher;prepareFrame(Lnet/minecraft/client/renderer/SubmitNodeStorage;)Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher$PreparedFrame;"))
-    private static FeatureRenderDispatcher.PreparedFrame vector3$buildWithVanillaFormats(FeatureRenderDispatcher dispatcher,
-            SubmitNodeStorage submits, Operation<FeatureRenderDispatcher.PreparedFrame> original) {
-        if (!vector3$vanillaFormats()) return original.call(dispatcher, submits);
-        boolean renderingLevel = IrisCompat.isRenderingLevel();
-        IrisCompat.setRenderingLevel(false);
-        try {
-            return original.call(dispatcher, submits);
-        } finally {
-            IrisCompat.setRenderingLevel(renderingLevel);
-        }
-    }
-
-    @WrapOperation(method = "renderFeatures", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher;renderAllFeatures(Lcom/mojang/renderpearl/api/commands/RenderPass;Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher$PreparedFrame;)V"))
-    private static void vector3$drawWithVanillaFormats(RenderPass pass, FeatureRenderDispatcher.PreparedFrame frame,
+            target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher;renderAllFeatures(Lnet/minecraft/client/renderer/SubmitNodeStorage;)V"))
+    private static void vector3$routeFeatures(FeatureRenderDispatcher dispatcher, SubmitNodeStorage submits,
             Operation<Void> original) {
+        RenderTarget target = vector3$routedTarget();
         if (!vector3$vanillaFormats()) {
-            original.call(pass, frame);
+            RenderTargets.drawInto(target, () -> original.call(dispatcher, submits));
             return;
         }
+        boolean renderingLevel = IrisCompat.isRenderingLevel();
         boolean skip = IrisCompat.skipExtension();
-        IrisCompat.setSkipExtension(true);
-        try {
-            original.call(pass, frame);
+        IrisCompat.setRenderingLevel(false);
+        try (FeatureRenderDispatcher.PreparedFrame frame = dispatcher.prepareFrame(submits)) {
+            IrisCompat.setRenderingLevel(renderingLevel);
+            IrisCompat.setSkipExtension(true);
+            RenderTargets.drawInto(target, () -> {
+                frame.executeSolid();
+                frame.executeTranslucent();
+                frame.executeTranslucentAfterTerrain();
+                frame.executeAlwaysOnTop();
+            });
         } finally {
+            IrisCompat.setRenderingLevel(renderingLevel);
             IrisCompat.setSkipExtension(skip);
         }
     }

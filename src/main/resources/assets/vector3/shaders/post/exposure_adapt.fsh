@@ -1,10 +1,9 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D LumSampler;
 uniform sampler2D PrevSampler;
 layout(std140) uniform ExposureSettings { vec4 Settings; vec4 Detail; };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 void main() {
     float lum = texture(LumSampler, vec2(0.5)).r;
     if (isnan(lum) || isinf(lum)) lum = Detail.x;

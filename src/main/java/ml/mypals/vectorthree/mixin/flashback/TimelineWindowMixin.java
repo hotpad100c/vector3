@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.mixin.flashback;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -9,7 +10,6 @@ import com.moulberry.flashback.keyframe.KeyframeType;
 import com.moulberry.flashback.playback.ReplayServer;
 import com.moulberry.flashback.state.EditorScene;
 import com.moulberry.flashback.state.EditorSceneHistoryEntry;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImDrawList;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiHoveredFlags;
@@ -23,6 +23,7 @@ import ml.mypals.vectorthree.fb.timeline.Timeline;
 import ml.mypals.vectorthree.fb.timeline.TrackTimeline;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -37,6 +38,9 @@ import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 /** Flashback's timeline: the injection points only. What they do lives in fb/timeline. */
 @Mixin(value = TimelineWindow.class, remap = false)
 public abstract class TimelineWindowMixin {
+    // Flashback for 26.2 passes GLFW key codes to ImGui.isKeyDown.
+    @Unique private static final int GLFW_KEY_LEFT_CONTROL = 341, GLFW_KEY_LEFT_ALT = 342, GLFW_KEY_RIGHT_ALT = 346;
+
     @Inject(method = "renderInner", at = @At(value = "INVOKE",
             target = "Lcom/moulberry/flashback/editor/ui/ImGuiHelper;beginPopup(Ljava/lang/String;)Z",
             shift = At.Shift.BEFORE))
@@ -71,10 +75,10 @@ public abstract class TimelineWindowMixin {
     }
 
     // Flashback previews keyframes while scrubbing the playhead only with Ctrl held; instant preview always does.
-    @WrapOperation(method = "renderInner", at = @At(value = "INVOKE",
-            target = "Lcom/moulberry/flashback/utils/InputHelper;isCtrlDownRaw()Z"))
-    private static boolean vector3$scrubWithKeyframes(Operation<Boolean> original) {
-        return original.call() || ShapeManagerWindow.isInstantPreview();
+    // renderInner reads Ctrl as ImGui.isKeyDown(GLFW_KEY_LEFT_CONTROL) || ImGui.isKeyDown(GLFW_KEY_RIGHT_CONTROL).
+    @WrapOperation(method = "renderInner", at = @At(value = "INVOKE", target = "Limgui/moulberry90/ImGui;isKeyDown(I)Z"))
+    private static boolean vector3$scrubWithKeyframes(int key, Operation<Boolean> original) {
+        return original.call(key) || key == GLFW_KEY_LEFT_CONTROL && ShapeManagerWindow.isInstantPreview();
     }
 
     // Flashback's keyframe popup becomes the Properties window: begin/end are swapped for the window's, and
@@ -183,10 +187,11 @@ public abstract class TimelineWindowMixin {
     }
 
     // Flashback scales the dragged keyframes about a pivot while Alt is held; Alt now copies, so scaling moves to Ctrl+Alt.
-    @WrapOperation(method = "calculateGrabMovementInfo", at = @At(value = "INVOKE",
-            target = "Lcom/moulberry/flashback/utils/InputHelper;isAltDownRaw()Z"))
-    private static boolean vector3$scaleWithCtrlAlt(Operation<Boolean> original) {
-        return original.call() && InputHelper.isCtrlDownRaw();
+    // calculateGrabMovementInfo reads Alt as ImGui.isKeyDown(GLFW_KEY_LEFT_ALT) / ImGui.isKeyDown(GLFW_KEY_RIGHT_ALT).
+    @WrapOperation(method = "calculateGrabMovementInfo", at = @At(value = "INVOKE", target = "Limgui/moulberry90/ImGui;isKeyDown(I)Z"))
+    private static boolean vector3$scaleWithCtrlAlt(int key, Operation<Boolean> original) {
+        boolean down = original.call(key);
+        return key == GLFW_KEY_LEFT_ALT || key == GLFW_KEY_RIGHT_ALT ? down && EditorInput.isCtrlDown() : down;
     }
 
     // Grabbing a selected track's handle drags the whole selection; Alt leaves a copy of the track behind instead,

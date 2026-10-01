@@ -1,12 +1,13 @@
 package ml.mypals.vectorthree.mc.shape.area;
 
+import ml.mypals.vectorthree.mc.render.Pipelines;
 import ml.mypals.vectorthree.core.Mod;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.UniformType;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.vertex.VertexFormat;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -98,12 +99,7 @@ final class AreaRenderType {
     private static RenderPipeline derive(RenderPipeline base, String name, String vertexShader, BindGroupLayout extra) {
         java.util.List<BindGroupLayout> layouts = new java.util.ArrayList<>(base.getBindGroupLayouts());
         if (extra != null) layouts.add(extra);
-        RenderPipeline.Snippet snippet = new RenderPipeline.Snippet(base.getShaders(), Optional.of(base.getShaderDefines()),
-                Optional.of(layouts), base.getColorTargetStates().toArray(new ColorTargetState[0]),
-                base.getColorTargetStates().size(), Optional.ofNullable(base.getDepthStencilState()),
-                Optional.of(base.getPolygonMode()), Optional.of(base.isCull()),
-                base.getVertexFormatBindings().toArray(new VertexFormat[0]), Optional.of(base.getPrimitiveTopology()),
-                base.pushConstantSize());
+        RenderPipeline.Snippet snippet = Pipelines.snippetOf(base, layouts);
         return RenderPipelines.register(RenderPipeline.builder(snippet)
                 .withLocation(Mod.id("pipeline/" + name))
                 .withVertexShader(Mod.id(vertexShader))

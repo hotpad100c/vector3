@@ -4,16 +4,16 @@ import ml.mypals.vectorthree.core.Mod;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.pipeline.UniformType;
-import com.mojang.renderpearl.api.textures.FilterMode;
-import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuSampler;
 import net.minecraft.client.renderer.RenderPipelines;
 
 import java.util.Optional;
@@ -26,20 +26,20 @@ public final class ScreenPass {
 
     public static RenderTarget scratch(RenderTarget main) {
         if (scratch == null) scratch = new TextureTarget("vector3_vfx_scratch", main.width, main.height,
-                GpuFormat.RGBA8_UNORM, null);
+                false, GpuFormat.RGBA8_UNORM);
         else if (scratch.width != main.width || scratch.height != main.height) scratch.resize(main.width, main.height);
         return scratch;
     }
 
     public static void copy(RenderTarget source, RenderTarget target) {
         if (copyPipeline == null) copyPipeline = pipeline("screen_vfx_copy", BindGroupLayout.builder()
-                .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER).build(),
+                .withSampler("InSampler").build(),
                 GpuFormat.RGBA8_UNORM, null);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_vfx_copy", target.getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(copyPipeline));
+            pass.setPipeline(copyPipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", source.getColorTextureView(), linear());
+            pass.bindTexture("InSampler", source.getColorTextureView(), linear());
             pass.draw(3, 1, 0, 0);
         }
     }

@@ -1,5 +1,4 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 
 uniform sampler2D InSampler;
 layout(std140) uniform ColorGradingSettings {
@@ -12,8 +11,8 @@ layout(std140) uniform ColorGradingSettings {
     vec4 Gamma;
     vec4 Gain;
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 vec3 aces(vec3 x) {
     return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
