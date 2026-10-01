@@ -5,6 +5,7 @@ import ml.mypals.vectorthree.mc.camera.EditorOverlays;
 import ml.mypals.vectorthree.mc.camera.PreviewPass;
 import com.llamalad7.mixinextras.sugar.Local;
 import ml.mypals.vectorthree.mc.vfx.ScreenVFXRenderer;
+import ml.mypals.vectorthree.mc.render.KitFeatureDispatcher;
 import ml.mypals.vectorthree.mc.render.ScreenLayer;
 import ml.mypals.vectorthree.mc.shape.particle.ParticleEmitters;
 import net.minecraft.client.renderer.GameRenderer;
@@ -27,6 +28,11 @@ public class GameRendererMixin {
     @Inject(method = "render", at = @At("RETURN"))
     private void vector3$restoreOverlays(CallbackInfo ci) {
         EditorOverlays.restoreAfterExport();
+    }
+
+    @Inject(method = "render", at = @At("RETURN"))
+    private void vector3$endKitFeatureFrame(CallbackInfo ci) {
+        KitFeatureDispatcher.endFrame();
     }
 
     // Once the level is drawn, before the hand clears the depth.

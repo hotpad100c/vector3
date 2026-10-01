@@ -6,6 +6,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import ml.mypals.ryansrenderingkit.utils.Helpers;
 import ml.mypals.vectorthree.mc.render.IrisBypassTarget;
+import ml.mypals.vectorthree.mc.render.KitFeatureDispatcher;
 import ml.mypals.vectorthree.mc.render.RenderTargets;
 import ml.mypals.vectorthree.mc.render.TextGlow;
 import net.minecraft.client.renderer.SubmitNodeStorage;
@@ -16,7 +17,8 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * Helpers#renderFeatures — RRK's feature-dispatcher draw used by the EmptyMesh shapes — draws into the main
- * target. Only calls wrapped in IrisBypassTarget#renderFeatures (or TextGlow's routing) are sent elsewhere, through
+ * target, on KitFeatureDispatcher's dispatcher rather than the game's. Only calls wrapped in
+ * IrisBypassTarget#renderFeatures (or TextGlow's routing) are sent elsewhere, through
  * RenderSystem's output override, so other callers keep their behavior.
  * <p>
  * Routed draws also pin vanilla vertex layouts. With a pack active Iris widens BLOCK/ENTITY/glyph
@@ -42,8 +44,9 @@ public class HelpersIrisBypassMixin {
     // 26.2's renderAllFeatures builds the frame (prepareFrame) and draws it in one call.
     @WrapOperation(method = "renderFeatures", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher;renderAllFeatures(Lnet/minecraft/client/renderer/SubmitNodeStorage;)V"))
-    private static void vector3$routeFeatures(FeatureRenderDispatcher dispatcher, SubmitNodeStorage submits,
+    private static void vector3$routeFeatures(FeatureRenderDispatcher gameDispatcher, SubmitNodeStorage submits,
             Operation<Void> original) {
+        FeatureRenderDispatcher dispatcher = KitFeatureDispatcher.get();
         RenderTarget target = vector3$routedTarget();
         if (!vector3$vanillaFormats()) {
             RenderTargets.drawInto(target, () -> original.call(dispatcher, submits));
