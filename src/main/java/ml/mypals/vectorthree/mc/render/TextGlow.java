@@ -5,17 +5,17 @@ import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.pipeline.UniformType;
-import com.mojang.renderpearl.api.textures.FilterMode;
-import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuSampler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
 import org.joml.Vector4f;
@@ -148,9 +148,9 @@ public final class TextGlow {
 
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_text_glow_composite", main.getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(compositePipeline));
+            pass.setPipeline(compositePipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", wider.getColorTextureView(), linear());
+            pass.bindTexture("InSampler", wider.getColorTextureView(), linear());
             pass.draw(3, 1, 0, 0);
         }
     }
@@ -171,9 +171,9 @@ public final class TextGlow {
         writeStep(step, 1f / source.width, 1f / source.height, 0);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_text_glow_down", target.getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(downPipeline));
+            pass.setPipeline(downPipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", source.getColorTextureView(), linear());
+            pass.bindTexture("InSampler", source.getColorTextureView(), linear());
             pass.setUniform("GlowStep", step);
             pass.draw(3, 1, 0, 0);
         }
@@ -184,10 +184,10 @@ public final class TextGlow {
         writeStep(step, 1f / wider.width, 1f / wider.height, weight);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_text_glow_up", target.getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(upPipeline));
+            pass.setPipeline(upPipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("PrevSampler", wider.getColorTextureView(), linear());
-            pass.setUniform("CurrentSampler", current.getColorTextureView(), linear());
+            pass.bindTexture("PrevSampler", wider.getColorTextureView(), linear());
+            pass.bindTexture("CurrentSampler", current.getColorTextureView(), linear());
             pass.setUniform("GlowStep", step);
             pass.draw(3, 1, 0, 0);
         }
@@ -209,16 +209,16 @@ public final class TextGlow {
         if (downPipeline != null) return;
         ColorTargetState hdr = new ColorTargetState(Optional.empty(), FORMAT, ColorTargetState.WRITE_ALL);
         downPipeline = screenPass("down", BindGroupLayout.builder()
-                .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withSampler("InSampler")
                 .withUniform("GlowStep", UniformType.UNIFORM_BUFFER)
                 .build(), hdr);
         upPipeline = screenPass("up", BindGroupLayout.builder()
-                .withUniform("PrevSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                .withUniform("CurrentSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withSampler("PrevSampler")
+                .withSampler("CurrentSampler")
                 .withUniform("GlowStep", UniformType.UNIFORM_BUFFER)
                 .build(), hdr);
         compositePipeline = screenPass("composite", BindGroupLayout.builder()
-                .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withSampler("InSampler")
                 .build(), new ColorTargetState(Optional.of(BlendFunction.ADDITIVE), GpuFormat.RGBA8_UNORM,
                 ColorTargetState.WRITE_COLOR));
     }
@@ -227,11 +227,11 @@ public final class TextGlow {
         RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
         int width = Math.max(1, main.width), height = Math.max(1, main.height);
         if (layer.glow == null) {
-            layer.glow = new TextureTarget("vector3_text_glow", width, height, FORMAT, GpuFormat.D32_FLOAT);
+            layer.glow = new TextureTarget("vector3_text_glow", width, height, true, FORMAT);
             for (int level = 0; level < LEVELS; level++) {
                 int w = scaled(width, level), h = scaled(height, level);
-                layer.down[level] = new TextureTarget("vector3_text_glow_down_" + level, w, h, FORMAT, null);
-                layer.up[level] = new TextureTarget("vector3_text_glow_up_" + level, w, h, FORMAT, null);
+                layer.down[level] = new TextureTarget("vector3_text_glow_down_" + level, w, h, false, FORMAT);
+                layer.up[level] = new TextureTarget("vector3_text_glow_up_" + level, w, h, false, FORMAT);
             }
             for (int i = 0; i < layer.steps.length; i++) {
                 int index = i;

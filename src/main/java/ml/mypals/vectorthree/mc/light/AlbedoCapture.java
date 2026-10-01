@@ -1,16 +1,17 @@
 package ml.mypals.vectorthree.mc.light;
 
+import ml.mypals.vectorthree.mc.render.Pipelines;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
-import com.mojang.renderpearl.api.vertex.VertexFormat;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.systems.RenderPassDescriptor;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import ml.mypals.vectorthree.core.Mod;
 import ml.mypals.vectorthree.mc.compat.IrisCompat;
 import ml.mypals.vectorthree.mixin.minecraft.area.RenderSetupAccessor;
@@ -24,7 +25,7 @@ import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.texture.UvMapping;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.Identifier;
 import net.minecraft.core.BlockPos;
 import org.joml.Vector4f;
@@ -64,13 +65,13 @@ public final class AlbedoCapture {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static void model(Model<?> model, Object state, PoseStack pose,
-            RenderType original, int color, UvMapping uvMapping) {
+            RenderType original, int color, TextureAtlasSprite sprite) {
         if (!collecting || copying || submits == null) return;
         RenderType albedo = TYPES.computeIfAbsent(original, AlbedoCapture::albedoType);
         if (albedo == null) return;
         copying = true;
         try {
-            submits.submitModel((Model) model, state, pose, albedo, 0xF000F0, 0, color, uvMapping, 0);
+            submits.submitModel((Model) model, state, pose, albedo, 0xF000F0, 0, color, sprite, 0, null);
             modelCount++;
         } finally {
             copying = false;
@@ -98,14 +99,28 @@ public final class AlbedoCapture {
             if (modelCount > 0) prepared = dispatcher.prepareFrame(frame);
             RenderSystem.getDevice().createCommandEncoder().clearColorAndDepthTextures(
                     target.getColorTexture(), new Vector4f(0), target.getDepthTexture(), 0.0);
-            RenderPassDescriptor descriptor = RenderPassDescriptor.builder(() -> "vector3_geometry_albedo")
+            RenderPassDescriptor descriptor = RenderPassDescriptor.create(() -> "vector3_geometry_albedo")
                     .withColorAttachment(target.getColorTextureView(), Optional.empty())
                     .withDepthAttachment(target.getDepthTextureView(), OptionalDouble.empty())
-                    .build();
-            try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor)) {
-                RenderSystem.bindDefaultUniforms(pass);
-                if (blocks) BlockAlbedoCapture.draw(pass);
-                if (prepared != null) prepared.executeSolid(pass);
+                    .withRenderArea(new RenderPass.RenderArea(0, 0, target.width, target.height));
+            if (blocks) {
+                try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(descriptor)) {
+                    RenderSystem.bindDefaultUniforms(pass);
+                    BlockAlbedoCapture.draw(pass);
+                }
+            }
+            if (prepared != null) {
+                // 26.2's feature renderers open a pass per draw; the output override points them at the capture.
+                GpuTextureView oldColor = RenderSystem.outputColorTextureOverride;
+                GpuTextureView oldDepth = RenderSystem.outputDepthTextureOverride;
+                RenderSystem.outputColorTextureOverride = target.getColorTextureView();
+                RenderSystem.outputDepthTextureOverride = target.getDepthTextureView();
+                try {
+                    prepared.executeSolid();
+                } finally {
+                    RenderSystem.outputColorTextureOverride = oldColor;
+                    RenderSystem.outputDepthTextureOverride = oldDepth;
+                }
             }
             ready = true;
         } finally {
@@ -139,7 +154,7 @@ public final class AlbedoCapture {
 
     private static void ensureTarget(RenderTarget main) {
         if (target == null) target = new TextureTarget("vector3_geometry_albedo", main.width, main.height,
-                GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT);
+                true, GpuFormat.RGBA8_UNORM);
         else if (target.width != main.width || target.height != main.height) target.resize(main.width, main.height);
     }
 
@@ -149,7 +164,7 @@ public final class AlbedoCapture {
         Object binding = textures.get("Sampler0");
         if (binding == null) return null;
         Identifier texture = ((TextureBindingAccessor) binding).vector3$location();
-        if (texture == null || !original.format().equals(RenderPipelines.ENTITY_CUTOUT.getVertexFormatBindings().getFirst()))
+        if (texture == null || !original.format().equals(RenderPipelines.ENTITY_CUTOUT.getVertexFormatBinding(0)))
             return null;
         RenderSetup setup = RenderSetup.builder(pipeline()).withTexture("Sampler0", texture)
                 .useLightmap().useOverlay().createRenderSetup();
@@ -159,12 +174,7 @@ public final class AlbedoCapture {
     private static RenderPipeline pipeline() {
         if (pipeline != null) return pipeline;
         RenderPipeline base = RenderPipelines.ENTITY_CUTOUT;
-        RenderPipeline.Snippet snippet = new RenderPipeline.Snippet(base.getShaders(), Optional.of(base.getShaderDefines()),
-                Optional.of(base.getBindGroupLayouts()), base.getColorTargetStates().toArray(new ColorTargetState[0]),
-                base.getColorTargetStates().size(), Optional.ofNullable(base.getDepthStencilState()),
-                Optional.of(base.getPolygonMode()), Optional.of(base.isCull()),
-                base.getVertexFormatBindings().toArray(new VertexFormat[0]), Optional.of(base.getPrimitiveTopology()),
-                base.pushConstantSize());
+        RenderPipeline.Snippet snippet = Pipelines.snippetOf(base);
         pipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
                 .withLocation(Mod.id("pipeline/entity_albedo"))
                 .withVertexShader(Mod.id("core/entity_albedo"))

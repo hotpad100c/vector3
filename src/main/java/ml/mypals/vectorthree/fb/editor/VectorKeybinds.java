@@ -1,13 +1,14 @@
 package ml.mypals.vectorthree.fb.editor;
 
-import imgui.moulberry90.flag.ImGuiKey;
 import ml.mypals.vectorthree.mixin.flashback.KeybindAccessor;
 import ml.mypals.vectorthree.mixin.flashback.KeybindFactory;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
+/** Flashback for 26.2 stores keybinds as GLFW key codes. */
 public final class VectorKeybinds {
-    public static final Object HELP = bind("vector3.help", ImGuiKey.Slash, true, false, false, false);
+    public static final Object HELP = bind("vector3.help", GLFW.GLFW_KEY_SLASH, true, false, false, false);
     private static final List<Object> ALL = List.of(HELP);
 
     private VectorKeybinds() {}

@@ -37,15 +37,15 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 	//RRK
-	implementation "maven.modrinth:CdJaAf0y:fEDHtqkn"
+	implementation "maven.modrinth:CdJaAf0y:t0A6GFKP"
 	//Flashback
 	implementation "maven.modrinth:4das1Fjq:${project.flashback_version}"
 	flashbackBundle "maven.modrinth:4das1Fjq:${project.flashback_version}"
-	compileOnly files(layout.buildDirectory.file("generated/flashback-libs/META-INF/jars/lattice-2.2.0.jar"))
+	compileOnly files(layout.buildDirectory.file("generated/flashback-libs/META-INF/jars/lattice-2.1.0.jar"))
 	//Sodium
-	implementation "maven.modrinth:AANobbMI:v4PSXean"
+	implementation "maven.modrinth:AANobbMI:xJZxADzI"
 	//Iris
-	implementation "maven.modrinth:YL57xq9U:bAdKrpw8"
+	implementation "maven.modrinth:YL57xq9U:gxZWWnKH"
 
 	testImplementation platform("org.junit:junit-bom:5.13.4")
 	testImplementation "org.junit.jupiter:junit-jupiter"
@@ -58,7 +58,7 @@ test {
 
 tasks.register("extractFlashbackCompileLibraries", Copy) {
 	from { zipTree(configurations.flashbackBundle.singleFile) }
-	include "META-INF/jars/lattice-2.2.0.jar"
+	include "META-INF/jars/lattice-2.1.0.jar"
 	into layout.buildDirectory.dir("generated/flashback-libs")
 }
 

@@ -1,6 +1,6 @@
 package ml.mypals.vectorthree.fb.multiedit;
 
-import com.moulberry.flashback.utils.InputHelper;
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import imgui.moulberry90.ImDrawList;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiCol;
@@ -84,7 +84,7 @@ public final class PropertySelection {
     public static @Nullable List<PropertyClipboard.Clip> frame() {
         float mouseX = ImGui.getIO().getMousePosX(), mouseY = ImGui.getIO().getMousePosY();
         boolean hoveredWindow = ImGui.isWindowHovered(ImGuiHoveredFlags.RootAndChildWindows);
-        boolean ctrl = InputHelper.isCtrlDownRaw();
+        boolean ctrl = EditorInput.isCtrlDown();
         List<PropertyClipboard.Clip> paste = null;
 
         boolean additive = ctrl || ImGui.getIO().getKeyShift();

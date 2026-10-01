@@ -2,8 +2,9 @@ package ml.mypals.vectorthree.mc.camera;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
-import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.GpuFormat;
+import ml.mypals.vectorthree.mc.render.RenderTargets;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -47,15 +48,15 @@ public final class PreviewPass {
             applyCamera.run();
             renderer.update(deltaTracker);
             renderer.extract(deltaTracker, true);
-            renderer.render();
+            renderer.render(deltaTracker, true);
             Camera camera = renderer.mainCamera();
             Shot shot = new Shot(camera.position(), new Vec3(camera.forwardVector()), new Vec3(camera.upVector()),
                     camera.getFov(), (float) main.width / main.height);
             if (image == null || image.width != main.width || image.height != main.height) {
                 release();
-                image = new TextureTarget("vector3_camera_preview", main.width, main.height, GpuFormat.RGBA8_UNORM, null);
+                image = new TextureTarget("vector3_camera_preview", main.width, main.height, false, GpuFormat.RGBA8_UNORM);
             }
-            image.copyColorFrom(main);
+            RenderTargets.copyColor(main, image);
             return shot;
         } finally {
             EditorOverlays.restore();

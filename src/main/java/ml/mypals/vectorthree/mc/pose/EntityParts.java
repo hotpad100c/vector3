@@ -65,8 +65,8 @@ public final class EntityParts {
             // As EnderDragonRenderer#submit: heading and pitch from its flight history, then into model space.
             float yRot = dragonState.getHistoricalPos(7).yRot();
             float pitch = (float) (dragonState.getHistoricalPos(5).y() - dragonState.getHistoricalPos(10).y());
-            stack.rotateDegrees(Axis.YP, -yRot);
-            stack.rotateDegrees(Axis.XP, pitch * 10);
+            stack.mulPose(Axis.YP.rotationDegrees(-yRot));
+            stack.mulPose(Axis.XP.rotationDegrees(pitch * 10));
             stack.translate(0, 0, 1);
             stack.scale(-1, -1, 1);
             stack.translate(0, -1.501f, 0);

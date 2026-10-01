@@ -1,8 +1,8 @@
 package ml.mypals.vectorthree.fb.curve;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import ml.mypals.vectorthree.core.curve.SpeedCurve;
 
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImDrawList;
 import imgui.moulberry90.ImGui;
 import imgui.moulberry90.flag.ImGuiKey;
@@ -100,13 +100,13 @@ public final class SpeedCurveEditor {
     }
 
     private static SpeedCurve dragged(SpeedCurve curve, float x, float y) {
-        if (InputHelper.isCtrlDownRaw()) {
+        if (EditorInput.isCtrlDown()) {
             x = Math.round(x / SNAP) * SNAP;
             y = Math.round(y / SNAP) * SNAP;
         }
         List<SpeedCurve.Point> points = new ArrayList<>(curve.points());
         SpeedCurve.Point point = points.get(dragIndex);
-        boolean free = InputHelper.isAltDownRaw();
+        boolean free = EditorInput.isAltDown();
         switch (dragPart) {
             case POINT -> {
                 if (dragIndex == 0 || dragIndex == points.size() - 1) return curve;

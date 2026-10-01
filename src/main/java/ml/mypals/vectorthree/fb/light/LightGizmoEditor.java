@@ -1,8 +1,8 @@
 package ml.mypals.vectorthree.fb.light;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.state.KeyframeTrack;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.builders.shapeBuilders.ShapeGenerator;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
@@ -97,7 +97,7 @@ public final class LightGizmoEditor {
 
     public void frame() {
         if (!ReplayUI.isActive() || keyframe == null) return;
-        if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
+        if (dragging != null && EditorInput.isGrabbed()) EditorInput.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
             if (preview != null) {
                 String parent = parentOf(keyframe.value);
@@ -129,7 +129,7 @@ public final class LightGizmoEditor {
                 ViewportPick.Hit hit = ViewportPick.pick(ray.origin, ray.direction);
                 if (hit != null) {
                     Vec3 point = hit.entity() != null ? hit.entity().getBoundingBox().getCenter()
-                            : InputHelper.isCtrlDownRaw() && hit.block() != null
+                            : EditorInput.isCtrlDown() && hit.block() != null
                             ? Vec3.atCenterOf(hit.block().getBlockPos().relative(hit.block().getDirection()))
                             : hit.location();
                     if (!point.equals(light.position())) {
@@ -141,7 +141,7 @@ public final class LightGizmoEditor {
                 }
             }
             if (ImGui.isMouseClicked(1) && hovered != null) {
-                ReplayUI.imguiWindower.ungrab();
+                EditorInput.ungrab();
                 dragging = hovered;
                 dragStart = light;
                 dragOrigin = handlePosition(light, hovered.kind());
@@ -343,7 +343,7 @@ public final class LightGizmoEditor {
         Vec3 position = start.position(), direction = start.direction();
         float radius = start.radius(), width = start.areaWidth(), height = start.areaHeight(), reach = start.areaReach();
         float inner = start.innerAngle(), outer = start.outerAngle();
-        boolean snap = InputHelper.isCtrlDownRaw();
+        boolean snap = EditorInput.isCtrlDown();
         switch (dragging.kind()) {
             case X, Y, Z -> position = position.add(dragAxis.scale(delta));
             case YAW, PITCH -> {
@@ -387,7 +387,7 @@ public final class LightGizmoEditor {
 
     private Light moveFree(Vec3 offset) {
         Vec3 position = dragStart.position().add(offset);
-        if (InputHelper.isCtrlDownRaw()) {
+        if (EditorInput.isCtrlDown()) {
             position = new Vec3(Math.round(position.x * 2) / 2.0, Math.round(position.y * 2) / 2.0,
                     Math.round(position.z * 2) / 2.0);
         }

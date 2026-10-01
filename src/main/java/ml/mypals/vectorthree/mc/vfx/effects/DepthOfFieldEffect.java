@@ -8,17 +8,17 @@ import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.pipeline.UniformType;
-import com.mojang.renderpearl.api.textures.FilterMode;
-import com.mojang.renderpearl.api.textures.GpuTexture;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import ml.mypals.vectorthree.core.port.Ports;
 import ml.mypals.vectorthree.core.fade.ScreenVFX;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -73,7 +73,7 @@ public final class DepthOfFieldEffect {
         write(projectionSettings, projection.m22(), projection.m32(), projection.m23(), projection.m33(),
                 zeroToOne ? 1 : 0, skyDepth(projection, zeroToOne), 0, 0);
         try (RenderPass pass = begin("depth", distance.getColorTextureView(), depthPipeline)) {
-            pass.setUniform("DepthSampler", main.getDepthTextureView(), ScreenPass.nearest());
+            pass.bindTexture("DepthSampler", main.getDepthTextureView(), ScreenPass.nearest());
             pass.setUniform("DOFProjection", projectionSettings);
             pass.draw(3, 1, 0, 0);
         }
@@ -123,16 +123,16 @@ public final class DepthOfFieldEffect {
         }
         GpuTextureView focus = dof.autofocus() && !distanceBlur ? autofocus(dof) : distance.getColorTextureView();
         try (RenderPass pass = begin("mip0", levels[0], mip0Pipeline)) {
-            pass.setUniform("InSampler", main.getColorTextureView(), ScreenPass.nearest());
-            pass.setUniform("DistanceSampler", distance.getColorTextureView(), ScreenPass.nearest());
-            pass.setUniform("FocusSampler", focus, ScreenPass.nearest());
+            pass.bindTexture("InSampler", main.getColorTextureView(), ScreenPass.nearest());
+            pass.bindTexture("DistanceSampler", distance.getColorTextureView(), ScreenPass.nearest());
+            pass.bindTexture("FocusSampler", focus, ScreenPass.nearest());
             pass.setUniform("DOFSettings", settings);
             pass.draw(3, 1, 0, 0);
         }
         if (blur) {
             for (int level = 1; level < levels.length; level++) {
                 try (RenderPass pass = begin("mip", levels[level], mipPipeline)) {
-                    pass.setUniform("InSampler", levels[level - 1], ScreenPass.linear());
+                    pass.bindTexture("InSampler", levels[level - 1], ScreenPass.linear());
                     pass.draw(3, 1, 0, 0);
                 }
             }
@@ -143,11 +143,11 @@ public final class DepthOfFieldEffect {
         }
         RenderTarget target = ScreenPass.scratch(main);
         try (RenderPass pass = begin("blur", target.getColorTextureView(), blurPipeline)) {
-            pass.setUniform("InSampler", main.getColorTextureView(), ScreenPass.nearest());
-            pass.setUniform("MipSampler", mipsView, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR, true));
-            pass.setUniform("NearSampler", dilateV.getColorTextureView(), ScreenPass.linear());
-            pass.setUniform("DistanceSampler", distance.getColorTextureView(), ScreenPass.nearest());
-            pass.setUniform("FocusSampler", focus, ScreenPass.nearest());
+            pass.bindTexture("InSampler", main.getColorTextureView(), ScreenPass.nearest());
+            pass.bindTexture("MipSampler", mipsView, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR, true));
+            pass.bindTexture("NearSampler", dilateV.getColorTextureView(), ScreenPass.linear());
+            pass.bindTexture("DistanceSampler", distance.getColorTextureView(), ScreenPass.nearest());
+            pass.bindTexture("FocusSampler", focus, ScreenPass.nearest());
             pass.setUniform("DOFSettings", settings);
             pass.draw(3, 1, 0, 0);
         }
@@ -158,8 +158,8 @@ public final class DepthOfFieldEffect {
     private static GpuTextureView autofocus(DofSettings dof) {
         Autofocus state = AUTOFOCUS[PreviewPass.isRendering() ? 1 : 0];
         if (state.current == null) {
-            state.current = new TextureTarget("vector3_dof_focus_a", 1, 1, GpuFormat.R32_FLOAT, null);
-            state.previous = new TextureTarget("vector3_dof_focus_b", 1, 1, GpuFormat.R32_FLOAT, null);
+            state.current = new TextureTarget("vector3_dof_focus_a", 1, 1, false, GpuFormat.R32_FLOAT);
+            state.previous = new TextureTarget("vector3_dof_focus_b", 1, 1, false, GpuFormat.R32_FLOAT);
         }
         if (state.lastFrame == frame) return state.current.getColorTextureView();
         boolean exporting = Ports.clock().exporting();
@@ -179,8 +179,8 @@ public final class DepthOfFieldEffect {
         state.previous = previous;
         write(autofocusSettings, blend, 0, 0, 0, 0, 0, 0, 0);
         try (RenderPass pass = begin("autofocus", state.current.getColorTextureView(), autofocusPipeline)) {
-            pass.setUniform("DistanceSampler", distance.getColorTextureView(), ScreenPass.nearest());
-            pass.setUniform("PrevSampler", previous.getColorTextureView(), ScreenPass.nearest());
+            pass.bindTexture("DistanceSampler", distance.getColorTextureView(), ScreenPass.nearest());
+            pass.bindTexture("PrevSampler", previous.getColorTextureView(), ScreenPass.nearest());
             pass.setUniform("AutofocusSettings", autofocusSettings);
             pass.draw(3, 1, 0, 0);
         }
@@ -189,7 +189,7 @@ public final class DepthOfFieldEffect {
 
     private static void dilate(GpuTextureView source, RenderTarget target, GpuBuffer direction) {
         try (RenderPass pass = begin("dilate", target.getColorTextureView(), dilatePipeline)) {
-            pass.setUniform("InSampler", source, ScreenPass.nearest());
+            pass.bindTexture("InSampler", source, ScreenPass.nearest());
             pass.setUniform("DOFSettings", settings);
             pass.setUniform("DOFDirection", direction);
             pass.draw(3, 1, 0, 0);
@@ -199,7 +199,7 @@ public final class DepthOfFieldEffect {
     private static RenderPass begin(String name, GpuTextureView target, RenderPipeline pipeline) {
         RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_dof_" + name, target, Optional.empty());
-        pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
+        pass.setPipeline(pipeline);
         RenderSystem.bindDefaultUniforms(pass);
         return pass;
     }
@@ -231,9 +231,9 @@ public final class DepthOfFieldEffect {
         }
         int halfWidth = Math.max(1, main.width >> 1), halfHeight = Math.max(1, main.height >> 1);
         if (distance == null) {
-            distance = new TextureTarget("vector3_dof_distance", main.width, main.height, GpuFormat.R32_FLOAT, null);
-            dilateH = new TextureTarget("vector3_dof_dilate_h", halfWidth, halfHeight, GpuFormat.R16_FLOAT, null);
-            dilateV = new TextureTarget("vector3_dof_dilate_v", halfWidth, halfHeight, GpuFormat.R16_FLOAT, null);
+            distance = new TextureTarget("vector3_dof_distance", main.width, main.height, false, GpuFormat.R32_FLOAT);
+            dilateH = new TextureTarget("vector3_dof_dilate_h", halfWidth, halfHeight, false, GpuFormat.R16_FLOAT);
+            dilateV = new TextureTarget("vector3_dof_dilate_v", halfWidth, halfHeight, false, GpuFormat.R16_FLOAT);
         } else if (distance.width != main.width || distance.height != main.height) {
             distance.resize(main.width, main.height);
             dilateH.resize(halfWidth, halfHeight);
@@ -259,8 +259,8 @@ public final class DepthOfFieldEffect {
     private static RenderPipeline pipeline(String name, GpuFormat format, String... uniforms) {
         BindGroupLayout.Builder layout = BindGroupLayout.builder();
         for (String uniform : uniforms)
-            layout = layout.withUniform(uniform, uniform.endsWith("Sampler")
-                    ? UniformType.COMBINED_IMAGE_SAMPLER : UniformType.UNIFORM_BUFFER);
+            layout = uniform.endsWith("Sampler") ? layout.withSampler(uniform)
+                    : layout.withUniform(uniform, UniformType.UNIFORM_BUFFER);
         // The mip chain keeps its CoC in alpha, and ScreenPass pipelines only write RGB.
         return RenderPipelines.register(RenderPipeline.builder()
                 .withLocation(Mod.id("pipeline/" + name))

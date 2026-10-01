@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.mc.shape.area;
 
+import ml.mypals.vectorthree.mc.render.PreparedDraws;
 import ml.mypals.vectorthree.core.Mod;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
@@ -10,12 +11,11 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
 import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.IndexType;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.IndexType;
 import ml.mypals.vectorthree.mc.compat.IrisCompat;
-import net.minecraft.client.renderer.StagedVertexBuffer;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import org.joml.Vector4f;
 import org.lwjgl.system.MemoryUtil;
@@ -456,8 +456,8 @@ public final class BlastShape extends AreaShape {
             if ((draw.layer() == 2) != translucentLayer) continue;
             GpuBuffer vertices = gpu.vertices[draw.layer()];
             if (vertices == null) continue;
-            draw.type().drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(vertices, draw.indices(), IndexType.INT, 0,
-                    draw.first(), draw.count(), draw.type().pipeline().getPrimitiveTopology()), pass);
+            PreparedDraws.draw(pass, draw.type(), vertices, draw.indices(), IndexType.INT, 0,
+                    draw.first(), draw.count(), draw.type().pipeline().getPrimitiveTopology());
         }
     }
 
@@ -468,7 +468,7 @@ public final class BlastShape extends AreaShape {
         if (vertices == null || indices == null || count == 0 || transformBuffer == null || skinnedTypes == null) return;
         PreparedRenderType type = skinnedTypes[layer];
         try {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(type.pipeline()));
+            pass.setPipeline(type.pipeline());
         } catch (IllegalStateException exception) {
             if (!skinUnavailable) Mod.LOGGER.warn("GPU-skinned blast pipeline unavailable, moving blocks on the CPU", exception);
             skinUnavailable = true;
@@ -479,7 +479,7 @@ public final class BlastShape extends AreaShape {
         pass.setUniform("DynamicTransforms", type.dynamicTransforms());
         pass.setVertexBuffer(0, vertices.slice());
         for (PreparedRenderType.Texture texture : type.textures()) {
-            pass.setUniform(texture.name(), texture.textureView(), texture.sampler());
+            pass.bindTexture(texture.name(), texture.textureView(), texture.sampler());
         }
         pass.setUniform("BlastBlockOf", gpu.blockOf[layer]);
         pass.setUniform("BlastTransforms", transformBuffer);

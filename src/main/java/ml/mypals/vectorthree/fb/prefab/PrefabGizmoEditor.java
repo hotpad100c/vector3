@@ -1,10 +1,10 @@
 package ml.mypals.vectorthree.fb.prefab;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import ml.mypals.vectorthree.core.prefab.PrefabTransform;
 
 import ml.mypals.vectorthree.core.Mod;
 import com.moulberry.flashback.editor.ui.ReplayUI;
-import com.moulberry.flashback.utils.InputHelper;
 import imgui.moulberry90.ImGui;
 import ml.mypals.ryansrenderingkit.collision.RayModelIntersection;
 import ml.mypals.ryansrenderingkit.shape.Shape;
@@ -66,7 +66,7 @@ public final class PrefabGizmoEditor {
     public void frame() {
         if (!ReplayUI.isActive()) return;
         if (dragging == null && builtMode != GizmoMode.current()) rebuild();
-        if (dragging != null && ReplayUI.imguiWindower.isGrabbed()) ReplayUI.imguiWindower.ungrab();
+        if (dragging != null && EditorInput.isGrabbed()) EditorInput.ungrab();
         if (dragging != null && !ImGui.isMouseDown(1)) {
             dragging = null;
             updateColors();
@@ -81,7 +81,7 @@ public final class PrefabGizmoEditor {
         if (dragging == null) {
             setHovered(ShapeGizmoEditor.mouseInViewport() ? pick(ray) : null);
             if (ImGui.isMouseClicked(1) && hovered != null) {
-                ReplayUI.imguiWindower.ungrab();
+                EditorInput.ungrab();
                 beginDrag(hovered, ray, camera);
             }
         } else if (ImGui.isMouseDown(1)) {
@@ -182,7 +182,7 @@ public final class PrefabGizmoEditor {
     }
 
     private PrefabTransform drag(RayModelIntersection.Ray ray) {
-        boolean snap = InputHelper.isCtrlDownRaw();
+        boolean snap = EditorInput.isCtrlDown();
         Vec3 origin = center(dragStart);
         Vector3d center = new Vector3d(dragStart.center());
         Vector3f rotation = new Vector3f(dragStart.rotationDegrees());

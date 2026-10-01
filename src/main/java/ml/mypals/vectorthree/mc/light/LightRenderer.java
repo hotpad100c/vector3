@@ -4,13 +4,13 @@ import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.pipeline.UniformType;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
 import ml.mypals.vectorthree.core.light.Light;
 import ml.mypals.vectorthree.core.fade.effects.GodRaysSettings;
 import ml.mypals.vectorthree.mc.vfx.effects.DepthOfFieldEffect;
@@ -147,33 +147,33 @@ public final class LightRenderer {
             if (light.shadow() > 0) {
                 try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                         () -> "vector3_light_shadow", shadowTarget.getColorTextureView(), Optional.empty())) {
-                    pass.setPipeline(RenderSystem.getCompiledPipeline(shadowPipeline));
+                    pass.setPipeline(shadowPipeline);
                     RenderSystem.bindDefaultUniforms(pass);
-                    pass.setUniform("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
+                    pass.bindTexture("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
                     pass.setUniform("LightSettings", settings);
                     pass.draw(3, 1, 0, 0);
                 }
             }
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                     () -> "vector3_light_surface", surfaceTarget.getColorTextureView(), Optional.empty())) {
-                pass.setPipeline(RenderSystem.getCompiledPipeline(surfacePipeline));
+                pass.setPipeline(surfacePipeline);
                 RenderSystem.bindDefaultUniforms(pass);
-                pass.setUniform("InSampler", scene.getColorTextureView(), ScreenPass.nearest());
-                pass.setUniform("AlbedoSampler", AlbedoCapture.ready()
+                pass.bindTexture("InSampler", scene.getColorTextureView(), ScreenPass.nearest());
+                pass.bindTexture("AlbedoSampler", AlbedoCapture.ready()
                         ? AlbedoCapture.colorView() : scene.getColorTextureView(), ScreenPass.nearest());
-                pass.setUniform("AlbedoDepthSampler", AlbedoCapture.ready()
+                pass.bindTexture("AlbedoDepthSampler", AlbedoCapture.ready()
                         ? AlbedoCapture.depthView() : DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
-                pass.setUniform("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
-                pass.setUniform("ShadowSampler", shadowTarget.getColorTextureView(), ScreenPass.nearest());
+                pass.bindTexture("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
+                pass.bindTexture("ShadowSampler", shadowTarget.getColorTextureView(), ScreenPass.nearest());
                 pass.setUniform("LightSettings", settings);
                 pass.draw(3, 1, 0, 0);
             }
             if (light.volume() > 0) {
                 try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                         () -> "vector3_light_volume", volumeTarget.getColorTextureView(), Optional.empty())) {
-                    pass.setPipeline(RenderSystem.getCompiledPipeline(volumePipeline));
+                    pass.setPipeline(volumePipeline);
                     RenderSystem.bindDefaultUniforms(pass);
-                    pass.setUniform("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
+                    pass.bindTexture("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
                     pass.setUniform("LightSettings", settings);
                     pass.draw(3, 1, 0, 0);
                 }
@@ -181,21 +181,21 @@ public final class LightRenderer {
         }
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_light_surface_composite", main.getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(surfaceCompositePipeline));
+            pass.setPipeline(surfaceCompositePipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", scene.getColorTextureView(), ScreenPass.nearest());
-            pass.setUniform("LightSampler", surfaceTarget.getColorTextureView(), ScreenPass.nearest());
+            pass.bindTexture("InSampler", scene.getColorTextureView(), ScreenPass.nearest());
+            pass.bindTexture("LightSampler", surfaceTarget.getColorTextureView(), ScreenPass.nearest());
             pass.draw(3, 1, 0, 0);
         }
         if (hasVolume) {
             ScreenPass.copy(main, scene);
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                     () -> "vector3_light_volume_composite", main.getColorTextureView(), Optional.empty())) {
-                pass.setPipeline(RenderSystem.getCompiledPipeline(volumeCompositePipeline));
+                pass.setPipeline(volumeCompositePipeline);
                 RenderSystem.bindDefaultUniforms(pass);
-                pass.setUniform("InSampler", volumeTarget.getColorTextureView(), ScreenPass.linear());
-                pass.setUniform("SceneSampler", scene.getColorTextureView(), ScreenPass.nearest());
-                pass.setUniform("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
+                pass.bindTexture("InSampler", volumeTarget.getColorTextureView(), ScreenPass.linear());
+                pass.bindTexture("SceneSampler", scene.getColorTextureView(), ScreenPass.nearest());
+                pass.bindTexture("DistanceSampler", DepthOfFieldEffect.distanceView(), ScreenPass.nearest());
                 pass.draw(3, 1, 0, 0);
             }
         }
@@ -204,30 +204,30 @@ public final class LightRenderer {
     private static void ensure() {
         if (surfacePipeline != null) return;
         BindGroupLayout surfaceLayout = BindGroupLayout.builder()
-                .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                .withUniform("AlbedoSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                .withUniform("AlbedoDepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                .withUniform("ShadowSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withSampler("InSampler")
+                .withSampler("AlbedoSampler")
+                .withSampler("AlbedoDepthSampler")
+                .withSampler("DistanceSampler")
+                .withSampler("ShadowSampler")
                 .withUniform("LightSettings", UniformType.UNIFORM_BUFFER).build();
         surfacePipeline = ScreenPass.pipeline("light_surface", surfaceLayout,
                 GpuFormat.RGBA16_FLOAT, BlendFunction.ADDITIVE);
         surfaceCompositePipeline = ScreenPass.pipeline("light_surface_composite", BindGroupLayout.builder()
-                .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                .withUniform("LightSampler", UniformType.COMBINED_IMAGE_SAMPLER).build(),
+                .withSampler("InSampler")
+                .withSampler("LightSampler").build(),
                 GpuFormat.RGBA8_UNORM, null);
         shadowPipeline = ScreenPass.pipeline("light_shadow", BindGroupLayout.builder()
-                .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withSampler("DistanceSampler")
                 .withUniform("LightSettings", UniformType.UNIFORM_BUFFER).build(),
                 GpuFormat.R16_FLOAT, null);
         volumePipeline = ScreenPass.pipeline("light_volume", BindGroupLayout.builder()
-                .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                .withSampler("DistanceSampler")
                 .withUniform("LightSettings", UniformType.UNIFORM_BUFFER).build(),
                 GpuFormat.RGBA16_FLOAT, BlendFunction.ADDITIVE);
         volumeCompositePipeline = ScreenPass.pipeline("light_volume_composite", BindGroupLayout.builder()
-                .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                .withUniform("SceneSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                .withUniform("DistanceSampler", UniformType.COMBINED_IMAGE_SAMPLER).build(),
+                .withSampler("InSampler")
+                .withSampler("SceneSampler")
+                .withSampler("DistanceSampler").build(),
                 GpuFormat.RGBA8_UNORM, null);
         settings = RenderSystem.getDevice().createBuffer(() -> "vector3_light_settings",
                 GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 256);
@@ -236,7 +236,7 @@ public final class LightRenderer {
     private static void ensureShadow(RenderTarget main) {
         int width = Math.max(1, main.width / 2), height = Math.max(1, main.height / 2);
         if (shadowTarget == null) {
-            shadowTarget = new TextureTarget("vector3_light_shadow", width, height, GpuFormat.R16_FLOAT, null);
+            shadowTarget = new TextureTarget("vector3_light_shadow", width, height, false, GpuFormat.R16_FLOAT);
         } else if (shadowTarget.width != width || shadowTarget.height != height) {
             shadowTarget.resize(width, height);
         }
@@ -245,7 +245,7 @@ public final class LightRenderer {
     private static void ensureSurface(RenderTarget main) {
         if (surfaceTarget == null) {
             surfaceTarget = new TextureTarget("vector3_light_surface", main.width, main.height,
-                    GpuFormat.RGBA16_FLOAT, null);
+                    false, GpuFormat.RGBA16_FLOAT);
         } else if (surfaceTarget.width != main.width || surfaceTarget.height != main.height) {
             surfaceTarget.resize(main.width, main.height);
         }
@@ -254,7 +254,7 @@ public final class LightRenderer {
     private static void ensureVolume(RenderTarget main) {
         int width = Math.max(1, main.width / 2), height = Math.max(1, main.height / 2);
         if (volumeTarget == null) {
-            volumeTarget = new TextureTarget("vector3_light_volume", width, height, GpuFormat.RGBA16_FLOAT, null);
+            volumeTarget = new TextureTarget("vector3_light_volume", width, height, false, GpuFormat.RGBA16_FLOAT);
         } else if (volumeTarget.width != width || volumeTarget.height != height) {
             volumeTarget.resize(width, height);
         }

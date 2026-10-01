@@ -1,24 +1,25 @@
 package ml.mypals.vectorthree.mc.light;
 
+import ml.mypals.vectorthree.mc.render.PreparedDraws;
+import ml.mypals.vectorthree.mc.render.Pipelines;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.QuadInstance;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.ColorTargetState;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.vertex.VertexFormat;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import ml.mypals.vectorthree.core.Mod;
 import ml.mypals.vectorthree.core.light.Light;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
 import net.minecraft.client.color.block.BlockTintSource;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.StagedVertexBuffer;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.block.BlockQuadOutput;
 import net.minecraft.client.renderer.block.ModelBlockRenderer;
@@ -145,12 +146,7 @@ final class BlockAlbedoCapture {
     private static RenderType type(boolean cutout) {
         if (cutout ? cutoutType != null : solidType != null) return cutout ? cutoutType : solidType;
         RenderPipeline base = cutout ? RenderPipelines.CUTOUT_BLOCK : RenderPipelines.SOLID_BLOCK;
-        RenderPipeline.Snippet snippet = new RenderPipeline.Snippet(base.getShaders(), Optional.of(base.getShaderDefines()),
-                Optional.of(base.getBindGroupLayouts()), base.getColorTargetStates().toArray(new ColorTargetState[0]),
-                base.getColorTargetStates().size(), Optional.ofNullable(base.getDepthStencilState()),
-                Optional.of(base.getPolygonMode()), Optional.of(base.isCull()),
-                base.getVertexFormatBindings().toArray(new VertexFormat[0]), Optional.of(base.getPrimitiveTopology()),
-                base.pushConstantSize());
+        RenderPipeline.Snippet snippet = Pipelines.snippetOf(base);
         RenderPipeline pipeline = RenderPipelines.register(RenderPipeline.builder(snippet)
                 .withLocation(Mod.id(cutout ? "pipeline/block_albedo_cutout" : "pipeline/block_albedo_solid"))
                 .withVertexShader(Mod.id("core/block_albedo"))
@@ -272,14 +268,8 @@ final class BlockAlbedoCapture {
 
         void draw(RenderPass pass, RenderType type, GpuBufferSlice dynamic) {
             if (empty()) return;
-            var sequential = RenderSystem.getSequentialBuffer(topology);
-            sequential.requestIndexCount(indices);
-            sequential.resizeToRequestedIndexCount();
-            PreparedRenderType base = type.prepare();
-            PreparedRenderType prepared = new PreparedRenderType(base.name(), base.pipeline(), base.oitPipelineSet(),
-                    dynamic, base.scissorState(), base.textures());
-            prepared.drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(vertices, null,
-                    sequential.type(), 0, 0, indices, topology), pass);
+            PreparedRenderType prepared = PreparedDraws.withTransform(type.prepare(), dynamic);
+            PreparedDraws.draw(pass, prepared, vertices, null, null, 0, 0, indices, topology);
         }
 
         void close() {

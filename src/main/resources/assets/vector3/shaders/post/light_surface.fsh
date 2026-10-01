@@ -1,5 +1,4 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D AlbedoSampler;
 uniform sampler2D AlbedoDepthSampler;
@@ -17,8 +16,8 @@ layout(std140) uniform LightSettings {
     vec4 AreaRight;
     vec4 AreaUp;
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 vec3 viewPosition(vec2 uv, float depth) {
     vec4 point = InverseProjectionMatrix * vec4(uv * 2.0 - 1.0, 0.5, 1.0);

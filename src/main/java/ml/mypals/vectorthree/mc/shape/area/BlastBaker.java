@@ -255,7 +255,6 @@ final class BlastBaker {
         }
 
         @Override public VertexConsumer setUv1(int u, int v) { return this; }
-        @Override public VertexConsumer setUv3(float u, float v) { return this; }
         @Override public VertexConsumer setLineWidth(float width) { return this; }
 
         void finish() {

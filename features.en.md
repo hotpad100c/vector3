@@ -2,7 +2,7 @@
 
 Vector3 is an extension of [Flashback](https://modrinth.com/mod/flashback). It lets you animate shapes, text, media and world clips with keyframes on the replay timeline, and adds a set of camera, post-processing and timeline-editing tools.
 
-> Requires: Minecraft 26.3, Fabric Loader, Fabric API, Flashback, RyansRenderingKit
+> Requires: Minecraft 26.2, Fabric Loader, Fabric API, Flashback, RyansRenderingKit
 >
 > Compatible with: Sodium, Iris
 

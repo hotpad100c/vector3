@@ -2,8 +2,8 @@ package ml.mypals.vectorthree.mc.shape.area;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.PrimitiveTopology;
 
 
 final class AreaGpuMesh {

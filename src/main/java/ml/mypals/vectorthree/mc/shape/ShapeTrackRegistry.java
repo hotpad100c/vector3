@@ -6,7 +6,12 @@ import ml.mypals.vectorthree.core.shape.WireframeSettings;
 
 import ml.mypals.vectorthree.core.port.Ports;
 import ml.mypals.vectorthree.mc.compat.IrisCompat;
-import com.mojang.renderpearl.api.pipeline.*;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import ml.mypals.ryansrenderingkit.RyansRenderingKit;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManager;
 import ml.mypals.ryansrenderingkit.builderManager.BuilderManagers;

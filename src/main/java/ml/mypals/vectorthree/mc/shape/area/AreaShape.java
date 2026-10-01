@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.mc.shape.area;
 
+import ml.mypals.vectorthree.mc.render.PreparedDraws;
 import ml.mypals.vectorthree.core.shape.area.AreaOptions;
 
 import ml.mypals.vectorthree.core.Mod;
@@ -7,8 +8,8 @@ import ml.mypals.vectorthree.mc.compat.IrisCompat;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.systems.RenderPass;
 import ml.mypals.ryansrenderingkit.builders.vertexBuilders.VertexBuilder;
 import ml.mypals.ryansrenderingkit.shape.Shape;
 import ml.mypals.ryansrenderingkit.shape.basics.tags.EmptyMesh;
@@ -18,7 +19,6 @@ import ml.mypals.vectorthree.core.shape.point.ShapePoint;
 import ml.mypals.vectorthree.core.shape.ShapeState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.StagedVertexBuffer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
@@ -238,7 +238,7 @@ public class AreaShape extends Shape implements EmptyMesh {
                 RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
                 try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                         () -> "vector3_area_screen", target.getColorTextureView(), Optional.empty(),
-                        target.hasDepth() ? target.getDepthTextureView() : null, OptionalDouble.empty())) {
+                        target.useDepth ? target.getDepthTextureView() : null, OptionalDouble.empty())) {
                     RenderSystem.bindDefaultUniforms(pass);
                     drawOpaqueMeshes(pass);
                     drawTranslucentMesh(pass);
@@ -357,15 +357,11 @@ public class AreaShape extends Shape implements EmptyMesh {
 
     private static void reserveSequentialIndices(AreaGpuMesh mesh) {
         if (mesh.isEmpty()) return;
-        var sequentialIndices = RenderSystem.getSequentialBuffer(mesh.topology());
-        sequentialIndices.requestIndexCount(mesh.indexCount());
-        sequentialIndices.resizeToRequestedIndexCount();
+        PreparedDraws.reserveSequential(mesh.topology(), mesh.indexCount());
     }
 
     protected static PreparedRenderType withTransform(RenderType renderType, GpuBufferSlice transform) {
-        PreparedRenderType prepared = renderType.prepare();
-        return new PreparedRenderType(prepared.name(), prepared.pipeline(), prepared.oitPipelineSet(), transform,
-                prepared.scissorState(), prepared.textures());
+        return PreparedDraws.withTransform(renderType.prepare(), transform);
     }
 
     public static void drawPreparedOpaque(RenderPass pass) {
@@ -386,13 +382,25 @@ public class AreaShape extends Shape implements EmptyMesh {
 
     public static void drawPreparedTranslucent() {
         if (PREPARED.isEmpty()) return;
-        RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
-        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                () -> "vector3_area", target.getColorTextureView(), Optional.empty(),
-                target.hasDepth() ? target.getDepthTextureView() : null, OptionalDouble.empty())) {
-            RenderSystem.bindDefaultUniforms(pass);
+        try (RenderPass pass = mainPass("vector3_area")) {
             drawPreparedTranslucent(pass);
         }
+    }
+
+    public static void drawPreparedOpaque() {
+        if (PREPARED.stream().allMatch(area -> area.frameTranslucent)) return;
+        try (RenderPass pass = mainPass("vector3_area_opaque")) {
+            drawPreparedOpaque(pass);
+        }
+    }
+
+    private static RenderPass mainPass(String label) {
+        RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+        RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                () -> label, target.getColorTextureView(), Optional.empty(),
+                target.useDepth ? target.getDepthTextureView() : null, OptionalDouble.empty());
+        RenderSystem.bindDefaultUniforms(pass);
+        return pass;
     }
 
     private void drawSafely(Runnable draw) {
@@ -407,9 +415,8 @@ public class AreaShape extends Shape implements EmptyMesh {
 
     protected void drawTranslucentMesh(RenderPass pass) {
         if (frameTranslucentMesh == null) return;
-        frameTranslucentMesh.drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(translucentMesh.vertexBuffer(),
-                translucentMesh.indexBuffer(), translucentMesh.indexType(), 0, 0, translucentMesh.indexCount(),
-                translucentMesh.topology()), pass);
+        PreparedDraws.draw(pass, frameTranslucentMesh, translucentMesh.vertexBuffer(), translucentMesh.indexBuffer(),
+                translucentMesh.indexType(), 0, 0, translucentMesh.indexCount(), translucentMesh.topology());
     }
 
     protected void drawOpaqueMeshes(RenderPass pass) {
@@ -418,8 +425,7 @@ public class AreaShape extends Shape implements EmptyMesh {
     }
 
     private static void drawSequential(RenderPass pass, PreparedRenderType prepared, AreaGpuMesh mesh) {
-        prepared.drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(mesh.vertexBuffer(), null,
-                RenderSystem.getSequentialBuffer(mesh.topology()).type(), 0, 0, mesh.indexCount(), mesh.topology()), pass);
+        PreparedDraws.draw(pass, prepared, mesh.vertexBuffer(), null, null, 0, 0, mesh.indexCount(), mesh.topology());
     }
 
     /** Whether this shape has outline content to contribute this frame; checked by AreaOutlineSubmitMixin. */

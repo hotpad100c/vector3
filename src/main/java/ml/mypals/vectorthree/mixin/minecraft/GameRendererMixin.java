@@ -5,6 +5,7 @@ import ml.mypals.vectorthree.mc.camera.EditorOverlays;
 import ml.mypals.vectorthree.mc.camera.PreviewPass;
 import com.llamalad7.mixinextras.sugar.Local;
 import ml.mypals.vectorthree.mc.vfx.ScreenVFXRenderer;
+import ml.mypals.vectorthree.mc.render.KitFeatureDispatcher;
 import ml.mypals.vectorthree.mc.render.ScreenLayer;
 import ml.mypals.vectorthree.mc.shape.particle.ParticleEmitters;
 import net.minecraft.client.renderer.GameRenderer;
@@ -29,8 +30,14 @@ public class GameRendererMixin {
         EditorOverlays.restoreAfterExport();
     }
 
-    @Inject(method = "renderLevel", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/GameRenderer;render3dHud(Lnet/minecraft/client/renderer/state/level/CameraRenderState;Lnet/minecraft/client/renderer/state/level/PlayerRenderState;Lnet/minecraft/client/renderer/state/OptionsRenderState;Z)V"))
+    @Inject(method = "render", at = @At("RETURN"))
+    private void vector3$endKitFeatureFrame(CallbackInfo ci) {
+        KitFeatureDispatcher.endFrame();
+    }
+
+    // Once the level is drawn, before the hand clears the depth.
+    @Inject(method = "renderLevel", at = @At(value = "INVOKE", shift = At.Shift.AFTER,
+            target = "Lnet/minecraft/client/renderer/LevelRenderer;render(Lcom/mojang/blaze3d/resource/GraphicsResourceAllocator;Lnet/minecraft/client/DeltaTracker;ZLnet/minecraft/client/renderer/state/level/CameraRenderState;Lorg/joml/Matrix4fc;Lcom/mojang/blaze3d/buffers/GpuBufferSlice;Lorg/joml/Vector4f;Z)V"))
     private void vector3$captureDepth(CallbackInfo ci, @Local Matrix4f projectionMatrix) {
         ScreenVFXRenderer.captureDepth(projectionMatrix);
     }

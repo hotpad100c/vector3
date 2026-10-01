@@ -1,5 +1,4 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D DistanceSampler;
 layout(std140) uniform LightSettings {
     vec4 LightPositionRadius;
@@ -13,8 +12,8 @@ layout(std140) uniform LightSettings {
     vec4 AreaRight;
     vec4 AreaUp;
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 float hashNoise(vec3 cell) {
     return fract(sin(dot(cell, vec3(127.1, 311.7, 74.7))) * 43758.5453);

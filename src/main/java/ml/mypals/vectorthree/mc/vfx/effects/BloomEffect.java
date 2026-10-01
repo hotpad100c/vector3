@@ -6,13 +6,13 @@ import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
-import com.mojang.renderpearl.api.pipeline.BlendFunction;
-import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.pipeline.UniformType;
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
 import ml.mypals.vectorthree.core.fade.effects.ColorGradingSettings.Rgb;
 import org.lwjgl.system.MemoryStack;
 
@@ -36,9 +36,9 @@ public final class BloomEffect {
                 1f / main.width, 1f / main.height, value.highQuality() ? 1 : 0, 0);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_bloom_prefilter", down[0].getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(prefilterPipeline));
+            pass.setPipeline(prefilterPipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", main.getColorTextureView(), ScreenPass.linear());
+            pass.bindTexture("InSampler", main.getColorTextureView(), ScreenPass.linear());
             pass.setUniform("BloomPrefilter", prefilterSettings);
             pass.draw(3, 1, 0, 0);
         }
@@ -47,9 +47,9 @@ public final class BloomEffect {
             write(steps[level], 1f / source.width, 1f / source.height, value.highQuality() ? 1 : 0, 0);
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                     () -> "vector3_bloom_down", down[level].getColorTextureView(), Optional.empty())) {
-                pass.setPipeline(RenderSystem.getCompiledPipeline(downPipeline));
+                pass.setPipeline(downPipeline);
                 RenderSystem.bindDefaultUniforms(pass);
-                pass.setUniform("InSampler", source.getColorTextureView(), ScreenPass.linear());
+                pass.bindTexture("InSampler", source.getColorTextureView(), ScreenPass.linear());
                 pass.setUniform("BloomStep", steps[level]);
                 pass.draw(3, 1, 0, 0);
             }
@@ -60,10 +60,10 @@ public final class BloomEffect {
             write(steps[LEVELS + level], 1f / wide.width, 1f / wide.height, scatter, 0);
             try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                     () -> "vector3_bloom_up", up[level].getColorTextureView(), Optional.empty())) {
-                pass.setPipeline(RenderSystem.getCompiledPipeline(upPipeline));
+                pass.setPipeline(upPipeline);
                 RenderSystem.bindDefaultUniforms(pass);
-                pass.setUniform("PrevSampler", wide.getColorTextureView(), ScreenPass.linear());
-                pass.setUniform("CurrentSampler", down[level].getColorTextureView(), ScreenPass.linear());
+                pass.bindTexture("PrevSampler", wide.getColorTextureView(), ScreenPass.linear());
+                pass.bindTexture("CurrentSampler", down[level].getColorTextureView(), ScreenPass.linear());
                 pass.setUniform("BloomStep", steps[LEVELS + level]);
                 pass.draw(3, 1, 0, 0);
             }
@@ -77,10 +77,10 @@ public final class BloomEffect {
                 tint.b() * value.intensity(), hasDirt ? value.dirtIntensity() : 0);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
                 () -> "vector3_bloom_composite", main.getColorTextureView(), Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(compositePipeline));
+            pass.setPipeline(compositePipeline);
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("InSampler", wide.getColorTextureView(), ScreenPass.linear());
-            pass.setUniform("DirtSampler", dirtView, ScreenPass.linear());
+            pass.bindTexture("InSampler", wide.getColorTextureView(), ScreenPass.linear());
+            pass.bindTexture("DirtSampler", dirtView, ScreenPass.linear());
             pass.setUniform("BloomComposite", compositeSettings);
             pass.draw(3, 1, 0, 0);
         }
@@ -104,18 +104,18 @@ public final class BloomEffect {
     private static void ensure(RenderTarget main) {
         if (prefilterPipeline == null) {
             prefilterPipeline = ScreenPass.pipeline("bloom_prefilter", BindGroupLayout.builder()
-                    .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withSampler("InSampler")
                     .withUniform("BloomPrefilter", UniformType.UNIFORM_BUFFER).build(), FORMAT, null);
             downPipeline = ScreenPass.pipeline("bloom_down", BindGroupLayout.builder()
-                    .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withSampler("InSampler")
                     .withUniform("BloomStep", UniformType.UNIFORM_BUFFER).build(), FORMAT, null);
             upPipeline = ScreenPass.pipeline("bloom_up", BindGroupLayout.builder()
-                    .withUniform("PrevSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                    .withUniform("CurrentSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withSampler("PrevSampler")
+                    .withSampler("CurrentSampler")
                     .withUniform("BloomStep", UniformType.UNIFORM_BUFFER).build(), FORMAT, null);
             compositePipeline = ScreenPass.pipeline("bloom_composite", BindGroupLayout.builder()
-                    .withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
-                    .withUniform("DirtSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+                    .withSampler("InSampler")
+                    .withSampler("DirtSampler")
                     .withUniform("BloomComposite", UniformType.UNIFORM_BUFFER).build(),
                     GpuFormat.RGBA8_UNORM, BlendFunction.ADDITIVE);
             prefilterSettings = buffer("prefilter", 32);
@@ -125,8 +125,8 @@ public final class BloomEffect {
         for (int i = 0; i < LEVELS; i++) {
             int w = Math.max(1, main.width >> (i + 1)), h = Math.max(1, main.height >> (i + 1));
             if (down[i] == null) {
-                down[i] = new TextureTarget("vector3_bloom_down_" + i, w, h, FORMAT, null);
-                up[i] = new TextureTarget("vector3_bloom_up_" + i, w, h, FORMAT, null);
+                down[i] = new TextureTarget("vector3_bloom_down_" + i, w, h, false, FORMAT);
+                up[i] = new TextureTarget("vector3_bloom_up_" + i, w, h, false, FORMAT);
             } else if (down[i].width != w || down[i].height != h) {
                 down[i].resize(w, h);
                 up[i].resize(w, h);

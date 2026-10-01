@@ -1,8 +1,7 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 void main() {
     float sum = 0.0;
     for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) {

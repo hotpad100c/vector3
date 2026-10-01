@@ -1,5 +1,6 @@
 package ml.mypals.vectorthree.fb.camera;
 
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import com.moulberry.flashback.editor.SelectedKeyframes;
 import com.moulberry.flashback.editor.ui.ReplayUI;
 import com.moulberry.flashback.keyframe.Keyframe;
@@ -263,7 +264,7 @@ public final class MotionPaths {
         if (hovered != null) {
             ImGui.setTooltip(I18n.get("vector3.motion_path.tooltip", hovered.tick()));
             if (ImGui.isMouseClicked(1)) {
-                ReplayUI.imguiWindower.ungrab();
+                EditorInput.ungrab();
                 select(hovered);
             }
         }

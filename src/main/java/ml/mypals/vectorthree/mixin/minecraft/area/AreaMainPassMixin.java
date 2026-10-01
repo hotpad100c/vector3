@@ -1,13 +1,10 @@
 package ml.mypals.vectorthree.mixin.minecraft.area;
 
-import com.mojang.renderpearl.api.commands.RenderPass;
 import ml.mypals.vectorthree.mc.shape.ShapeTrackRegistry;
 import ml.mypals.vectorthree.mc.shape.area.AreaShape;
 import ml.mypals.vectorthree.mc.shape.model.TexturedObjShape;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
-import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -31,25 +28,18 @@ public class AreaMainPassMixin {
         }
     }
 
-    @Inject(method = "executeSolid", at = @At(value = "INVOKE", shift = At.Shift.AFTER,
-            target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher$PreparedFrame;executeSolid(Lcom/mojang/renderpearl/api/commands/RenderPass;)V"))
-    private void vector3$drawAreaOpaque(ChunkSectionsToRender chunks, FeatureRenderDispatcher.PreparedFrame frame,
-            RenderPass pass, CallbackInfo ci) {
-        AreaShape.drawPreparedOpaque(pass);
-        TexturedObjShape.drawPreparedOpaque(pass);
+    // The main frame pass (addMainPass's executes lambda): opaque after the solid features, translucent just before
+    // the translucent terrain, where vanilla draws its own translucent features.
+    @Inject(method = "lambda$addMainPass$0", at = @At(value = "INVOKE", shift = At.Shift.AFTER,
+            target = "Lnet/minecraft/client/renderer/feature/FeatureRenderDispatcher$PreparedFrame;executeSolid()V"))
+    private void vector3$drawAreaOpaque(CallbackInfo ci) {
+        AreaShape.drawPreparedOpaque();
+        TexturedObjShape.drawPreparedOpaque();
     }
 
-    @Inject(method = "executeClassicTransparency", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;renderGroup(Lnet/minecraft/client/renderer/chunk/ChunkSectionLayerGroup;Lcom/mojang/renderpearl/api/commands/RenderPass;Lcom/mojang/renderpearl/api/textures/GpuSampler;Lcom/mojang/renderpearl/api/textures/GpuTextureView;Z)V"))
-    private void vector3$drawAreaTranslucent(ChunkSectionsToRender chunks, FeatureRenderDispatcher.PreparedFrame frame,
-            RenderPass pass, CallbackInfo ci) {
-        AreaShape.drawPreparedTranslucent(pass);
-        TexturedObjShape.drawPreparedTranslucent(pass);
-    }
-
-    @Inject(method = "executeOit", at = @At("HEAD"))
-    private void vector3$drawAreaTranslucentOit(ChunkSectionsToRender chunks, FeatureRenderDispatcher.PreparedFrame frame,
-            CallbackInfo ci) {
+    @Inject(method = "lambda$addMainPass$0", at = @At(value = "INVOKE", ordinal = 1,
+            target = "Lnet/minecraft/client/renderer/chunk/ChunkSectionsToRender;renderGroup(Lnet/minecraft/client/renderer/chunk/ChunkSectionLayerGroup;Lcom/mojang/blaze3d/textures/GpuSampler;)V"))
+    private void vector3$drawAreaTranslucent(CallbackInfo ci) {
         AreaShape.drawPreparedTranslucent();
         TexturedObjShape.drawPreparedTranslucent();
     }

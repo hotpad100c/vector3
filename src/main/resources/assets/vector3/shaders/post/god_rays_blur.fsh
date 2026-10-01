@@ -1,12 +1,11 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 layout(std140) uniform GodRaysBlur {
     vec4 Ray; // length (share of the way to the sun), decay, samples, falloff
     vec4 Sun; // sun screen position, aspect ratio
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 float noise(vec2 p) {
     return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));

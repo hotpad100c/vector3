@@ -1,10 +1,9 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D SceneSampler;
 uniform sampler2D DistanceSampler;
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 void main() {
     ivec2 size = textureSize(InSampler, 0);
     vec2 pixel = texCoord * vec2(size) - 0.5;

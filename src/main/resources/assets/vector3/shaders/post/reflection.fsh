@@ -1,5 +1,4 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 uniform sampler2D DistanceSampler;
 uniform sampler2D MaterialSampler;
@@ -11,8 +10,8 @@ layout(std140) uniform ReflectionSettings {
     vec4 CameraUp;
     vec4 CameraForward;
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 vec3 viewPosition(vec2 uv, float distance) {
     vec2 ndc = uv * 2.0 - 1.0;

@@ -1,11 +1,10 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 uniform sampler2D InSampler;
 layout(std140) uniform BlurPass {
     vec4 Pass; // texel step along the blur axis, sigma, taps on each side
 };
-layout(location = 0) in vec2 texCoord;
-layout(location = 0) out vec4 fragColor;
+in vec2 texCoord;
+out vec4 fragColor;
 
 // One axis of a Gaussian; running it along x and then y gives the full 2D blur.
 void main() {

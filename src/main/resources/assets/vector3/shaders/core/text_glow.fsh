@@ -1,15 +1,14 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : require
 
-#include <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
 
 uniform sampler2D Sampler0;
 
-layout(location = 0) in vec2 texCoord0;
-layout(location = 1) in vec4 vertexColor;
-layout(location = 2) flat in float strength;
+in vec2 texCoord0;
+in vec4 vertexColor;
+flat in float strength;
 
-layout(location = 0) out vec4 fragColor;
+out vec4 fragColor;
 
 void main() {
 #ifdef GRAYSCALE

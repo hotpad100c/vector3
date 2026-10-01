@@ -1,6 +1,6 @@
 package ml.mypals.vectorthree.fb.multiedit;
 
-import com.moulberry.flashback.utils.InputHelper;
+import ml.mypals.vectorthree.fb.editor.EditorInput;
 import imgui.moulberry90.ImGui;
 import ml.mypals.vectorthree.fb.expression.ExpressionUi;
 import org.jetbrains.annotations.Nullable;
@@ -186,7 +186,7 @@ public final class MultiEditSession {
             Object before = WidgetValues.snapshot(container);
             boolean[] mixed = WidgetValues.mixed(key, before, s.captures);
             // Ctrl unlocks a mixed widget, and it stays unlocked while it is being edited, so Ctrl can be let go to type.
-            boolean locked = WidgetValues.any(mixed) && !InputHelper.isCtrlDownRaw() && !HELD.contains(s.scope + "|" + key)
+            boolean locked = WidgetValues.any(mixed) && !EditorInput.isCtrlDown() && !HELD.contains(s.scope + "|" + key)
                     || !s.shared && ExpressionUi.locks(key, before);
             if (locked) ImGui.beginDisabled();
             s.pending.push(new Pending(key, before, locked, mixed, kind, label, color));
