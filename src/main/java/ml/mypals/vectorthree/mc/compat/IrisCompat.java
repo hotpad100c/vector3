@@ -2,6 +2,7 @@ package ml.mypals.vectorthree.mc.compat;
 
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import net.fabricmc.loader.api.FabricLoader;
+import org.joml.Matrix4f;
 
 /**
  * The only way the rest of the mod reaches Iris. Every call checks {@link #LOADED} first, so IrisHooks
@@ -11,6 +12,19 @@ public final class IrisCompat {
     public static final boolean LOADED = FabricLoader.getInstance().isModLoaded("iris");
 
     public enum Program { ENTITIES_TRANSLUCENT, PARTICLES_TRANSLUCENT, LINES }
+
+    /** The Iris programs the shadow pass can draw our geometry with. */
+    public enum ShadowProgram { ENTITIES }
+
+    /**
+     * Draws one frame of custom geometry into Iris's shadow map. Called from Iris's shadow pass, after the opaque
+     * terrain: the matrices are the shadow pass's own, and anything drawn ends up in the shadow framebuffer.
+     */
+    @FunctionalInterface
+    public interface ObjShadowHook {
+        void renderShadow(Matrix4f modelView, Matrix4f projection, double cameraX, double cameraY, double cameraZ,
+                float tickDelta);
+    }
 
     private IrisCompat() {}
 
@@ -29,6 +43,16 @@ public final class IrisCompat {
 
     public static void assignPipeline(RenderPipeline pipeline, Program program) {
         if (LOADED) IrisHooks.assignPipeline(pipeline, program);
+    }
+
+    /** Tells Iris which of its shadow programs draws {@code pipeline} during the shadow pass. */
+    public static void assignPipelineShadow(RenderPipeline pipeline, ShadowProgram program) {
+        if (LOADED) IrisHooks.assignPipelineShadow(pipeline, program);
+    }
+
+    /** Registers a draw hook for the shadow pass; only ever fires while a pack is in use. */
+    public static void registerShadowCallback(ObjShadowHook hook) {
+        if (LOADED) IrisHooks.registerShadowRenderCallback(hook);
     }
 
     public static boolean bypass() {

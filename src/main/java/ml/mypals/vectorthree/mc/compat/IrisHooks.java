@@ -5,6 +5,8 @@ import ml.mypals.vectorthree.mc.shape.model.ObjPbrTexture;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.api.v0.IrisApi;
 import net.irisshaders.iris.api.v0.IrisProgram;
+import net.irisshaders.iris.api.v0.IrisShadowProgram;
+import net.irisshaders.iris.api.v0.IrisShadowRenderCallback;
 import net.irisshaders.iris.pbr.loader.PBRTextureLoaderRegistry;
 import net.irisshaders.iris.vertices.ImmediateState;
 
@@ -37,6 +39,24 @@ final class IrisHooks {
             case PARTICLES_TRANSLUCENT -> IrisProgram.PARTICLES_TRANSLUCENT;
             case LINES -> IrisProgram.LINES;
         });
+    }
+
+    // Iris 0.4 introduced the shadow pass API; on anything older these are no-ops, so the shape simply casts no
+    // shadow instead of the mod failing to load.
+    static void assignPipelineShadow(RenderPipeline pipeline, IrisCompat.ShadowProgram program) {
+        if (IrisApi.getInstance().getMinorApiRevision() < 4) return;
+        IrisApi.getInstance().assignPipelineShadow(pipeline, switch (program) {
+            case ENTITIES -> IrisShadowProgram.SHADOW_ENTITIES;
+        });
+    }
+
+    // The callback is invoked from Iris's shadow pass, so the wrapper only forwards; the hook itself is kept free
+    // of Iris types because IrisCompat may be loaded without Iris.
+    static void registerShadowRenderCallback(IrisCompat.ObjShadowHook hook) {
+        if (IrisApi.getInstance().getMinorApiRevision() < 4) return;
+        IrisApi.getInstance().registerShadowRenderCallback(
+                (modelView, projection, cameraX, cameraY, cameraZ, tickDelta) ->
+                        hook.renderShadow(modelView, projection, cameraX, cameraY, cameraZ, tickDelta));
     }
 
     static boolean bypass() { return ImmediateState.bypass; }
