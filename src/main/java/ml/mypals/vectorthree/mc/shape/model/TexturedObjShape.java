@@ -43,8 +43,11 @@ import net.minecraft.client.renderer.rendertype.RenderSetup;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -58,9 +61,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.OptionalDouble;
 
@@ -79,14 +84,36 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     public static final String LIGHTING = "vector3:obj_lighting";
     /** Pivot overrides for posing: {@code part=x,y,z;part=x,y,z}. */
     public static final String PIVOTS = "vector3:obj_pivots";
+    /** Per-part texture overrides, a path or empty: {@code part=path;part=path}. */
+    public static final String PART_TEXTURES = "vector3:obj_part_textures";
+    /** Per-part normal map overrides, a path or empty: {@code part=path;part=path}. */
+    public static final String PART_NORMALS = "vector3:obj_part_normals";
+    /** Per-part specular map overrides, a path or empty: {@code part=path;part=path}. */
+    public static final String PART_SPECULARS = "vector3:obj_part_speculars";
+    /** Per-part colour tints, ARGB ints: {@code part=argb;part=argb}. */
+    public static final String PART_COLORS = "vector3:obj_part_colors";
+    /** Hidden parts only, {@code false} being hidden: {@code part=false;part=false}. */
+    public static final String PART_VISIBLE = "vector3:obj_part_visible";
     private static final String DEFAULT_MODEL = "ryansrenderingkit:models/monkey.obj";
     private static final Identifier WHITE = Mod.id("obj/white");
     private record TextureKey(ObjModel.TextureRef texture, @Nullable ObjModel.TextureRef normal,
             @Nullable ObjModel.TextureRef specular) {}
 
+    /** A part's resolved overrides: the maps to swap in (null keeps the range's own) and the colour to multiply. */
+    private record PartOverride(@Nullable ObjModel.TextureRef texture, @Nullable ObjModel.TextureRef normal,
+            @Nullable ObjModel.TextureRef specular, float red, float green, float blue, float alpha) {
+        static final PartOverride NONE = new PartOverride(null, null, null, 1, 1, 1, 1);
+
+        boolean empty() {
+            return texture == null && normal == null && specular == null
+                    && red == 1 && green == 1 && blue == 1 && alpha == 1;
+        }
+    }
+
     private static final Map<TextureKey, Identifier> TEXTURES = new HashMap<>();
     private static final List<TexturedObjShape> PREPARED = new ArrayList<>();
     private static RenderPipeline entityPipeline, entitySeeThroughPipeline;
+    private static RenderPipeline shadowEntityPipeline;
     private static boolean whiteLoaded;
 
     public enum Mode {
@@ -111,6 +138,13 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     private final boolean lighting;
     private final String shapeId;
     private Map<String, Vector3f> pivots;
+    private Map<String, String> partTextures = Map.of();
+    private Map<String, String> partNormals = Map.of();
+    private Map<String, String> partSpeculars = Map.of();
+    private Map<String, Integer> partColors = Map.of();
+    private Set<String> hiddenParts = Set.of();
+    // Resolved once per part: Material.of and the _n / _s companions check the disk, which no frame should repeat.
+    private final Map<Integer, PartOverride> partOverrides = new HashMap<>();
     private ObjModel model;
     private GpuBuffer gpuVertices;
     private GpuBuffer gpuIndices;
@@ -118,7 +152,14 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     private Boolean entityExtended;
     private boolean failed;
     private boolean frameEntity;
+    // The packed light the entity mesh was last built with. The format carries one light value per vertex, so a
+    // shape whose position's light changed has to be rebuilt; the initial value is the full-bright constant the
+    // mesh used to be baked with.
+    private int bakedLight = 0xF000F0;
     private final List<FrameDraw> frameDraws = new ArrayList<>();
+    // The shadow pass runs before the main pass, from the sun: its frames are a second set, never a reuse of the
+    // main pass's (which hold the main camera's matrices and the entity pipelines).
+    private final List<FrameDraw> shadowDraws = new ArrayList<>();
 
     public static Mode mode(ShapeState state) {
         return Mode.of(state.blockProperties() == null ? null : state.blockProperties().get(MODE));
@@ -157,8 +198,145 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         return text.toString();
     }
 
+    public static Map<String, String> partTextures(@Nullable Map<String, String> properties) {
+        return partPaths(properties, PART_TEXTURES);
+    }
+
+    public static Map<String, String> partNormals(@Nullable Map<String, String> properties) {
+        return partPaths(properties, PART_NORMALS);
+    }
+
+    public static Map<String, String> partSpeculars(@Nullable Map<String, String> properties) {
+        return partPaths(properties, PART_SPECULARS);
+    }
+
+    /** The part's ARGB tint, or the empty map when none is set. Entries that aren't integers are dropped. */
+    public static Map<String, Integer> partColors(@Nullable Map<String, String> properties) {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        partPaths(properties, PART_COLORS).forEach((part, color) -> {
+            try {
+                result.put(part, (int) Long.parseLong(color.trim()));
+            } catch (NumberFormatException ignored) {
+                // A malformed entry only loses that colour.
+            }
+        });
+        return result;
+    }
+
+    /** Parts the model hides; the format only stores them, so anything missing is visible. */
+    public static Set<String> hiddenParts(@Nullable Map<String, String> properties) {
+        Set<String> result = new LinkedHashSet<>();
+        partPaths(properties, PART_VISIBLE).forEach((part, visible) -> {
+            if ("false".equalsIgnoreCase(visible.trim())) result.add(part);
+        });
+        return result;
+    }
+
+    public static String encodePartTextures(Map<String, String> map) {
+        return encodeParts(map);
+    }
+
+    public static String encodePartNormals(Map<String, String> map) {
+        return encodeParts(map);
+    }
+
+    public static String encodePartSpeculars(Map<String, String> map) {
+        return encodeParts(map);
+    }
+
+    public static String encodePartColors(Map<String, Integer> map) {
+        return encodeParts(map);
+    }
+
+    public static String encodeHiddenParts(Set<String> hidden) {
+        StringBuilder text = new StringBuilder();
+        for (String part : hidden) text.append(text.isEmpty() ? "" : ";").append(part).append("=false");
+        return text.toString();
+    }
+
+    // The "part=value" text the live per-part properties share; the value may hold '=' itself.
+    private static Map<String, String> partPaths(@Nullable Map<String, String> properties, String key) {
+        Map<String, String> result = new LinkedHashMap<>();
+        String text = properties == null ? null : properties.get(key);
+        if (text == null) return result;
+        for (String entry : text.split(";")) {
+            int equals = entry.lastIndexOf('=');
+            if (equals < 0) continue;
+            result.put(entry.substring(0, equals), entry.substring(equals + 1));
+        }
+        return result;
+    }
+
+    private static String encodeParts(Map<String, ?> entries) {
+        StringBuilder text = new StringBuilder();
+        entries.forEach((part, value) -> text.append(text.isEmpty() ? "" : ";").append(part).append('=')
+                .append(value));
+        return text.toString();
+    }
+
     public void setPivots(Map<String, Vector3f> pivots) {
         this.pivots = pivots;
+    }
+
+    /** The live per-part overrides, applied without rebuilding the shape; drops the resolved cache. */
+    public void setPartConfig(Map<String, String> textures, Map<String, String> normals,
+            Map<String, String> speculars, Map<String, Integer> colors, Set<String> hidden) {
+        // A state is re-applied many times over with the same values; only a real change is worth another look at
+        // the disk. The copies keep the cache honest if a caller mutates a map it handed over.
+        Map<String, String> nextTextures = copy(textures);
+        Map<String, String> nextNormals = copy(normals);
+        Map<String, String> nextSpeculars = copy(speculars);
+        Map<String, Integer> nextColors = copy(colors);
+        Set<String> nextHidden = hidden == null ? Set.of() : new LinkedHashSet<>(hidden);
+        if (nextTextures.equals(partTextures) && nextNormals.equals(partNormals)
+                && nextSpeculars.equals(partSpeculars) && nextColors.equals(partColors)
+                && nextHidden.equals(hiddenParts)) return;
+        this.partTextures = nextTextures;
+        this.partNormals = nextNormals;
+        this.partSpeculars = nextSpeculars;
+        this.partColors = nextColors;
+        this.hiddenParts = nextHidden;
+        this.partOverrides.clear();
+    }
+
+    private static <V> Map<String, V> copy(@Nullable Map<String, V> map) {
+        return map == null ? Map.of() : new LinkedHashMap<>(map);
+    }
+
+    /**
+     * Whether the model's looks come from a map rather than from the shape's colour: the MTL's own materials, or a
+     * texture picked in the editor. The colour stays in the shape's state (the editor keeps it for the solid mode),
+     * but it no longer takes part in rendering, so anything that reads it must read {@link #tint()} instead.
+     */
+    private boolean textured() {
+        return mode == Mode.MATERIALS
+                || (mode == Mode.TEXTURE && texturePath != null && !texturePath.isBlank());
+    }
+
+    /**
+     * The colour a draw multiplies its material by: none in the textured modes, where a leftover colour would tint
+     * the texture the user picked, and the shape's own colour everywhere else.
+     */
+    private Color tint() {
+        return textured() ? Color.WHITE : baseColor;
+    }
+
+    /**
+     * The packed light of the shape's position in the world, block light and sky light together, read the way vanilla
+     * reads it for an entity (see EntityRenderer#getPackedLightCoords). Sampling the world rather than handing the
+     * mesh the full-bright constant is what lets a model go dark at night. Outside a level there is nothing to
+     * sample, so the old full-bright value stands.
+     */
+    private int worldLight() {
+        var level = Minecraft.getInstance().level;
+        if (level == null) return 0xF000F0;
+        // The pivot is where the model sits; its origin is sampled rather than a corner of its bounding box, the same
+        // choice the vanilla entity path makes with the entity's own position.
+        Vec3 pos = transformer.getShapeWorldPivot(true);
+        BlockPos blockPos = BlockPos.containing(pos.x, pos.y, pos.z);
+        // Block light first: LightCoordsUtil#pack takes (block, sky).
+        return LightCoordsUtil.pack(level.getBrightness(LightLayer.BLOCK, blockPos),
+                level.getBrightness(LightLayer.SKY, blockPos));
     }
 
     public List<String> partNames() {
@@ -189,6 +367,11 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         this.lighting = lighting;
         this.shapeId = shapeId;
         this.pivots = pivots(properties);
+        this.partTextures = partTextures(properties);
+        this.partNormals = partNormals(properties);
+        this.partSpeculars = partSpeculars(properties);
+        this.partColors = partColors(properties);
+        this.hiddenParts = hiddenParts(properties);
         String source = modelPath == null || modelPath.isBlank() ? DEFAULT_MODEL : modelPath;
         try {
             model = ObjModel.load(source);
@@ -265,7 +448,7 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
                     Vector3f normal = model.normal(corner);
                     Vector3f n = normal != null ? normal : face;
                     builder.addVertex((float) p.x, (float) p.y, (float) p.z).setColor(0xFFFFFFFF).setUv(uv[0], uv[1])
-                            .setOverlay(OverlayTexture.NO_OVERLAY).setLight(0xF000F0).setNormal(n.x, n.y, n.z);
+                            .setOverlay(OverlayTexture.NO_OVERLAY).setLight(bakedLight).setNormal(n.x, n.y, n.z);
                 }
             }
             MeshData mesh = builder.build();
@@ -316,13 +499,25 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     /** Called from LevelRenderer#submitFeatures, before any render pass is open. */
     public void submitFrame() {
         frameDraws.clear();
-        if (failed || gpuVertices == null || !enabled() || baseColor.getAlpha() == 0 || onScreenLayer()) return;
+        if (failed || gpuVertices == null || !enabled() || tint().getAlpha() == 0 || onScreenLayer()) return;
         try {
-            // Unless the shape bypasses shaders (ShapeState#bypassShaders), a shader pack shades it.
-            frameEntity = IrisBypassTarget.isActive()
-                    && !Boolean.TRUE.equals(customData.get(IrisBypassTarget.SHAPE_FLAG));
-            if (frameEntity && (entityVertices == null || entityExtended != irisExtendsNow())) buildEntityMesh();
+            // Unless the shape bypasses shaders (ShapeState#bypassShaders), a shader pack shades it, which goes
+            // through Iris's entity program. Without a pack, "lighting" asks for that same entity path: 26.3's
+            // entity shader reads the lightmap, so the mesh is lit by the light where the shape sits and goes dark
+            // at night, where obj_lit would keep its fixed direction lit. No pack means irisExtendsNow() is false
+            // and IrisCompat.assignPipeline is a no-op, so the entity render type reaches the vanilla entity shader
+            // unchanged; nothing else has to adapt for this path.
+            frameEntity = (IrisBypassTarget.isActive()
+                    && !Boolean.TRUE.equals(customData.get(IrisBypassTarget.SHAPE_FLAG)))
+                    || (!IrisCompat.isPackInUse() && lighting);
             if (frameEntity) {
+                // One light value covers the whole mesh, so a shape whose position's light changed is rebuilt; the
+                // extended flag covers Iris widening the format when a pack is enabled.
+                int light = worldLight();
+                if (entityVertices == null || entityExtended != irisExtendsNow() || light != bakedLight) {
+                    bakedLight = light;
+                    buildEntityMesh();
+                }
                 if (entityVertices == null) return;
                 var sequential = RenderSystem.getSequentialBuffer(PrimitiveTopology.TRIANGLES);
                 sequential.requestIndexCount(model.corners.size());
@@ -343,14 +538,98 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
         Matrix4f pose = new Matrix4f(poseStack.last().pose());
         Matrix4f[] world = partMatrices(pose, publishFrames);
         ObjModel.Material chosen = mode == Mode.TEXTURE ? chosenMaterial() : ObjModel.Material.DEFAULT;
-        if (world == null && mode != Mode.MATERIALS) {
+        // One draw for the whole mesh is only right while no part changes what the ranges would use.
+        if (world == null && mode != Mode.MATERIALS && noPartOverrides() && hiddenParts.isEmpty()) {
             addDraw(new Matrix4f(base).mul(pose), pose, chosen, 0, model.corners.size());
             return;
         }
         for (ObjModel.Range range : model.ranges) {
+            String part = partName(range.part());
+            if (part != null && hiddenParts.contains(part)) continue;
             Matrix4f partPose = world == null ? pose : new Matrix4f(pose).mul(world[range.part()]);
-            addDraw(new Matrix4f(base).mul(partPose), partPose, mode == Mode.MATERIALS ? range.material() : chosen,
-                    range.first(), range.count());
+            ObjModel.Material material = mode == Mode.MATERIALS ? range.material() : chosen;
+            addDraw(new Matrix4f(base).mul(partPose), partPose, partMaterial(material, range.part()), range.first(),
+                    range.count());
+        }
+    }
+
+    private boolean noPartOverrides() {
+        return partTextures.isEmpty() && partNormals.isEmpty() && partSpeculars.isEmpty() && partColors.isEmpty();
+    }
+
+    private @Nullable String partName(int part) {
+        return part >= 0 && part < model.parts.size() ? model.parts.get(part).name() : null;
+    }
+
+    // The range's own material with its part's overrides layered on. A per-part texture takes over the part's whole
+    // diffuse look: the MTL material's Kd colour and maps no longer tint or replace it, so the texture wins outright.
+    private ObjModel.Material partMaterial(ObjModel.Material base, int part) {
+        PartOverride override = partOverride(part);
+        if (override.empty()) return base;
+        boolean maps = mode != Mode.SOLID;
+        if (maps && override.texture() != null) {
+            return new ObjModel.Material(base.name(), override.red(), override.green(), override.blue(),
+                    base.alpha() * override.alpha(), override.texture(), override.normal(), override.specular());
+        }
+        return new ObjModel.Material(base.name(), base.red() * override.red(), base.green() * override.green(),
+                base.blue() * override.blue(), base.alpha() * override.alpha(), base.texture(),
+                maps && override.normal() != null ? override.normal() : base.normal(),
+                maps && override.specular() != null ? override.specular() : base.specular());
+    }
+
+    // Cached per part index: the same part serves several ranges, and resolving a path reads the disk.
+    private PartOverride partOverride(int part) {
+        PartOverride cached = partOverrides.get(part);
+        if (cached != null) return cached;
+        String name = partName(part);
+        PartOverride override = name == null ? PartOverride.NONE : resolveOverride(name);
+        partOverrides.put(part, override);
+        return override;
+    }
+
+    private PartOverride resolveOverride(String part) {
+        ObjModel.TextureRef texture = null, normal = null, specular = null;
+        String path = partTextures.get(part);
+        if (path != null && !path.isBlank()) {
+            ObjModel.TextureRef ref = textureRef(path);
+            if (ref != null) {
+                ObjModel.Material material = ObjModel.Material.of(ref);
+                texture = material.texture();
+                normal = material.normal();
+                specular = material.specular();
+            }
+        }
+        String normalPath = partNormals.get(part);
+        if (normalPath != null && !normalPath.isBlank()) {
+            ObjModel.TextureRef ref = textureRef(normalPath);
+            if (ref != null) normal = ref;
+        }
+        String specularPath = partSpeculars.get(part);
+        if (specularPath != null && !specularPath.isBlank()) {
+            ObjModel.TextureRef ref = textureRef(specularPath);
+            if (ref != null) specular = ref;
+        }
+        float red = 1, green = 1, blue = 1, alpha = 1;
+        Integer color = partColors.get(part);
+        if (color != null) {
+            red = ((color >>> 16) & 255) / 255f;
+            green = ((color >>> 8) & 255) / 255f;
+            blue = (color & 255) / 255f;
+            alpha = ((color >>> 24) & 255) / 255f;
+        }
+        PartOverride override = new PartOverride(texture, normal, specular, red, green, blue, alpha);
+        return override.empty() ? PartOverride.NONE : override;
+    }
+
+    // A path from the editor, made absolute against the game directory the way the shape's own texture is.
+    private static @Nullable ObjModel.TextureRef textureRef(String path) {
+        try {
+            Path file = Path.of(path);
+            if (!file.isAbsolute()) file = Minecraft.getInstance().gameDirectory.toPath().resolve(file);
+            return new ObjModel.TextureRef(file.toAbsolutePath().normalize(), null);
+        } catch (RuntimeException ignored) {
+            // Not a usable path; the part keeps the texture it would have had.
+            return null;
         }
     }
 
@@ -419,7 +698,9 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     // On the UI layer the mesh skips the level's main pass and is drawn here, with the UI pass's ortho projection.
     private void drawOnScreen() {
         frameDraws.clear();
-        if (failed || gpuVertices == null || baseColor.getAlpha() == 0) return;
+        // tint(), not baseColor: in the textured modes the colour no longer takes part, so an invisible leftover
+        // colour must not hide a shape the main pass still draws.
+        if (failed || gpuVertices == null || tint().getAlpha() == 0) return;
         try {
             frameEntity = false;
             prepareDraws(ScreenLayer.basePose(), false);
@@ -440,12 +721,16 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     }
 
     // core/obj_lit reads the shape's own transform from TextureMat to light faces in world orientation. It is never
-    // used while a shader pack is loaded, even when the shape bypasses it: the pack does the lighting then.
+    // used while a shader pack is loaded, even when the shape bypasses it: the pack does the lighting then. In the
+    // level's main pass "lighting" now takes the entity path (see submitFrame), so lit stays false there and obj_lit
+    // is no longer selected; the UI layer (drawOnScreen) still draws through it when lighting is on without a pack,
+    // so the branch stays as it was.
     private void addDraw(Matrix4f modelView, Matrix4f pose, ObjModel.Material material, int first, int count) {
         float inverse = 1f / 255f;
-        Vector4f color = new Vector4f(baseColor.getRed() * inverse * material.red(),
-                baseColor.getGreen() * inverse * material.green(), baseColor.getBlue() * inverse * material.blue(),
-                baseColor.getAlpha() * inverse * material.alpha());
+        Color base = tint();
+        Vector4f color = new Vector4f(base.getRed() * inverse * material.red(),
+                base.getGreen() * inverse * material.green(), base.getBlue() * inverse * material.blue(),
+                base.getAlpha() * inverse * material.alpha());
         if (color.w <= 0) return;
         boolean lit = lighting && !frameEntity && !IrisCompat.isPackInUse();
         GpuBufferSlice transform = RenderSystem.getDynamicUniforms().writeTransform(modelView, color, new Vector3f(),
@@ -523,6 +808,167 @@ public final class TexturedObjShape extends ObjModelShape implements EmptyMesh {
     // Same test AreaShape uses: whether Iris would widen an entity-format buffer built right now.
     private static boolean irisExtendsNow() {
         return IrisCompat.isPackInUse() && IrisCompat.isRenderingLevel() && !IrisCompat.skipExtension();
+    }
+
+    // The shadow pass matches a pipeline to a program by its vertex format and defines, so this is the entity
+    // format with the alpha cutout entities use; Iris then draws it with the pack's shadow_entities program. The
+    // shadow pass ignores the target a pass was made with, so the geometry lands in the shadow map either way.
+    private static RenderPipeline shadowPipeline() {
+        if (shadowEntityPipeline == null) {
+            shadowEntityPipeline = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.ENTITY_SNIPPET)
+                    .withLocation(Mod.id("pipeline/obj_shadow"))
+                    .withShaderDefine("ALPHA_CUTOUT", 0.1f)
+                    .withBindGroupLayout(BindGroupLayouts.SAMPLER1)
+                    .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+                    .withCull(false)
+                    .withDepthStencilState(DepthStencilState.DEFAULT)
+                    .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+                    .build());
+            // Iris rejects a second assignment to the same pipeline, so this has to stay behind the null check.
+            IrisCompat.assignPipelineShadow(shadowEntityPipeline, IrisCompat.ShadowProgram.ENTITIES);
+        }
+        return shadowEntityPipeline;
+    }
+
+    // The entity snippet's layout declares the lightmap and overlay samplers as well, and the vanilla entity path
+    // binds all three; the shadow program only samples the albedo, but leaving the others unbound would make this
+    // the one draw in the pass with a half-filled layout.
+    private static RenderType shadowType(Identifier texture) {
+        RenderSetup setup = RenderSetup.builder(shadowPipeline())
+                .withTexture("Sampler0", texture)
+                .useLightmap()
+                .useOverlay()
+                .createRenderSetup();
+        return RenderType.create("vector3_obj_shadow", setup);
+    }
+
+    // Iris renders the shadow map before the main pass, so nothing of the main pass's frames can be reused there.
+    // Without a pack there is no shadow pass (IrisCompat guards every call), and this never runs.
+    static {
+        if (IrisCompat.LOADED) {
+            shadowPipeline();
+            IrisCompat.registerShadowCallback(TexturedObjShape::submitShadowFrame);
+        }
+    }
+
+    // Iris calls this from inside its shadow pass, after the opaque terrain. Only the tick delta is of use: the
+    // pose is rebuilt from the shape's own state, and the pass's model view comes in as the base matrix.
+    private static void submitShadowFrame(Matrix4f modelView, Matrix4f projection, double cameraX, double cameraY,
+            double cameraZ, float tickDelta) {
+        if (!IrisCompat.isPackInUse() || PreviewPass.isRendering()) return;
+        try {
+            List<TexturedObjShape> shapes = new ArrayList<>();
+            int corners = 0;
+            for (String shapeId : ShapeTrackRegistry.shapeIds()) {
+                // Like the main pass, one broken shape only loses its own draws, never everyone's shadows.
+                TexturedObjShape shape = null;
+                try {
+                    if (!(ShapeTrackRegistry.shape(shapeId) instanceof TexturedObjShape found)) continue;
+                    shape = found;
+                    if (shape.failed || !shape.enabled() || shape.tint().getAlpha() == 0 || shape.onScreenLayer()
+                            || shape.model.corners.isEmpty()) continue;
+                    // The shadow program binds the same entity mesh the main pass uses for entities; it has to be
+                    // laid out for the widening Iris does to buffers built during a level render, which is the case
+                    // here too.
+                    if (shape.entityVertices == null || shape.entityExtended == null
+                            || shape.entityExtended != irisExtendsNow()) shape.buildEntityMesh();
+                    if (shape.entityVertices == null) continue;
+                    // Every draw restarts at index 0 of the shared sequential buffer, so it only has to hold the
+                    // largest mesh in the list; the meshes themselves are built before the pass opens.
+                    corners = Math.max(corners, shape.model.corners.size());
+                    shapes.add(shape);
+                } catch (Exception exception) {
+                    if (shape != null) {
+                        shape.failed = true;
+                        shape.shadowDraws.clear();
+                    }
+                    Mod.LOGGER.warn("OBJ draw failed, pausing it until the shape is rebuilt", exception);
+                }
+            }
+            if (shapes.isEmpty()) return;
+            // The shadow pass runs before submitFeatures, so the frame-boundary resize has not happened yet: the
+            // request is made and satisfied here, which is exactly what the main pass's reserve does.
+            var sequential = RenderSystem.getSequentialBuffer(PrimitiveTopology.TRIANGLES);
+            sequential.requestIndexCount(corners);
+            sequential.resizeToRequestedIndexCount();
+            Matrix4f base = new Matrix4f(modelView);
+            for (TexturedObjShape shape : shapes) {
+                try {
+                    shape.prepareShadowDraws(base, tickDelta);
+                } catch (Exception exception) {
+                    shape.failed = true;
+                    shape.shadowDraws.clear();
+                    Mod.LOGGER.warn("OBJ draw failed, pausing it until the shape is rebuilt", exception);
+                }
+            }
+            var target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+            try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+                    () -> "vector3_obj_shadow", target.getColorTextureView(), Optional.empty(),
+                    target.getDepthTextureView(), OptionalDouble.empty())) {
+                RenderSystem.bindDefaultUniforms(pass);
+                for (TexturedObjShape shape : shapes) shape.drawShadow(pass);
+            }
+        } catch (Exception exception) {
+            // Nothing may escape into Iris's shadow pass: a throw here would take the whole frame down.
+            Mod.LOGGER.warn("OBJ shadow draw failed", exception);
+        }
+    }
+
+    // The main pass's prepareDraws with the shadow pass's model view as the base. beforeDraw's camSpace flag asks
+    // for the shape's position relative to the camera, exactly the space both model view matrices expect: the
+    // vanilla entity path in this pass is posed the same way, inside the shadow model view.
+    private void prepareShadowDraws(Matrix4f base, float tickDelta) {
+        shadowDraws.clear();
+        PoseStack poseStack = new PoseStack();
+        beforeDraw(poseStack, tickDelta, true);
+        Matrix4f pose = new Matrix4f(poseStack.last().pose());
+        Matrix4f[] world = partMatrices(pose, false);
+        ObjModel.Material chosen = mode == Mode.TEXTURE ? chosenMaterial() : ObjModel.Material.DEFAULT;
+        if (world == null && mode != Mode.MATERIALS && noPartOverrides() && hiddenParts.isEmpty()) {
+            addShadowDraw(new Matrix4f(base).mul(pose), chosen, 0, model.corners.size());
+            return;
+        }
+        for (ObjModel.Range range : model.ranges) {
+            String part = partName(range.part());
+            if (part != null && hiddenParts.contains(part)) continue;
+            Matrix4f partPose = world == null ? pose : new Matrix4f(pose).mul(world[range.part()]);
+            ObjModel.Material material = mode == Mode.MATERIALS ? range.material() : chosen;
+            addShadowDraw(new Matrix4f(base).mul(partPose), partMaterial(material, range.part()), range.first(),
+                    range.count());
+        }
+    }
+
+    // addDraw with the shadow pipeline: the shadow program reads no texture matrix, and the shadow map is never
+    // sorted into a translucent and an opaque batch, so a draw is a draw.
+    private void addShadowDraw(Matrix4f modelView, ObjModel.Material material, int first, int count) {
+        float inverse = 1f / 255f;
+        Color base = tint();
+        Vector4f color = new Vector4f(base.getRed() * inverse * material.red(),
+                base.getGreen() * inverse * material.green(), base.getBlue() * inverse * material.blue(),
+                base.getAlpha() * inverse * material.alpha());
+        if (color.w <= 0) return;
+        GpuBufferSlice transform = RenderSystem.getDynamicUniforms().writeTransform(modelView, color, new Vector3f(),
+                new Matrix4f());
+        PreparedRenderType prepared = shadowType(texture(material)).prepare();
+        shadowDraws.add(new FrameDraw(new PreparedRenderType(prepared.name(), prepared.pipeline(),
+                prepared.oitPipelineSet(), transform, prepared.scissorState(), prepared.textures()),
+                first, count, false));
+    }
+
+    // The entity mesh is plain triangles in corner order, so it draws with the sequential index buffer, the way
+    // the main pass draws the same mesh through Iris's entity program.
+    private void drawShadow(RenderPass pass) {
+        if (failed) return;
+        try {
+            for (FrameDraw draw : shadowDraws) {
+                draw.type().drawFromBuffer(new StagedVertexBuffer.ExecuteInfo(entityVertices, null,
+                        RenderSystem.getSequentialBuffer(PrimitiveTopology.TRIANGLES).type(), 0, draw.first(),
+                        draw.count(), PrimitiveTopology.TRIANGLES), pass);
+            }
+        } catch (Exception exception) {
+            failed = true;
+            Mod.LOGGER.warn("OBJ draw failed, pausing it until the shape is rebuilt", exception);
+        }
     }
 
     // Vanilla's ENTITY_TRANSLUCENT, but triangles; Iris gives it its translucent entity program.

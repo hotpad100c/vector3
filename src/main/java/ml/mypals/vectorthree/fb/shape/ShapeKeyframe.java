@@ -274,6 +274,11 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         ImString objTexture = new ImString(objTexturePath == null ? "" : objTexturePath, 1024);
         ImBoolean objLighting = new ImBoolean(TexturedObjShape.lighting(state));
         Map<String, org.joml.Vector3f> objPivots = TexturedObjShape.pivots(state.blockProperties());
+        Map<String, String> objPartTextures = new LinkedHashMap<>(TexturedObjShape.partTextures(state.blockProperties()));
+        Map<String, String> objPartNormals = new LinkedHashMap<>(TexturedObjShape.partNormals(state.blockProperties()));
+        Map<String, String> objPartSpeculars = new LinkedHashMap<>(TexturedObjShape.partSpeculars(state.blockProperties()));
+        Map<String, Integer> objPartColors = new LinkedHashMap<>(TexturedObjShape.partColors(state.blockProperties()));
+        java.util.Set<String> objHiddenParts = new java.util.LinkedHashSet<>(TexturedObjShape.hiddenParts(state.blockProperties()));
         ImString imageFile = new ImString(state.shapeType().equals("image") && state.model() != null
                 ? state.model() : "", 1024);
         ImString videoFile = new ImString(state.shapeType().equals("video") && state.model() != null
@@ -304,7 +309,13 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
         changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.position"), position, 0.05f);
         changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.rotation"), rotation, 1.0f);
         changed |= ImGui.dragFloat3(I18n.get("vector3.keyframe.scale"), scale, 0.01f, 0.001f, 1000.0f);
-        changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.color"), color);
+        // In the textured modes the shape's colour no longer takes part in rendering (TexturedObjShape#tint), so
+        // showing it would only suggest it still tints the model. The test repeats the model's own rule, and reads
+        // the live widgets, so switching mode or pasting a texture path hides the picker at once.
+        boolean objTextured = state.shapeType().equals("obj")
+                && (objMode.get() == TexturedObjShape.Mode.MATERIALS.ordinal()
+                        || (objMode.get() == TexturedObjShape.Mode.TEXTURE.ordinal() && !objTexture.get().isBlank()));
+        if (!objTextured) changed |= ImGui.colorEdit4(I18n.get("vector3.keyframe.color"), color);
 
         List<ShapePoint> points = new ArrayList<>(state.points() == null ? List.of() : state.points());
         switch (selectedType[0]) {
@@ -428,19 +439,78 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                         && objShape.partNames().size() > 1 && ImGui.treeNode(I18n.get("vector3.keyframe.obj_pivots"))) {
                     if (ImGui.isItemHovered()) ImGui.setTooltip(I18n.get("vector3.keyframe.obj_pivots.tooltip"));
                     for (String part : objShape.partNames()) {
-                        org.joml.Vector3f pivot = objShape.pivotOf(part);
-                        float[] xyz = {pivot.x, pivot.y, pivot.z};
                         ImGui.pushID(part);
-                        if (ImGui.dragFloat3(part, xyz, 0.01f)) {
-                            objPivots.put(part, new org.joml.Vector3f(xyz[0], xyz[1], xyz[2]));
-                            changed = true;
-                        }
-                        if (objPivots.containsKey(part)) {
-                            ImGui.sameLine();
-                            if (ImGui.smallButton(I18n.get("vector3.keyframe.obj_pivot_reset"))) {
-                                objPivots.remove(part);
+                        if (ImGui.treeNode(part)) {
+                            org.joml.Vector3f pivot = objShape.pivotOf(part);
+                            float[] xyz = {pivot.x, pivot.y, pivot.z};
+                            if (ImGui.dragFloat3(I18n.get("vector3.keyframe.obj_part_pivot"), xyz, 0.01f)) {
+                                objPivots.put(part, new org.joml.Vector3f(xyz[0], xyz[1], xyz[2]));
                                 changed = true;
                             }
+                            if (objPivots.containsKey(part)) {
+                                ImGui.sameLine();
+                                if (ImGui.smallButton(I18n.get("vector3.keyframe.obj_pivot_reset"))) {
+                                    objPivots.remove(part);
+                                    changed = true;
+                                }
+                            }
+                            // Texture, normal and specular overrides only mean anything once the model is shaded at all.
+                            if (objMode.get() != TexturedObjShape.Mode.SOLID.ordinal()) {
+                                ImString partTexture = new ImString(objPartTextures.getOrDefault(part, ""), 1024);
+                                if (ImGui.inputText(I18n.get("vector3.keyframe.obj_part_texture"), partTexture)) {
+                                    objPartTextures.put(part, partTexture.get());
+                                    changed = true;
+                                }
+                                if (FileBrowse.button("obj_part_texture_" + part, partTexture,
+                                        I18n.get("vector3.file.image_filter"),
+                                        "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff", "tga")) {
+                                    objPartTextures.put(part, partTexture.get());
+                                    changed = true;
+                                }
+                                ImString partNormal = new ImString(objPartNormals.getOrDefault(part, ""), 1024);
+                                if (ImGui.inputText(I18n.get("vector3.keyframe.obj_part_normal"), partNormal)) {
+                                    objPartNormals.put(part, partNormal.get());
+                                    changed = true;
+                                }
+                                if (FileBrowse.button("obj_part_normal_" + part, partNormal,
+                                        I18n.get("vector3.file.image_filter"),
+                                        "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff", "tga")) {
+                                    objPartNormals.put(part, partNormal.get());
+                                    changed = true;
+                                }
+                                ImString partSpecular = new ImString(objPartSpeculars.getOrDefault(part, ""), 1024);
+                                if (ImGui.inputText(I18n.get("vector3.keyframe.obj_part_specular"), partSpecular)) {
+                                    objPartSpeculars.put(part, partSpecular.get());
+                                    changed = true;
+                                }
+                                if (FileBrowse.button("obj_part_specular_" + part, partSpecular,
+                                        I18n.get("vector3.file.image_filter"),
+                                        "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff", "tga")) {
+                                    objPartSpeculars.put(part, partSpecular.get());
+                                    changed = true;
+                                }
+                            }
+                            int partColorArg = objPartColors.getOrDefault(part, 0xFFFFFFFF);
+                            float[] partColor = {
+                                    ((partColorArg >>> 16) & 255) / 255.0f,
+                                    ((partColorArg >>> 8) & 255) / 255.0f,
+                                    (partColorArg & 255) / 255.0f,
+                                    ((partColorArg >>> 24) & 255) / 255.0f
+                            };
+                            if (ImGui.colorEdit4(I18n.get("vector3.keyframe.obj_part_color"), partColor)) {
+                                objPartColors.put(part, (Math.round(partColor[3] * 255) << 24)
+                                        | (Math.round(partColor[0] * 255) << 16)
+                                        | (Math.round(partColor[1] * 255) << 8)
+                                        | Math.round(partColor[2] * 255));
+                                changed = true;
+                            }
+                            ImBoolean partVisible = new ImBoolean(!objHiddenParts.contains(part));
+                            if (ImGui.checkbox(I18n.get("vector3.keyframe.obj_part_visible"), partVisible)) {
+                                if (partVisible.get()) objHiddenParts.remove(part);
+                                else objHiddenParts.add(part);
+                                changed = true;
+                            }
+                            ImGui.treePop();
                         }
                         ImGui.popID();
                     }
@@ -636,7 +706,8 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
                             ? (projectWorld[0] ? ShapeEntities.worldSource(projectedEntity[0]) : Map.of())
                             : selectedType[0].equals("block") ? blockProperties
                             : selectedType[0].equals("obj") ? objProperties(objMode.get(), objTexture.get(),
-                                    objLighting.get(), objPivots)
+                                    objLighting.get(), objPivots, objPartTextures, objPartNormals, objPartSpeculars,
+                                    objPartColors, objHiddenParts)
                             : state.blockProperties())
                     .withParticle(selectedType[0].equals("particle") ? particle[0] : state.particle())
                     .withScreen(screen[0] && layerCapable)
@@ -698,12 +769,37 @@ public final class ShapeKeyframe extends CustomKeyframe<ShapeState> {
     }
 
     private static Map<String, String> objProperties(int mode, String texture, boolean lighting,
-            Map<String, org.joml.Vector3f> pivots) {
+            Map<String, org.joml.Vector3f> pivots, Map<String, String> partTextures, Map<String, String> partNormals,
+            Map<String, String> partSpeculars, Map<String, Integer> partColors, java.util.Set<String> hiddenParts) {
         Map<String, String> properties = new java.util.HashMap<>(Map.of(
                 TexturedObjShape.MODE, TexturedObjShape.Mode.values()[mode].id,
                 TexturedObjShape.TEXTURE, texture,
                 TexturedObjShape.LIGHTING, Boolean.toString(lighting)));
         if (!pivots.isEmpty()) properties.put(TexturedObjShape.PIVOTS, TexturedObjShape.encodePivots(pivots));
+        putPart(properties, TexturedObjShape.PART_TEXTURES, TexturedObjShape.encodePartTextures(prune(partTextures)));
+        putPart(properties, TexturedObjShape.PART_NORMALS, TexturedObjShape.encodePartNormals(prune(partNormals)));
+        putPart(properties, TexturedObjShape.PART_SPECULARS,
+                TexturedObjShape.encodePartSpeculars(prune(partSpeculars)));
+        if (!partColors.isEmpty()) {
+            properties.put(TexturedObjShape.PART_COLORS, TexturedObjShape.encodePartColors(partColors));
+        }
+        if (!hiddenParts.isEmpty()) {
+            properties.put(TexturedObjShape.PART_VISIBLE, TexturedObjShape.encodeHiddenParts(hiddenParts));
+        }
         return properties;
+    }
+
+    private static void putPart(Map<String, String> properties, String key, String encoded) {
+        if (encoded != null && !encoded.isEmpty()) properties.put(key, encoded);
+    }
+
+    /** Removes entries whose path is blank, so empty overrides aren't serialised. */
+    private static Map<String, String> prune(Map<String, String> map) {
+        if (map.isEmpty()) return map;
+        Map<String, String> result = new LinkedHashMap<>();
+        map.forEach((part, value) -> {
+            if (value != null && !value.isBlank()) result.put(part, value);
+        });
+        return result;
     }
 }

@@ -306,11 +306,16 @@ public final class ShapeTrackRegistry {
         return state != null && state.screen();
     }
 
-    // Pivots only move parts of an OBJ that is already loaded, so editing them must not rebuild it.
-    private static java.util.Map<String, String> withoutPivots(java.util.Map<String, String> properties) {
-        if (properties == null || !properties.containsKey(TexturedObjShape.PIVOTS)) return properties;
+    // Pivots and the per-part overrides only re-pose or re-texture parts of an OBJ that is already loaded, so
+    // editing them must not rebuild it.
+    private static final java.util.List<String> LIVE_PROPERTIES = java.util.List.of(TexturedObjShape.PIVOTS,
+            TexturedObjShape.PART_TEXTURES, TexturedObjShape.PART_NORMALS, TexturedObjShape.PART_SPECULARS,
+            TexturedObjShape.PART_COLORS, TexturedObjShape.PART_VISIBLE);
+
+    private static java.util.Map<String, String> withoutLiveProperties(java.util.Map<String, String> properties) {
+        if (properties == null || LIVE_PROPERTIES.stream().noneMatch(properties::containsKey)) return properties;
         java.util.Map<String, String> rest = new java.util.HashMap<>(properties);
-        rest.remove(TexturedObjShape.PIVOTS);
+        LIVE_PROPERTIES.forEach(rest::remove);
         return rest;
     }
 
@@ -325,7 +330,8 @@ public final class ShapeTrackRegistry {
                         || state.shapeType().equals("image")
                         || state.shapeType().equals("video"))
                 && (!java.util.Objects.equals(previous.model(), state.model())
-                        || !java.util.Objects.equals(withoutPivots(previous.blockProperties()), withoutPivots(state.blockProperties())));
+                        || !java.util.Objects.equals(withoutLiveProperties(previous.blockProperties()),
+                                withoutLiveProperties(state.blockProperties())));
         boolean areaBoundsChanged = previous != null && (state.shapeType().equals("area") || state.shapeType().equals("blast"))
                 && !java.util.Objects.equals(previous.points(), state.points());
         if (shape != null && (!state.shapeType().equals(SHAPE_TYPES.get(state.shapeId()))
@@ -355,6 +361,12 @@ public final class ShapeTrackRegistry {
             shape.forceSetWorldScale(new Vec3(1, 1, 1));
         }
         if (shape instanceof TexturedObjShape obj) obj.setPivots(TexturedObjShape.pivots(state.blockProperties()));
+        if (shape instanceof TexturedObjShape obj) obj.setPartConfig(
+                TexturedObjShape.partTextures(state.blockProperties()),
+                TexturedObjShape.partNormals(state.blockProperties()),
+                TexturedObjShape.partSpeculars(state.blockProperties()),
+                TexturedObjShape.partColors(state.blockProperties()),
+                TexturedObjShape.hiddenParts(state.blockProperties()));
         if (shape instanceof AreaShape area) area.updateTransform(state);
         updateGeometry(shape, state);
         if (shape instanceof VideoShape video) video.setPlayback(state.videoStartTick(),
